@@ -1,5 +1,5 @@
 [package]
-name = "pipecast-manager"
+name = "pipecast-pipewire"
 version = "0.1.0"
 edition = "2021"
 

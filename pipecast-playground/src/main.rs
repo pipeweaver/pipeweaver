@@ -1,9 +1,9 @@
 use anyhow::{Result};
 use log::{debug, info, LevelFilter};
-use pipecast_manager::oneshot::Sender;
-use pipecast_manager::ulid::Ulid;
-use pipecast_manager::{oneshot, FilterHandler, FilterProperty, FilterValue, MediaClass, PipewireMessage, PipewireRunner};
-use pipecast_manager::{FilterProperties, LinkType, NodeProperties};
+use pipecast_pipewire::oneshot::Sender;
+use pipecast_pipewire::ulid::Ulid;
+use pipecast_pipewire::{oneshot, FilterHandler, FilterProperty, FilterValue, MediaClass, PipewireMessage, PipewireRunner};
+use pipecast_pipewire::{FilterProperties, LinkType, NodeProperties};
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
 use std::thread::sleep;
 use std::time::Duration;
@@ -291,8 +291,8 @@ impl FilterHandler for VolumeFilter {
             if self.volume == 1. {
                 outputs[i].copy_from_slice(input);
                 continue;
-            } 
-            
+            }
+
             // Otherwise, multiply the samples by the volume
             for (index, sample) in input.iter().enumerate() {
                 outputs[i][index] = sample * self.volume;

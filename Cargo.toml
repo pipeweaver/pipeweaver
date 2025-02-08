@@ -3,5 +3,5 @@ resolver = "2"
 
 members = [
 	"pipecast-playground",
-	"pipecast-manager",
+	"pipecast-pipewire",
 ]

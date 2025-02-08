@@ -10,5 +10,5 @@ tokio = { version = "1.41.1", features = ["rt-multi-thread", "sync", "macros"] }
 
 #pipewire = { git = "https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git" }
 #pipewire = { path = "../../../IdeaProjects/pw-rs/pipewire" }
-pipecast-manager = { path = "../pipecast-manager" }
+pipecast-pipewire = { path = "../pipecast-pipewire" }
 log = "0.4.22"
