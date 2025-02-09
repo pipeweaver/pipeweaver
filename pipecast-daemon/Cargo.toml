@@ -14,6 +14,7 @@ serde_json = { workspace = true }
 
 ### Internal Dependencies ###
 pipecast-ipc = { path = "../pipecast-ipc" }
+pipecast-profile = { path = "../pipecast-profile" }
 
 ### Log Writing ###
 simplelog = "0.12.2"

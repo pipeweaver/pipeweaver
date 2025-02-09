@@ -1,0 +1,10 @@
+[package]
+name = "pipecast-profile"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+ulid = { workspace = true }
+
+enum-map = "2.7.3"
