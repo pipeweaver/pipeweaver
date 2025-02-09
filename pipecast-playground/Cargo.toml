@@ -8,6 +8,9 @@ edition = "2021"
 anyhow = { workspace = true }
 log = { workspace = true }
 
+### Logging ###
+simplelog = "0.12.2"
+
 ### Async Runtime ###
 tokio = { version = "1.41.1", features = ["rt-multi-thread", "sync", "macros"] }
 
