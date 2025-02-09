@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+### Inherited Dependencies ###
 anyhow = { workspace = true }
 serde = { workspace = true }
-
 json-patch = { workspace = true }
 interprocess = { workspace = true }
 

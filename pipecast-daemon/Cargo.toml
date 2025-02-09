@@ -4,21 +4,22 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+### Inherited Dependencies ###
+anyhow = { workspace = true }
+interprocess = { workspace = true }
+ulid = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
 ### Internal Dependencies ###
 pipecast-ipc = { path = "../pipecast-ipc" }
 
-### Logging ###
-log = "0.4.25"
+### Log Writing ###
 simplelog = "0.12.2"
-
-### Error Handling ###
-anyhow = { workspace = true }
 
 ### Async Runtime ###
 tokio = { version = "1.41.1", features = ["rt-multi-thread", "sync", "macros"] }
-
-### IPC Handler ###
-interprocess = { workspace = true }
 
 ### HTTP Server ###
 actix = "0.13.5"
@@ -28,7 +29,3 @@ actix-cors = "0.7.0"
 mime_guess = "2.0.5"
 include_dir = "0.7.4"
 json-patch = "3.0.1"
-
-### Serialisation / Deserialisation ###
-serde = { workspace = true }
-serde_json = { workspace = true }

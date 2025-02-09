@@ -7,10 +7,14 @@ members = [
     "pipecast-ipc",
     "pipecast-pipewire",
     "pipecast-playground",
+    "pipecast-profile",
     "pipecast-shared",
 ]
 
 [workspace.dependencies]
+### Logging ###
+log = "0.4.25"
+
 ### Error Handling ###
 anyhow = "1.0.95"
 
@@ -23,3 +27,6 @@ json-patch = "3.0.1"
 
 ### IPC Communication ###
 interprocess = { version = "2.2.1", features = ["tokio"] }
+
+### Device Identification ###
+ulid = "1.2.0"

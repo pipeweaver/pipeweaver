@@ -4,11 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.95"
-simplelog = "0.12.2"
+### Inheritied Dependencies ###
+anyhow = { workspace = true }
+log = { workspace = true }
+
+### Async Runtime ###
 tokio = { version = "1.41.1", features = ["rt-multi-thread", "sync", "macros"] }
 
 #pipewire = { git = "https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git" }
 #pipewire = { path = "../../../IdeaProjects/pw-rs/pipewire" }
 pipecast-pipewire = { path = "../pipecast-pipewire" }
-log = "0.4.22"

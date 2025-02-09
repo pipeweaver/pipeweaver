@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = { version = "1.0.93", features = ["backtrace"] }
-log = "0.4.22"
+### Inhertied Dependencies ###
+anyhow = { workspace = true }
+ulid = { workspace = true }
+log = { workspace = true }
 
 pipewire = { git = "https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git" }
 oneshot = "0.1.8"
-
-ulid = "1.1.4"
