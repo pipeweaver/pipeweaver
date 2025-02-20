@@ -1,92 +1,106 @@
 mod default;
 
 use enum_map::{Enum, EnumMap};
+use std::collections::HashMap;
+use strum_macros::{Display, EnumIter};
 use ulid::Ulid;
 
 /// Main Profile Node
+#[derive(Debug, Clone)]
 pub struct Profile {
     /// A list of devices currently configured in this profile
-    devices: Devices,
-
+    pub devices: Devices,
+    pub routes: HashMap<Ulid, Vec<Ulid>>,
 }
 
-struct Devices {
+#[derive(Debug, Clone)]
+pub struct Devices {
     /// Source devices (Devices that bring audio into the Mixer)
-    sources: SourceDevices,
+    pub sources: SourceDevices,
 
     /// Target devices (Devices that audio is routed into)
-    targets: TargetDevices,
+    pub targets: TargetDevices,
 }
 
-struct SourceDevices {
+#[derive(Debug, Clone)]
+pub struct SourceDevices {
     /// Sink Devices physically attached to Pipewire
-    physical_devices: Vec<PhysicalSourceDevice>,
+    pub physical_devices: Vec<PhysicalSourceDevice>,
 
     /// Virtual Source devices
-    virtual_devices: Vec<VirtualSourceDevice>,
+    pub virtual_devices: Vec<VirtualSourceDevice>,
 }
 
-struct TargetDevices {
+#[derive(Debug, Clone)]
+pub struct TargetDevices {
     /// Source Devices attached to Pipewire
-    physical_devices: Vec<PhysicalTargetDevice>,
+    pub physical_devices: Vec<PhysicalTargetDevice>,
 
     /// Virtual Sink Devices
-    virtual_devices: Vec<VirtualTargetDevice>,
+    pub virtual_devices: Vec<VirtualTargetDevice>,
 }
 
-struct VirtualSourceDevice {
-    id: Ulid,
-    name: String,
-
-    mute_state: MuteState,
-    mute_targets: EnumMap<MuteTarget, Vec<Ulid>>,
-
-    volumes: EnumMap<Mix, u8>,
+#[derive(Debug, Clone)]
+pub struct DeviceDescription {
+    pub id: Ulid,
+    pub name: String,
 }
 
-struct PhysicalSourceDevice {
-    id: Ulid,
-    name: String,
-
-    mute_state: MuteState,
-    mute_targets: EnumMap<MuteTarget, Vec<Ulid>>,
-
-    volumes: EnumMap<Mix, u8>,
-    attached_devices: Vec<String>,
+#[derive(Debug, Clone)]
+pub struct VirtualSourceDevice {
+    pub description: DeviceDescription,
+    pub mute_states: MuteStates,
+    pub volumes: EnumMap<Mix, u8>,
 }
 
-struct VirtualTargetDevice {
-    id: Ulid,
-    name: String,
-
-    volume: u8,
-    mix: Mix,
+#[derive(Debug, Clone)]
+pub struct MuteStates {
+    pub mute_state: MuteState,
+    pub mute_targets: EnumMap<MuteTarget, Vec<Ulid>>,
 }
 
-struct PhysicalTargetDevice {
-    id: Ulid,
-    name: String,
+#[derive(Debug, Clone)]
+pub struct PhysicalSourceDevice {
+    pub description: DeviceDescription,
+    pub mute_states: MuteStates,
 
-    volume: u8,
-    mix: Mix,
-
-    attached_devices: Vec<String>,
+    pub volumes: EnumMap<Mix, u8>,
+    pub attached_devices: Vec<String>,
 }
 
-#[derive(Enum)]
-enum Mix {
+#[derive(Debug, Clone)]
+pub struct VirtualTargetDevice {
+    pub description: DeviceDescription,
+
+    pub volume: u8,
+    pub mix: Mix,
+}
+
+#[derive(Debug, Clone)]
+pub struct PhysicalTargetDevice {
+    pub description: DeviceDescription,
+
+    pub volume: u8,
+    pub mix: Mix,
+
+    pub attached_devices: Vec<String>,
+}
+
+#[derive(Debug, Display, Copy, Clone, Enum, EnumIter)]
+pub enum Mix {
     A,
     B,
 }
 
-enum MuteState {
+#[derive(Debug, Copy, Clone)]
+pub enum MuteState {
     Unmuted,
     MuteTargetA,
     MuteTargetB,
 }
 
-#[derive(Enum)]
-enum MuteTarget {
+#[derive(Debug, Copy, Clone, Enum, EnumIter)]
+pub enum MuteTarget {
     TargetA,
     TargetB,
 }

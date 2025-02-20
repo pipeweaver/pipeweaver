@@ -8,3 +8,6 @@ serde = { workspace = true }
 ulid = { workspace = true }
 
 enum-map = "2.7.3"
+
+strum = "0.27.0"
+strum_macros = "0.27.0"

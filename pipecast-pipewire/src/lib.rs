@@ -1,16 +1,15 @@
+pub extern crate oneshot;
+pub extern crate ulid;
 mod store;
 mod manager;
 
-pub extern crate ulid;
-pub extern crate oneshot;
-
+use crate::manager::run_pw_main_loop;
 use anyhow::{anyhow, bail, Result};
 use log::{info, warn};
 use std::sync::mpsc;
 use std::thread;
 use std::thread::JoinHandle;
 use ulid::Ulid;
-use crate::manager::run_pw_main_loop;
 
 type PWSender = pipewire::channel::Sender<PipewireMessage>;
 type PWReceiver = pipewire::channel::Receiver<PipewireMessage>;
@@ -22,9 +21,9 @@ pub enum PipewireMessage {
     CreateDeviceNode(NodeProperties),
     CreateFilterNode(FilterProperties),
     CreateDeviceLink(LinkType, LinkType),
-    
+
     SetFilterValue(Ulid, u32, FilterValue),
-    
+
     Quit,
 }
 
@@ -70,7 +69,7 @@ impl PipewireRunner {
         Ok(Self {
             pipewire_thread: Some(pipewire_handle),
             messaging_thread: Some(message_handle),
-            message_sender: tx
+            message_sender: tx,
         })
     }
 
@@ -101,7 +100,7 @@ impl Drop for PipewireRunner {
 }
 
 // Maps messages from an mpsc::channel to a pipewire::channel
-fn run_message_loop(receiver: Receiver, sender: PWSender)  {
+fn run_message_loop(receiver: Receiver, sender: PWSender) {
     loop {
         match receiver.recv().unwrap_or(PipewireMessage::Quit) {
             PipewireMessage::Quit => {
@@ -132,31 +131,31 @@ pub struct NodeProperties {
     // Node Configuration
     pub linger: bool,
     pub class: MediaClass,
-    
+
     // Ready Sender
     pub ready_sender: oneshot::Sender<()>,
 }
 
 pub struct FilterProperties {
     pub filter_id: Ulid,
-    
+
     pub filter_name: String,
     pub filter_nick: String,
     pub filter_description: String,
-    
+
     pub app_id: String,
     pub app_name: String,
-    
+
     pub linger: bool,
     pub callback: Box<dyn FilterHandler>,
-    
+
     pub ready_sender: oneshot::Sender<()>,
 }
 
 pub enum MediaClass {
     Source,
     Sink,
-    Duplex
+    Duplex,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -167,12 +166,12 @@ pub enum LinkType {
 
 
 pub type FilterCallback = dyn FnMut(Vec<&mut [f32]>, Vec<&mut [f32]>) + Send;
-pub trait FilterHandler: Send + 'static  {
+pub trait FilterHandler: Send + 'static {
     fn get_properties(&self) -> Vec<FilterProperty>;
     fn get_property(&self, id: u32) -> FilterProperty;
     fn set_property(&mut self, id: u32, value: FilterValue);
-    
-    fn process_samples(&self, inputs: Vec<&mut [f32]>, outputs: Vec<&mut[f32]>);
+
+    fn process_samples(&self, inputs: Vec<&mut [f32]>, outputs: Vec<&mut [f32]>);
 }
 
 // We need these because while *WE* know what values are coming in and out, rust doesn't
@@ -180,6 +179,7 @@ pub trait FilterHandler: Send + 'static  {
 pub enum FilterValue {
     Int32(i32),
     Float32(f32),
+    UInt8(u8),
     UInt32(u32),
     String(String),
 }

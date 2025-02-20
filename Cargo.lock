@@ -1475,16 +1475,20 @@ dependencies = [
  "actix-web",
  "actix-web-actors",
  "anyhow",
+ "enum-map",
  "include_dir",
  "interprocess",
  "json-patch",
  "log",
  "mime_guess",
  "pipecast-ipc",
+ "pipecast-pipewire",
  "pipecast-profile",
  "serde",
  "serde_json",
  "simplelog",
+ "strum",
+ "strum_macros",
  "tokio",
  "ulid",
 ]
@@ -1532,6 +1536,8 @@ version = "0.1.0"
 dependencies = [
  "enum-map",
  "serde",
+ "strum",
+ "strum_macros",
  "ulid",
 ]
 
@@ -1916,6 +1922,25 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
+
+[[package]]
+name = "strum"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce1475c515a4f03a8a7129bb5228b81a781a86cb0b3fbbc19e1c556d491a401f"
+
+[[package]]
+name = "strum_macros"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9688894b43459159c82bfa5a5fa0435c19cbe3c9b427fa1dd7b1ce0c279b18a7"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn",
+]
 
 [[package]]
 name = "syn"
