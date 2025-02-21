@@ -2,6 +2,7 @@ pub extern crate oneshot;
 pub extern crate ulid;
 mod store;
 mod manager;
+mod registry;
 
 use crate::manager::run_pw_main_loop;
 use anyhow::{anyhow, bail, Result};

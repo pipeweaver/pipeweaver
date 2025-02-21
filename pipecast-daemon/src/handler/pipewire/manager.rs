@@ -2,12 +2,10 @@ use crate::handler::pipewire::filters::pass_through::PassThroughFilter;
 use crate::handler::pipewire::filters::volume::VolumeFilter;
 use enum_map::{enum_map, EnumMap};
 use log::{debug, info};
-use pipecast_pipewire::oneshot::Sender;
 use pipecast_pipewire::{oneshot, FilterProperties, LinkType, MediaClass, NodeProperties, PipewireMessage, PipewireRunner};
 use pipecast_profile::{DeviceDescription, Mix, PhysicalSourceDevice, PhysicalTargetDevice, Profile, VirtualSourceDevice, VirtualTargetDevice};
 use std::collections::HashMap;
 use std::time::Duration;
-use strum::IntoEnumIterator;
 use tokio::time::sleep;
 use ulid::Ulid;
 
@@ -110,7 +108,7 @@ impl PipewireManager {
 
     async fn create_virtual_source(&mut self, device: &VirtualSourceDevice) {
         debug!("[{}] Creating Virtual Node {}", device.description.id, device.description.name);
-        self.create_node(device.description.clone(), MediaClass::Source).await;
+        self.create_node(device.description.clone(), MediaClass::Sink).await;
 
         debug!("[{}] Creating Volume Filters", device.description.id);
         // Create the A and B volume nodes (there might be a nicer way to do this)
@@ -148,7 +146,7 @@ impl PipewireManager {
 
     async fn create_virtual_target(&mut self, device: &VirtualTargetDevice) {
         debug!("[{}] Creating Virtual Node {}", device.description.id, device.description.name);
-        self.create_node(device.description.clone(), MediaClass::Sink).await;
+        self.create_node(device.description.clone(), MediaClass::Source).await;
 
         debug!("[{}] Creating Volume Filter", device.description.id);
         // Create the A and B volume nodes (there might be a nicer way to do this)
@@ -167,10 +165,11 @@ impl PipewireManager {
     async fn create_node(&mut self, device: DeviceDescription, class: MediaClass) {
         // Ok, we've been asked to create a node, so let's do that
         let (send, recv) = oneshot::channel();
+        let identifier = format!("PipeCast {}", device.name).to_lowercase().replace(" ", "_");
         let props = NodeProperties {
             node_id: device.id,
-            node_name: format!("PipeCast{}", device.name),
-            node_nick: format!("PipeCast{}", device.name),
+            node_name: identifier.clone(),
+            node_nick: identifier,
             node_description: format!("PipeCast {}", device.name),
             app_id: "com.github.pipecast".to_string(),
             app_name: "pipecast".to_string(),

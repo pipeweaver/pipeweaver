@@ -1,20 +1,18 @@
+use crate::registry::PipewireRegistry;
 use crate::store::{FilterStore, LinkStore, NodeStore, Store};
 use crate::{FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties};
 use crate::{MediaClass, PWReceiver, PipewireMessage};
 use anyhow::anyhow;
 use log::{debug, error};
 use pipewire::core::Core;
+use pipewire::device::Device;
 use pipewire::filter::{Filter, FilterFlags, FilterState, PortFlags};
-use pipewire::keys::{
-    APP_ICON_NAME, APP_ID, APP_NAME, DEVICE_ICON_NAME, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE,
-    LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS,
-    MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION, NODE_DRIVER, NODE_NAME, NODE_NICK,
-    NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME,
-};
+use pipewire::keys::{APP_ICON_NAME, APP_ID, APP_NAME, APP_PROCESS_ID, AUDIO_CHANNEL, AUDIO_CHANNELS, CLIENT_ID, CLIENT_NAME, DEVICE_DESCRIPTION, DEVICE_ICON_NAME, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION, NODE_DRIVER, NODE_ID, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_DIRECTION, PORT_MONITOR, PORT_NAME};
 use pipewire::link::Link;
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
 use pipewire::proxy::ProxyT;
+use pipewire::registry::{Listener, Registry};
 use pipewire::spa::pod::builder::Builder;
 use pipewire::spa::pod::deserialize::PodDeserializer;
 use pipewire::spa::pod::{Pod, Value, ValueArray};
@@ -24,8 +22,11 @@ use pipewire::spa::sys::{
     SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR,
 };
 use pipewire::spa::utils::Direction;
+use pipewire::types::ObjectType;
 use pipewire::{context, main_loop};
-use std::cell::RefCell;
+use std::any::{Any, TypeId};
+use std::cell::{Ref, RefCell};
+use std::ops::Deref;
 use std::rc::Rc;
 use ulid::Ulid;
 
@@ -35,13 +36,19 @@ pub(crate) struct FilterData {
 
 struct PipewireManager {
     core: Core,
+    registry: PipewireRegistry,
+
     store: Rc<RefCell<Store>>,
 }
 
 impl PipewireManager {
-    pub fn new(core: Core) -> Self {
+    pub fn new(core: Core, registry: Registry) -> Self {
+        let store = Rc::new(RefCell::new(Store::new()));
+        let registry = PipewireRegistry::new(registry, store);
+
         Self {
             core,
+            registry,
             store: Rc::new(RefCell::new(Store::new())),
         }
     }
@@ -72,9 +79,9 @@ impl PipewireManager {
                 MediaClass::Sink => "Audio/Sink",
             },
 
-            *pipewire::keys::AUDIO_CHANNELS => "2",
-            *pipewire::keys::NODE_LATENCY => "128/48000",
-            *pipewire::keys::NODE_MAX_LATENCY => "128/48000",
+            *AUDIO_CHANNELS => "2",
+            *NODE_LATENCY => "128/48000",
+            *NODE_MAX_LATENCY => "128/48000",
 
             //
             // "icon_name" => properties.app_id,
@@ -267,7 +274,7 @@ impl PipewireManager {
             input_ports.push(filter.add_port(
                 Direction::Input,
                 PortFlags::MAP_BUFFERS,
-                properties! {*FORMAT_DSP => "32 bit float mono audio", *PORT_NAME => format!("input_{}", i)},
+                properties! {*FORMAT_DSP => "32 bit float mono audio", *PORT_NAME => format!("input_{}", i), *AUDIO_CHANNEL => i},
                 &mut params,
             ).expect("Filter Input Creation Failed"));
         }
@@ -277,7 +284,7 @@ impl PipewireManager {
             output_ports.push(filter.add_port(
                 Direction::Output,
                 PortFlags::MAP_BUFFERS,
-                properties! {*FORMAT_DSP => "32 bit float mono audio", *PORT_NAME => format!("output_{}", i)},
+                properties! {*FORMAT_DSP => "32 bit float mono audio", *PORT_NAME => format!("output_{}", i), *AUDIO_CHANNEL => i},
                 &mut params,
             ).expect("Filter Output Creation Failed"));
         }
@@ -458,6 +465,7 @@ pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Res
         return;
     };
 
+
     // Wrap the mainloop so we shuffle it around
     let mainloop = Rc::new(mainloop);
 
@@ -471,7 +479,15 @@ pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Res
         return;
     };
 
-    let manager = Rc::new(RefCell::new(PipewireManager::new(core)));
+    let Ok(registry) = core.get_registry() else {
+        start_tx
+            .send(Err(anyhow!("Unable to Fetch Registry from Core")))
+            .expect("OneShot Channel is broken!");
+        return;
+    };
+
+
+    let manager = Rc::new(RefCell::new(PipewireManager::new(core, registry)));
 
     let receiver_clone = mainloop.clone();
     let _receiver = pw_rx.attach(mainloop.loop_(), {
