@@ -60,12 +60,19 @@ pub struct MuteStates {
 }
 
 #[derive(Debug, Clone)]
+pub struct PhysicalDeviceDescriptor {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub nickname: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct PhysicalSourceDevice {
     pub description: DeviceDescription,
     pub mute_states: MuteStates,
 
     pub volumes: EnumMap<Mix, u8>,
-    pub attached_devices: Vec<String>,
+    pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
 
 #[derive(Debug, Clone)]
@@ -83,7 +90,7 @@ pub struct PhysicalTargetDevice {
     pub volume: u8,
     pub mix: Mix,
 
-    pub attached_devices: Vec<String>,
+    pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
 
 #[derive(Debug, Display, Copy, Clone, Enum, EnumIter)]

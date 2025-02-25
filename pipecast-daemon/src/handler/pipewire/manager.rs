@@ -2,8 +2,9 @@ use crate::handler::pipewire::filters::pass_through::PassThroughFilter;
 use crate::handler::pipewire::filters::volume::VolumeFilter;
 use enum_map::{enum_map, EnumMap};
 use log::{debug, info};
-use pipecast_pipewire::{oneshot, FilterProperties, LinkType, MediaClass, NodeProperties, PipewireMessage, PipewireRunner};
-use pipecast_profile::{DeviceDescription, Mix, PhysicalSourceDevice, PhysicalTargetDevice, Profile, VirtualSourceDevice, VirtualTargetDevice};
+use pipecast_pipewire::LinkType::{Filter, UnmanagedNode};
+use pipecast_pipewire::{oneshot, FilterProperties, LinkType, MediaClass, NodeProperties, PipecastNode, PipewireMessage, PipewireRunner};
+use pipecast_profile::{DeviceDescription, Mix, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice, Profile, VirtualSourceDevice, VirtualTargetDevice};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -15,6 +16,8 @@ pub(crate) struct PipewireManager {
     profile: Profile,
     source_map: HashMap<Ulid, EnumMap<Mix, Ulid>>,
     target_map: HashMap<Ulid, Ulid>,
+
+    node_list: Vec<PipecastNode>,
 }
 
 impl PipewireManager {
@@ -24,18 +27,52 @@ impl PipewireManager {
 
         Self {
             pipewire: manager,
+
             profile: Default::default(),
 
             source_map: HashMap::default(),
             target_map: HashMap::default(),
+
+            node_list: Default::default(),
         }
     }
 
     pub async fn run(&mut self) {
         debug!("[Pipewire Runner] Starting Event Loop");
 
+        debug!("[Pipewire Runner] Waiting for Pipewire to Calm..");
+        sleep(Duration::from_secs(1)).await;
+
         debug!("Loading Profile");
         self.load_profile().await;
+
+        // Fetch the Physical Node List (TODO: We need a listener / callback for this)
+        debug!("Fetching attached physical nodes");
+        let (tx, rx) = oneshot::channel();
+        let _ = self.pipewire.send_message(PipewireMessage::GetUsableNodes(tx));
+        if let Ok(nodes) = rx.await {
+            self.node_list = nodes;
+        }
+
+        // Ok, check the profile physical settings and map the device to the node
+        for device in &self.profile.devices.targets.physical_devices {
+            for attached_device in &device.attached_devices {
+                if let Some(node_id) = self.locate_physical_node_id(attached_device, true) {
+                    debug!("Attaching {:?} to {:?}", attached_device, device.description.name);
+                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(Filter(device.description.id), UnmanagedNode(node_id)));
+                }
+            }
+        }
+
+        for device in &self.profile.devices.sources.physical_devices {
+            for attached_device in &device.attached_devices {
+                if let Some(node_id) = self.locate_physical_node_id(attached_device, false) {
+                    debug!("Attaching {:?} to {:?}", attached_device, device.description.name);
+                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(UnmanagedNode(node_id), Filter(device.description.id)));
+                }
+            }
+        }
+
 
         loop {
             // We're just going to loop for now..
@@ -160,6 +197,50 @@ impl PipewireManager {
         // Route the Volume Filter to the Virtual Node
         self.create_route(LinkType::Filter(id), LinkType::Node(device.description.id)).await;
         self.target_map.insert(device.description.id, id);
+    }
+
+    fn locate_physical_node_id(&self, device: &PhysicalDeviceDescriptor, input: bool) -> Option<u32> {
+        debug!("Looking for Physical Device: {:?}", device);
+
+        // This might look a little cumbersome, especially with the need to iterate three
+        // times, HOWEVER, we have to check this in terms of accuracy. The name is the
+        // specific location of a device on the USB / PCI-E / etc bus, which if we hit is
+        // a guaranteed 100% 'this is our device' match.
+        for node in &self.node_list {
+            if device.name == node.name && ((input && node.inputs != 0) || (!input && node.outputs != 0)) {
+                debug!("Found Name Match {:?}, NodeId: {}", device.name, node.node_id);
+                return Some(node.node_id);
+            }
+        }
+
+        // The description is *GENERALLY* unique, and represents how the device is displayed
+        // in things like pavucontrol, Gnome's and KDE's audio settings, etc., but uniqueness
+        // is less guaranteed here. This is often useful in situations where (for example)
+        // the device is plugged into a different USB port, so it's description has changed
+        if device.description.is_some() {
+            for node in &self.node_list {
+                if device.description == node.description && ((input && node.inputs != 0) || (!input && node.outputs != 0)) {
+                    debug!("Found Description Match {:?}, NodeId: {}", device.description, node.node_id);
+                    return Some(node.node_id);
+                }
+            }
+        }
+
+        // Finally, we'll check by nickname. In my experience this is very NOT unique, for
+        // example, all my GoXLR nodes have their nickname as 'GoXLR', I'm at least slightly
+        // skeptical whether I should even track this due to the potential for false
+        // positives, but it's here for now.
+        if device.nickname.is_some() {
+            for node in &self.node_list {
+                if device.nickname == node.nickname && ((input && node.inputs != 0) || (!input && node.outputs != 0)) {
+                    debug!("Found Nickname Match {:?}, NodeId: {}", device.nickname, node.node_id);
+                    return Some(node.node_id);
+                }
+            }
+        }
+        debug!("Device Not Found: {:?}", device);
+
+        None
     }
 
     async fn create_node(&mut self, device: DeviceDescription, class: MediaClass) {

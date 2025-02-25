@@ -1,32 +1,26 @@
 use crate::registry::PipewireRegistry;
 use crate::store::{FilterStore, LinkStore, NodeStore, Store};
-use crate::{FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties};
+use crate::{registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties, PipecastNode};
 use crate::{MediaClass, PWReceiver, PipewireMessage};
 use anyhow::anyhow;
 use log::{debug, error};
 use pipewire::core::Core;
-use pipewire::device::Device;
 use pipewire::filter::{Filter, FilterFlags, FilterState, PortFlags};
-use pipewire::keys::{APP_ICON_NAME, APP_ID, APP_NAME, APP_PROCESS_ID, AUDIO_CHANNEL, AUDIO_CHANNELS, CLIENT_ID, CLIENT_NAME, DEVICE_DESCRIPTION, DEVICE_ICON_NAME, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION, NODE_DRIVER, NODE_ID, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_DIRECTION, PORT_MONITOR, PORT_NAME};
+use pipewire::keys::{APP_ICON_NAME, APP_ID, APP_NAME, AUDIO_CHANNEL, AUDIO_CHANNELS, CLIENT_ID, CLIENT_NAME, DEVICE_DESCRIPTION, DEVICE_ICON_NAME, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION, NODE_DRIVER, NODE_ID, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_DIRECTION, PORT_MONITOR, PORT_NAME};
 use pipewire::link::Link;
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
 use pipewire::proxy::ProxyT;
-use pipewire::registry::{Listener, Registry};
+use pipewire::registry::Registry;
 use pipewire::spa::pod::builder::Builder;
 use pipewire::spa::pod::deserialize::PodDeserializer;
 use pipewire::spa::pod::{Pod, Value, ValueArray};
-use pipewire::spa::sys::{
-    spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position,
-    SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_TYPE_OBJECT_ParamProcessLatency,
-    SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR,
-};
+use pipewire::spa::sys::{spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position, SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_TYPE_OBJECT_ParamProcessLatency, SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR, SPA_KEY_AUDIO_POSITION};
 use pipewire::spa::utils::Direction;
-use pipewire::types::ObjectType;
+
 use pipewire::{context, main_loop};
-use std::any::{Any, TypeId};
-use std::cell::{Ref, RefCell};
-use std::ops::Deref;
+use std::cell::RefCell;
+
 use std::rc::Rc;
 use ulid::Ulid;
 
@@ -44,12 +38,12 @@ struct PipewireManager {
 impl PipewireManager {
     pub fn new(core: Core, registry: Registry) -> Self {
         let store = Rc::new(RefCell::new(Store::new()));
-        let registry = PipewireRegistry::new(registry, store);
+        let registry = PipewireRegistry::new(registry, store.clone());
 
         Self {
             core,
             registry,
-            store: Rc::new(RefCell::new(Store::new())),
+            store,
         }
     }
 
@@ -80,17 +74,13 @@ impl PipewireManager {
             },
 
             *AUDIO_CHANNELS => "2",
-            *NODE_LATENCY => "128/48000",
-            *NODE_MAX_LATENCY => "128/48000",
+            *NODE_LATENCY => "1024/48000",
+            *NODE_MAX_LATENCY => "1024/48000",
 
-            //
-            // "icon_name" => properties.app_id,
-            "factory.mode" => "merge",
+            // https://gitlab.freedesktop.org/pipewire/pipewire/-/wikis/Virtual-Devices
             "audio.position" => "FL,FR",
             "monitor.channel-volumes" => "false",
-            "monitor.passthrough" => "false",
-
-
+            "monitor.passthrough" => "true",
         };
 
         debug!(
@@ -338,7 +328,7 @@ impl PipewireManager {
         let latency = spa_process_latency_info {
             quantum: 0.,
             rate: 0,
-            ns: 10,
+            ns: 1,
         };
         let pod = unsafe {
             Pod::from_raw(spa_process_latency_build(
@@ -380,14 +370,25 @@ impl PipewireManager {
         let src = self.get_ports(source);
         let dest = self.get_ports(destination);
 
-        if src.1 != dest.2 {
-            // Port counts do not match.
-            return;
-        }
+        // TODO: Fix this too
+        // Still making assumptions about the Ports and their mapping, we should check for the
+        // canonical setup.
+        for i in 0..2 {
+            // Check whether we have a mono source, if so we need to map it to stereo
+            let src_port = if i == 1 && src.2 == 1 {
+                0
+            } else {
+                i
+            };
 
-        // Ok, for each port, create a link to the other
-        for i in 0..src.1 {
-            let link = self.create_port_link(src.0, i as u32, dest.0, i as u32);
+            // Do the same for the Destination
+            let dest_port = if i == 1 && dest.1 == 1 {
+                0
+            } else {
+                i
+            };
+
+            let link = self.create_port_link(src.0, src_port as u32, dest.0, dest_port as u32);
             let store = LinkStore {
                 link,
 
@@ -402,6 +403,9 @@ impl PipewireManager {
     }
 
     fn get_ports(&self, link: LinkType) -> (u32, usize, usize) {
+        // TODO: Fix this
+        // We should instead be correctly mapping the FL, FR and MONO ports here, rather than
+        // just hoping they line up
         match link {
             LinkType::Node(id) => {
                 let store = self.store.borrow();
@@ -420,6 +424,15 @@ impl PipewireManager {
                 let id = filter.pw_id.unwrap();
                 let input_port_count = filter.input_ports.len();
                 let output_port_count = filter.output_ports.len();
+
+                (id, input_port_count, output_port_count)
+            }
+            LinkType::UnmanagedNode(id) => {
+                let mut store = self.store.borrow_mut();
+                let node = store.get_unmanaged_node(id).expect("Invalid NodeID");
+
+                let input_port_count = node.ports[registry::Direction::In].len();
+                let output_port_count = node.ports[registry::Direction::Out].len();
 
                 (id, input_port_count, output_port_count)
             }
@@ -446,6 +459,10 @@ impl PipewireManager {
                 },
             )
             .expect("Failed to create link")
+    }
+
+    fn get_usable_nodes(&self) -> Vec<PipecastNode> {
+        self.store.borrow().get_usable_nodes()
     }
 }
 
@@ -503,6 +520,9 @@ pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Res
             }
             PipewireMessage::CreateDeviceLink(source, destination) => {
                 manager.borrow_mut().create_link(source, destination);
+            }
+            PipewireMessage::GetUsableNodes(sender) => {
+                sender.send(manager.borrow().get_usable_nodes()).expect("Broken Response Sender!");
             }
 
             PipewireMessage::SetFilterValue(id, key, value) => {

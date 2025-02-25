@@ -23,6 +23,7 @@ pub enum PipewireMessage {
     CreateFilterNode(FilterProperties),
     CreateDeviceLink(LinkType, LinkType),
 
+    GetUsableNodes(oneshot::Sender<Vec<PipecastNode>>),
     SetFilterValue(Ulid, u32, FilterValue),
 
     Quit,
@@ -163,6 +164,7 @@ pub enum MediaClass {
 pub enum LinkType {
     Node(Ulid),
     Filter(Ulid),
+    UnmanagedNode(u32),
 }
 
 
@@ -189,4 +191,16 @@ pub struct FilterProperty {
     pub id: u32,
     pub name: String,
     pub value: FilterValue,
+}
+
+#[derive(Debug)]
+pub struct PipecastNode {
+    pub node_id: u32,
+
+    pub name: Option<String>,
+    pub nickname: Option<String>,
+    pub description: Option<String>,
+
+    pub inputs: u8,
+    pub outputs: u8,
 }

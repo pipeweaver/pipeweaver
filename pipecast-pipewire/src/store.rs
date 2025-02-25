@@ -1,6 +1,6 @@
 use crate::manager::FilterData;
-use crate::registry::{RegistryDevice, RegistryNode};
-use crate::{FilterValue, LinkType};
+use crate::registry::{Direction, RegistryDevice, RegistryNode};
+use crate::{FilterValue, LinkType, PipecastNode};
 use log::debug;
 use oneshot::Sender;
 use pipewire::filter::{Filter, FilterListener, FilterPort};
@@ -151,6 +151,48 @@ impl Store {
     pub fn add_link(&mut self, link: LinkStore) {
         self.managed_links.push(link);
     }
+
+    /// This function returns a list of nodes which can be linked to and from inside PipeCast
+    pub fn get_usable_nodes(&self) -> Vec<PipecastNode> {
+        // Firstly, iterate over the devices, we need to peek into all of them to check nodes..
+        let mut pipecast_nodes: Vec<PipecastNode> = Vec::new();
+
+        for device in self.unmanaged_devices.values() {
+            for (node_id, node) in &device.nodes {
+                // We need to count the number of non-monitor ports on the input and output
+                let mut in_count = 0;
+                let mut out_count = 0;
+                for port in node.ports[Direction::In].values() {
+                    if !port.is_monitor {
+                        in_count += 1;
+                    }
+                }
+                for port in node.ports[Direction::Out].values() {
+                    if !port.is_monitor {
+                        out_count += 1;
+                    }
+                }
+
+                // In this instance, if we have more than 2 ports we can't easily link them
+                // together effectively, so we'll ignore this node, we'll also ignore it if there
+                // are NO ports at all!
+                if in_count > 2 || out_count > 2 || (in_count == 0 && out_count == 0) {
+                    continue;
+                }
+
+                // We get here, this node should be usable
+                pipecast_nodes.push(PipecastNode {
+                    node_id: *node_id,
+                    name: node.name.clone(),
+                    nickname: node.nickname.clone(),
+                    description: node.description.clone(),
+                    inputs: in_count,
+                    outputs: out_count,
+                });
+            }
+        }
+        pipecast_nodes
+    }
 }
 
 // This works, but is horrifically messy..
@@ -190,6 +232,7 @@ pub struct FilterStore {
     pub data: Rc<RefCell<FilterData>>,
 }
 
+#[derive(Debug)]
 pub struct LinkStore {
     pub(crate) link: Link,
 
