@@ -5,9 +5,10 @@ edition = "2021"
 
 [dependencies]
 serde = { workspace = true }
+serde_json = { workspace = true }
+
 ulid = { workspace = true }
+enum-map = { workspace = true }
 
-enum-map = "2.7.3"
-
-strum = "0.27.0"
+strum = { version = "0.27.0" }
 strum_macros = "0.27.0"

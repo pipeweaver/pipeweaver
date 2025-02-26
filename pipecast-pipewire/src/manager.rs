@@ -302,6 +302,7 @@ impl PipewireManager {
             })
             .process(move |filter, data, position| {
                 let samples = position.clock.duration as u32;
+                //debug!("Rate: {:?}", position.clock.rate.denom);
 
                 let mut input_list = vec![];
                 let mut output_list = vec![];

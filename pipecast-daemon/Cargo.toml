@@ -11,15 +11,20 @@ ulid = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+json-patch = { workspace = true }
 
 ### Internal Dependencies ###
 pipecast-ipc = { path = "../pipecast-ipc" }
 pipecast-profile = { path = "../pipecast-profile" }
 pipecast-pipewire = { path = "../pipecast-pipewire" }
 
-enum-map = "2.7.3"
+### Enum Handling
+enum-map = { workspace = true }
 strum = "0.27.0"
 strum_macros = "0.27.0"
+
+### Project Paths
+directories = "6.0.0"
 
 ### Log Writing ###
 simplelog = "0.12.2"
@@ -34,4 +39,4 @@ actix-web-actors = "4.3.0"
 actix-cors = "0.7.0"
 mime_guess = "2.0.5"
 include_dir = "0.7.4"
-json-patch = "3.0.1"
+

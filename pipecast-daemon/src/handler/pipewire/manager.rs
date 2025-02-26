@@ -28,7 +28,7 @@ impl PipewireManager {
         Self {
             pipewire: manager,
 
-            profile: Default::default(),
+            profile: Profile::base_settings(),
 
             source_map: HashMap::default(),
             target_map: HashMap::default(),

@@ -12,4 +12,4 @@ log = { workspace = true }
 pipewire = { git = "https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git" }
 oneshot = "0.1.8"
 
-enum-map = "2.7.3"
+enum-map = { workspace = true }

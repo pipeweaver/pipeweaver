@@ -2,13 +2,16 @@ mod stop;
 mod servers;
 mod handler;
 mod platform;
+mod settings;
+mod profile;
 
 use crate::handler::primary_worker::start_primary_worker;
 use crate::platform::spawn_runtime;
 use crate::servers::http_server::spawn_http_server;
 use crate::servers::ipc_server::{bind_socket, spawn_ipc_server};
 use crate::stop::Stop;
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
+use directories::ProjectDirs;
 use log::{debug, error, info, LevelFilter};
 use pipecast_ipc::commands::HttpSettings;
 use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
@@ -19,6 +22,9 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let dirs = ProjectDirs::from("io", "github", "pipecast").ok_or(anyhow!("Unable to locate project directory"))?;
+
+
     // We need to ignore a couple of packages log output so create a builder.
     let mut log_config = ConfigBuilder::new();
 

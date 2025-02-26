@@ -1,19 +1,20 @@
 mod default;
 
 use enum_map::{Enum, EnumMap};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use strum_macros::{Display, EnumIter};
 use ulid::Ulid;
 
 /// Main Profile Node
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Profile {
     /// A list of devices currently configured in this profile
     pub devices: Devices,
     pub routes: HashMap<Ulid, Vec<Ulid>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Devices {
     /// Source devices (Devices that bring audio into the Mixer)
     pub sources: SourceDevices,
@@ -22,7 +23,7 @@ pub struct Devices {
     pub targets: TargetDevices,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct SourceDevices {
     /// Sink Devices physically attached to Pipewire
     pub physical_devices: Vec<PhysicalSourceDevice>,
@@ -31,7 +32,7 @@ pub struct SourceDevices {
     pub virtual_devices: Vec<VirtualSourceDevice>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct TargetDevices {
     /// Source Devices attached to Pipewire
     pub physical_devices: Vec<PhysicalTargetDevice>,
@@ -40,33 +41,33 @@ pub struct TargetDevices {
     pub virtual_devices: Vec<VirtualTargetDevice>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceDescription {
     pub id: Ulid,
     pub name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct VirtualSourceDevice {
     pub description: DeviceDescription,
     pub mute_states: MuteStates,
     pub volumes: EnumMap<Mix, u8>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct MuteStates {
     pub mute_state: MuteState,
     pub mute_targets: EnumMap<MuteTarget, Vec<Ulid>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct PhysicalDeviceDescriptor {
     pub name: Option<String>,
     pub description: Option<String>,
     pub nickname: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct PhysicalSourceDevice {
     pub description: DeviceDescription,
     pub mute_states: MuteStates,
@@ -75,7 +76,7 @@ pub struct PhysicalSourceDevice {
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct VirtualTargetDevice {
     pub description: DeviceDescription,
 
@@ -83,7 +84,7 @@ pub struct VirtualTargetDevice {
     pub mix: Mix,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct PhysicalTargetDevice {
     pub description: DeviceDescription,
 
@@ -93,21 +94,24 @@ pub struct PhysicalTargetDevice {
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
 
-#[derive(Debug, Display, Copy, Clone, Enum, EnumIter)]
+#[derive(Default, Debug, Display, Copy, Clone, Enum, EnumIter, Serialize, Deserialize)]
 pub enum Mix {
+    #[default]
     A,
     B,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum MuteState {
+    #[default]
     Unmuted,
     MuteTargetA,
     MuteTargetB,
 }
 
-#[derive(Debug, Copy, Clone, Enum, EnumIter)]
+#[derive(Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize)]
 pub enum MuteTarget {
+    #[default]
     TargetA,
     TargetB,
 }

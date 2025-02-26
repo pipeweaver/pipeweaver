@@ -2,8 +2,8 @@ use crate::{DeviceDescription, Devices, Mix, MuteState, MuteStates, PhysicalDevi
 use enum_map::enum_map;
 use ulid::Ulid;
 
-impl Default for Profile {
-    fn default() -> Self {
+impl Profile {
+    pub fn base_settings() -> Self {
         let mic_id = Ulid::from_string("01JKMZFMP9A8J92S631RF3AP3W").expect("Unable to Parse ULID");
         let pc_line_in_id = Ulid::from_string("01JKMZFMP9A8J92S631RF3AP3J").expect("Unable to Parse ULID");
         let system_id = Ulid::from_string("01JKMZFMP9QKHFTAJYC92HCXTV").expect("Unable to Parse ULID");
@@ -30,8 +30,8 @@ impl Default for Profile {
                                 mute_targets: Default::default(),
                             },
                             volumes: enum_map! {
-                                Mix::A => 100,
-                                Mix::B => 100,
+                                Mix::A => 99,
+                                Mix::B => 99,
                             },
                             attached_devices: vec![
                                 PhysicalDeviceDescriptor {
@@ -79,8 +79,8 @@ impl Default for Profile {
                                 mute_targets: Default::default(),
                             },
                             volumes: enum_map! {
-                                Mix::A => 100,
-                                Mix::B => 100,
+                                Mix::A => 99,
+                                Mix::B => 99,
                             },
                         },
                         VirtualSourceDevice {
@@ -93,8 +93,8 @@ impl Default for Profile {
                                 mute_targets: Default::default(),
                             },
                             volumes: enum_map! {
-                                Mix::A => 100,
-                                Mix::B => 100,
+                                Mix::A => 99,
+                                Mix::B => 99,
                             },
                         },
                         VirtualSourceDevice {
@@ -107,8 +107,8 @@ impl Default for Profile {
                                 mute_targets: Default::default(),
                             },
                             volumes: enum_map! {
-                                Mix::A => 100,
-                                Mix::B => 100,
+                                Mix::A => 99,
+                                Mix::B => 99,
                             },
                         },
                         VirtualSourceDevice {
@@ -121,8 +121,8 @@ impl Default for Profile {
                                 mute_targets: Default::default(),
                             },
                             volumes: enum_map! {
-                                Mix::A => 100,
-                                Mix::B => 100,
+                                Mix::A => 99,
+                                Mix::B => 99,
                             },
                         },
                         VirtualSourceDevice {
@@ -135,8 +135,8 @@ impl Default for Profile {
                                 mute_targets: Default::default(),
                             },
                             volumes: enum_map! {
-                                Mix::A => 100,
-                                Mix::B => 100,
+                                Mix::A => 99,
+                                Mix::B => 99,
                             },
                         },
                     ],
@@ -148,7 +148,7 @@ impl Default for Profile {
                                 id: headphones_id,
                                 name: "Headphones".to_string(),
                             },
-                            volume: 100,
+                            volume: 99,
                             mix: Mix::A,
                             attached_devices: vec![
                                 PhysicalDeviceDescriptor {
@@ -175,7 +175,7 @@ impl Default for Profile {
                                 id: stream_mix_id,
                                 name: "Stream Mix".to_string(),
                             },
-                            volume: 100,
+                            volume: 99,
                             mix: Mix::B,
                         },
                         VirtualTargetDevice {
@@ -183,7 +183,7 @@ impl Default for Profile {
                                 id: vod_mix_id,
                                 name: "VOD".to_string(),
                             },
-                            volume: 100,
+                            volume: 99,
                             mix: Mix::B,
                         },
                         VirtualTargetDevice {
@@ -191,7 +191,7 @@ impl Default for Profile {
                                 id: chat_mic_id,
                                 name: "Chat Mic".to_string(),
                             },
-                            volume: 100,
+                            volume: 99,
                             mix: Mix::A,
                         }
                     ],
