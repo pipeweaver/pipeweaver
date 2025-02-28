@@ -56,7 +56,6 @@ impl PipewireManager {
             *NODE_DESCRIPTION => properties.node_description,
 
             *NODE_VIRTUAL => "true",
-            *NODE_DRIVER => "true",
             *PORT_MONITOR => "false",
 
             *APP_ICON_NAME => &*properties.app_id,
@@ -75,8 +74,20 @@ impl PipewireManager {
             },
 
             *AUDIO_CHANNELS => "2",
-            *NODE_LATENCY => "1024/48000",
-            *NODE_MAX_LATENCY => "1024/48000",
+            *NODE_LATENCY => "128/48000",
+            *NODE_MAX_LATENCY => "128/48000",
+
+
+            // I'm not entirely sure why, but these are needed to prevent arbitrary quantum changes
+            // in the target nodes at the end of the tree. I'm speculating that the run-up from idle
+            // take a tiny amount of time to spool up, during which the target node is expecting
+            // but not receiving data, resulting in a buffer increase.
+            //
+            // These settings can cause some slight audio issues while the tree is being attached,
+            // but for now, it has the desired result.
+            *NODE_FORCE_QUANTUM => "128",
+            *NODE_DRIVER => "true",
+            *NODE_ALWAYS_PROCESS => "true",
 
             // https://gitlab.freedesktop.org/pipewire/pipewire/-/wikis/Virtual-Devices
             "audio.position" => "FL,FR",
