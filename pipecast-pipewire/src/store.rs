@@ -3,13 +3,13 @@ use crate::registry::{Direction, RegistryDevice, RegistryNode};
 use crate::{FilterValue, LinkType, PipecastNode};
 use log::debug;
 use oneshot::Sender;
+use parking_lot::RwLock;
 use pipewire::filter::{Filter, FilterListener, FilterPort};
 use pipewire::link::Link;
 use pipewire::node::{Node, NodeListener};
 use pipewire::properties::Properties;
 use pipewire::proxy::ProxyListener;
 use pipewire::spa::param::ParamType;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use ulid::Ulid;
@@ -145,7 +145,7 @@ impl Store {
 
     pub fn filter_set_parameter(&mut self, id: Ulid, key: u32, value: FilterValue) {
         let filter = self.managed_filters.get_mut(&id).expect("Broke!");
-        filter.data.borrow_mut().callback.set_property(key, value);
+        filter.data.write().callback.set_property(key, value);
     }
 
     pub fn add_link(&mut self, link: LinkStore) {
@@ -216,20 +216,26 @@ pub(crate) struct NodeStore {
 }
 
 pub struct FilterStore {
+    /// The Pipewire Node ID for this Filter
     pub(crate) pw_id: Option<u32>,
 
+    /// The PipeCast Ulid Identifier
     pub(crate) id: Ulid,
 
-    pub(crate) filter_listener: FilterListener<Rc<RefCell<FilterData>>>,
-
+    /// Details of the ports assigned to this filter
     pub(crate) input_ports: Vec<FilterPort>,
     pub(crate) output_ports: Vec<FilterPort>,
 
-    pub filter: Filter,
+    /// These two fields need to exist purely to prevent the filter and the listener from
+    /// being dropped, they're never directly accessed, they're just a store.
+    pub(crate) _filter: Filter,
+    pub(crate) _listener: FilterListener<Rc<RwLock<FilterData>>>,
 
+    /// The 'Ready Sender' is called once the filter is setup and ready-to-go
     pub(crate) ready_sender: Option<Sender<()>>,
 
-    pub data: Rc<RefCell<FilterData>>,
+    /// The Data related to the filter, including the sample processing callback
+    pub data: Rc<RwLock<FilterData>>,
 }
 
 #[derive(Debug)]

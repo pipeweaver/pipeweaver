@@ -1555,6 +1555,7 @@ dependencies = [
  "enum-map",
  "log",
  "oneshot",
+ "parking_lot",
  "pipewire",
  "ulid",
 ]

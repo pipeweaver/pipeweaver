@@ -9,7 +9,9 @@ anyhow = { workspace = true }
 ulid = { workspace = true }
 log = { workspace = true }
 
-pipewire = { git = "https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git" }
+pipewire = { git = "https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git", features = ["v0_3_77"] }
 oneshot = "0.1.8"
 
 enum-map = { workspace = true }
+
+parking_lot = "0.12.3"

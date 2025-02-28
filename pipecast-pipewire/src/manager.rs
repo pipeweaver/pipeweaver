@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use log::{debug, error};
 use pipewire::core::Core;
 use pipewire::filter::{Filter, FilterFlags, FilterState, PortFlags};
-use pipewire::keys::{APP_ICON_NAME, APP_ID, APP_NAME, AUDIO_CHANNEL, AUDIO_CHANNELS, CLIENT_ID, CLIENT_NAME, DEVICE_DESCRIPTION, DEVICE_ICON_NAME, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION, NODE_DRIVER, NODE_ID, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_DIRECTION, PORT_MONITOR, PORT_NAME};
+use pipewire::keys::{APP_ICON_NAME, APP_ID, APP_NAME, AUDIO_CHANNEL, AUDIO_CHANNELS, CLIENT_ID, CLIENT_NAME, DEVICE_DESCRIPTION, DEVICE_ICON_NAME, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_ALWAYS_PROCESS, NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_ID, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_DIRECTION, PORT_MONITOR, PORT_NAME};
 use pipewire::link::Link;
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
@@ -21,6 +21,7 @@ use pipewire::spa::utils::Direction;
 use pipewire::{context, main_loop};
 use std::cell::RefCell;
 
+use parking_lot::RwLock;
 use std::rc::Rc;
 use ulid::Ulid;
 
@@ -279,11 +280,12 @@ impl PipewireManager {
             ).expect("Filter Output Creation Failed"));
         }
 
-        // Possibly Use a RWLock provided by parking-lot here..
-        let data = Rc::new(RefCell::new(FilterData {
+        // Use a RWLock provided by parking-lot here, so we can safely grab the filter to change
+        // its settings on-the-fly
+        let data = Rc::new(RwLock::new(FilterData {
             callback: props.callback,
         }));
-        let data_clone = data.clone();
+        let data_inner = data.clone();
 
         debug!("[{}] Registering Filter Listener", props.filter_id);
         let listener_input_ports = input_ports.clone();
@@ -291,7 +293,7 @@ impl PipewireManager {
         let listener_state_store = self.store.clone();
         let listener_id = props.filter_id;
         let listener = filter
-            .add_local_listener_with_user_data(data_clone)
+            .add_local_listener_with_user_data(data_inner)
             .state_changed(move |filter, _data, old, _new| {
                 if old == FilterState::Connecting {
                     debug!("[{}] Filter Connected", listener_id);
@@ -316,9 +318,7 @@ impl PipewireManager {
                     output_list.push(out_buffer.unwrap());
                 }
 
-                data.borrow()
-                    .callback
-                    .process_samples(input_list, output_list);
+                data.read().callback.process_samples(input_list, output_list);
             })
             .register()
             .expect("Filter Borked.");
@@ -350,8 +350,8 @@ impl PipewireManager {
             data,
 
             id: props.filter_id,
-            filter,
-            filter_listener: listener,
+            _filter: filter,
+            _listener: listener,
             input_ports,
             output_ports,
 
