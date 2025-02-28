@@ -86,8 +86,7 @@ impl PipewireManager {
             // These settings can cause some slight audio issues while the tree is being attached,
             // but for now, it has the desired result.
             *NODE_FORCE_QUANTUM => "128",
-            *NODE_DRIVER => "true",
-            *NODE_ALWAYS_PROCESS => "true",
+            *NODE_DRIVER => "false",
 
             // https://gitlab.freedesktop.org/pipewire/pipewire/-/wikis/Virtual-Devices
             "audio.position" => "FL,FR",
@@ -467,7 +466,14 @@ impl PipewireManager {
                     *LINK_INPUT_NODE => dest_node.to_string(),
                     *LINK_INPUT_PORT => dest_port.to_string(),
                     *OBJECT_LINGER => "false",
-                    *NODE_PASSIVE => "true",
+                    
+                    // No passivity here. While our links may, in some cases, be attached to
+                    // physical sources / sinks, in other cases they're attached to filters which
+                    // don't have the opportunity to go idle, and implying as such can create a
+                    // disconnect between internal and external behaviours.
+                    //
+                    // TODO: send a parameter indicating the node types
+                    *NODE_PASSIVE => "false",
                 },
             )
             .expect("Failed to create link")
