@@ -55,15 +55,6 @@ impl PipewireManager {
         }
 
         // Ok, check the profile physical settings and map the device to the node
-        for device in &self.profile.devices.targets.physical_devices {
-            for attached_device in &device.attached_devices {
-                if let Some(node_id) = self.locate_physical_node_id(attached_device, true) {
-                    debug!("Attaching {:?} to {:?}", attached_device, device.description.name);
-                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(Filter(device.description.id), UnmanagedNode(node_id)));
-                }
-            }
-        }
-
         for device in &self.profile.devices.sources.physical_devices {
             for attached_device in &device.attached_devices {
                 if let Some(node_id) = self.locate_physical_node_id(attached_device, false) {
@@ -73,6 +64,15 @@ impl PipewireManager {
             }
         }
 
+        sleep(Duration::from_secs(1)).await;
+        for device in &self.profile.devices.targets.physical_devices {
+            for attached_device in &device.attached_devices {
+                if let Some(node_id) = self.locate_physical_node_id(attached_device, true) {
+                    debug!("Attaching {:?} to {:?}", attached_device, device.description.name);
+                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(Filter(device.description.id), UnmanagedNode(node_id)));
+                }
+            }
+        }
 
         loop {
             // We're just going to loop for now..
