@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use log::{debug, error};
 use pipewire::core::Core;
 use pipewire::filter::{Filter, FilterFlags, FilterState, PortFlags};
-use pipewire::keys::{APP_ICON_NAME, APP_ID, APP_NAME, AUDIO_CHANNEL, AUDIO_CHANNELS, CLIENT_ID, CLIENT_NAME, DEVICE_DESCRIPTION, DEVICE_ICON_NAME, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_ALWAYS_PROCESS, NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_ID, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_DIRECTION, PORT_MONITOR, PORT_NAME};
+use pipewire::keys::{APP_ICON_NAME, APP_ID, APP_NAME, AUDIO_CHANNEL, AUDIO_CHANNELS, CLIENT_ID, CLIENT_NAME, DEVICE_DESCRIPTION, DEVICE_ICON_NAME, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_ALWAYS_PROCESS, NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_ID, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_DIRECTION, PORT_MONITOR, PORT_NAME};
 use pipewire::link::Link;
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
@@ -78,21 +78,35 @@ impl PipewireManager {
             *NODE_MAX_LATENCY => "128/48000",
 
 
-            // I'm not entirely sure why, but these are needed to prevent arbitrary quantum changes
-            // in the target nodes at the end of the tree. I'm speculating that the run-up from idle
-            // take a tiny amount of time to spool up, during which the target node is expecting
-            // but not receiving data, resulting in a buffer increase.
-            //
-            // These settings can cause some slight audio issues while the tree is being attached,
-            // but for now, it has the desired result.
+            // Force the QUANTUM and the RATE to ensure that we're not internally adjusted when
+            // latency occurs following a link
             *NODE_FORCE_QUANTUM => "128",
+            *NODE_FORCE_RATE => "48000",
+
+            // We don't want to set a driver here. If creating a large number of nodes each of them
+            // will pick a different device while finding a clock source, resulting in the nodes
+            // being spread all over the place. When the node tree starts getting linked together
+            // pipewire needs to pull all the nodes / filters / devices into a single clock source
+            // which can cause some pretty aggressive behaviours (I've seen it infinite loop as
+            // various nodes fight for clock control).
+            //
+            // Setting this to false means that the devices will fall under the 'Dummy' node until
+            // a physical device is attached, at which point it'll move everything together under
+            // that single clock.
             *NODE_DRIVER => "false",
 
             // https://gitlab.freedesktop.org/pipewire/pipewire/-/wikis/Virtual-Devices
             "audio.position" => "FL,FR",
+
+            // In the case of PipeCast, we're handling the volumes ourselves via filters, so we're
+            // going to simply ignore what pipewire says the volume is and monitor at 100%. This
+            // should prevent weirdness and unexpected results if the volumes are directly adjusted.
             "monitor.channel-volumes" => "false",
-            "monitor.passthrough" => "true",
+
+            // Keep the monitor as close to 'real-time' as possible
+            "monitor.passthrough" => "false",
         };
+
 
         debug!(
             "[{}] Attempting to Create Device '{}'",
@@ -466,7 +480,7 @@ impl PipewireManager {
                     *LINK_INPUT_NODE => dest_node.to_string(),
                     *LINK_INPUT_PORT => dest_port.to_string(),
                     *OBJECT_LINGER => "false",
-                    
+
                     // No passivity here. While our links may, in some cases, be attached to
                     // physical sources / sinks, in other cases they're attached to filters which
                     // don't have the opportunity to go idle, and implying as such can create a
