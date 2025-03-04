@@ -4,11 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+pipecast-shared = { path = "../pipecast-shared" }
+
 serde = { workspace = true }
 serde_json = { workspace = true }
 
 ulid = { workspace = true }
 enum-map = { workspace = true }
 
-strum = { version = "0.27.0" }
-strum_macros = "0.27.0"
+strum = { workspace = true }
+strum_macros = { workspace = true }

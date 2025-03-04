@@ -1523,6 +1523,7 @@ dependencies = [
  "pipecast-ipc",
  "pipecast-pipewire",
  "pipecast-profile",
+ "pipecast-shared",
  "serde",
  "serde_json",
  "simplelog",
@@ -1541,10 +1542,12 @@ dependencies = [
  "futures",
  "interprocess",
  "json-patch",
+ "pipecast-shared",
  "reqwest",
  "serde",
  "tokio-serde",
  "tokio-util",
+ "ulid",
 ]
 
 [[package]]
@@ -1576,6 +1579,7 @@ name = "pipecast-profile"
 version = "0.1.0"
 dependencies = [
  "enum-map",
+ "pipecast-shared",
  "serde",
  "serde_json",
  "strum",
@@ -1586,6 +1590,14 @@ dependencies = [
 [[package]]
 name = "pipecast-shared"
 version = "0.1.0"
+dependencies = [
+ "enum-map",
+ "serde",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "ulid",
+]
 
 [[package]]
 name = "pipewire"

@@ -22,7 +22,9 @@ anyhow = "1.0.95"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"
 
-### EnumMapping..
+### Enum Helpers..
+strum = { version = "0.27.0" }
+strum_macros = "0.27.0"
 enum-map = { version = "2.7.3", features = ["serde"] }
 
 ### JSON Patching ###
@@ -33,3 +35,5 @@ interprocess = { version = "2.2.1", features = ["tokio"] }
 
 ### Device Identification ###
 ulid = { version = "1.2.0", features = ["serde"] }
+
+

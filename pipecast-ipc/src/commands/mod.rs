@@ -1,5 +1,7 @@
 use json_patch::Patch;
+use pipecast_shared::Mix;
 use serde::{Deserialize, Serialize};
+use ulid::Ulid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DaemonRequest {
@@ -38,7 +40,9 @@ pub struct WebsocketResponse {
 pub enum DaemonCommand {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum PipewireCommand {}
+pub enum PipewireCommand {
+    SetVolume(Ulid, Mix, u8),
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PipewireCommandResponse {

@@ -1,14 +1,25 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
+use enum_map::Enum;
+use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumIter};
+
+#[derive(Default, Debug, Display, Copy, Clone, Enum, EnumIter, Serialize, Deserialize)]
+pub enum Mix {
+    #[default]
+    A,
+    B,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum MuteState {
+    #[default]
+    Unmuted,
+    MuteTargetA,
+    MuteTargetB,
+}
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+#[derive(Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize)]
+pub enum MuteTarget {
+    #[default]
+    TargetA,
+    TargetB,
 }

@@ -1,9 +1,9 @@
 mod default;
 
 use enum_map::{Enum, EnumMap};
+use pipecast_shared::{Mix, MuteState, MuteTarget};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use strum_macros::{Display, EnumIter};
 use ulid::Ulid;
 
 /// Main Profile Node
@@ -94,24 +94,4 @@ pub struct PhysicalTargetDevice {
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
 
-#[derive(Default, Debug, Display, Copy, Clone, Enum, EnumIter, Serialize, Deserialize)]
-pub enum Mix {
-    #[default]
-    A,
-    B,
-}
 
-#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize)]
-pub enum MuteState {
-    #[default]
-    Unmuted,
-    MuteTargetA,
-    MuteTargetB,
-}
-
-#[derive(Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize)]
-pub enum MuteTarget {
-    #[default]
-    TargetA,
-    TargetB,
-}

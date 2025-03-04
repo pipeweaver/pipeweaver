@@ -17,11 +17,12 @@ json-patch = { workspace = true }
 pipecast-ipc = { path = "../pipecast-ipc" }
 pipecast-profile = { path = "../pipecast-profile" }
 pipecast-pipewire = { path = "../pipecast-pipewire" }
+pipecast-shared = { path = "../pipecast-shared" }
 
 ### Enum Handling
 enum-map = { workspace = true }
-strum = "0.27.0"
-strum_macros = "0.27.0"
+strum = { workspace = true }
+strum_macros = { workspace = true }
 
 ### Project Paths
 directories = "6.0.0"

@@ -4,11 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# Local Dependencies
+pipecast-shared = { path = "../pipecast-shared" }
+
 ### Inherited Dependencies ###
 anyhow = { workspace = true }
 serde = { workspace = true }
 json-patch = { workspace = true }
 interprocess = { workspace = true }
+ulid = { workspace = true }
 
 async-trait = "0.1.86"
 futures = "0.3.31"
