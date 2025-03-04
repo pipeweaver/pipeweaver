@@ -1,16 +1,22 @@
 use crate::handler::pipewire::filters::pass_through::PassThroughFilter;
 use crate::handler::pipewire::filters::volume::VolumeFilter;
+use crate::handler::primary_worker::ManagerMessage;
 use enum_map::{enum_map, EnumMap};
 use log::{debug, info};
+use pipecast_ipc::commands::{PipewireCommand, PipewireCommandResponse};
 use pipecast_pipewire::LinkType::{Filter, UnmanagedNode};
 use pipecast_pipewire::{oneshot, FilterProperties, LinkType, MediaClass, NodeProperties, PipecastNode, PipewireMessage, PipewireRunner};
 use pipecast_profile::{DeviceDescription, Mix, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice, Profile, VirtualSourceDevice, VirtualTargetDevice};
 use std::collections::HashMap;
 use std::time::Duration;
+use tokio::select;
+use tokio::sync::mpsc;
 use tokio::time::sleep;
 use ulid::Ulid;
 
 pub(crate) struct PipewireManager {
+    command_receiver: mpsc::Receiver<ManagerMessage>,
+
     pipewire: PipewireRunner,
 
     profile: Profile,
@@ -21,11 +27,12 @@ pub(crate) struct PipewireManager {
 }
 
 impl PipewireManager {
-    pub fn new() -> Self {
+    pub fn new(command_receiver: mpsc::Receiver<ManagerMessage>) -> Self {
         debug!("Establishing Connection to Pipewire..");
         let manager = PipewireRunner::new().unwrap();
 
         Self {
+            command_receiver,
             pipewire: manager,
 
             profile: Profile::base_settings(),
@@ -43,40 +50,26 @@ impl PipewireManager {
         debug!("[Pipewire Runner] Waiting for Pipewire to Calm..");
         sleep(Duration::from_secs(1)).await;
 
-        debug!("Loading Profile");
-        self.load_profile().await;
-
-        // Fetch the Physical Node List (TODO: We need a listener / callback for this)
-        debug!("Fetching attached physical nodes");
         let (tx, rx) = oneshot::channel();
         let _ = self.pipewire.send_message(PipewireMessage::GetUsableNodes(tx));
         if let Ok(nodes) = rx.await {
             self.node_list = nodes;
         }
 
-        // Ok, check the profile physical settings and map the device to the node
-        for device in &self.profile.devices.sources.physical_devices {
-            for attached_device in &device.attached_devices {
-                if let Some(node_id) = self.locate_physical_node_id(attached_device, false) {
-                    debug!("Attaching {:?} to {:?}", attached_device, device.description.name);
-                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(UnmanagedNode(node_id), Filter(device.description.id)));
-                }
-            }
-        }
-
-        sleep(Duration::from_secs(1)).await;
-        for device in &self.profile.devices.targets.physical_devices {
-            for attached_device in &device.attached_devices {
-                if let Some(node_id) = self.locate_physical_node_id(attached_device, true) {
-                    debug!("Attaching {:?} to {:?}", attached_device, device.description.name);
-                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(Filter(device.description.id), UnmanagedNode(node_id)));
-                }
-            }
-        }
+        debug!("Loading Profile");
+        self.load_profile().await;
 
         loop {
-            // We're just going to loop for now..
-            sleep(Duration::from_secs(5)).await;
+            select!(
+                Some(command) = self.command_receiver.recv() => {
+                    match command {
+                        ManagerMessage::Execute(command, tx) => {
+                            debug!("Received Command: {:?}", command);
+                            let _ = tx.send(PipewireCommandResponse::Ok);
+                        }
+                    }
+                }
+            );
         }
     }
 
@@ -107,6 +100,29 @@ impl PipewireManager {
         for (source, targets) in self.profile.routes.clone() {
             for target in targets {
                 self.create_device_route(source, target).await;
+            }
+        }
+
+        // Fetch the Physical Node List (TODO: We need a listener / callback for this)
+        debug!("Fetching attached physical nodes");
+
+        // Ok, check the profile physical settings and map the device to the node
+        for device in &self.profile.devices.sources.physical_devices {
+            for attached_device in &device.attached_devices {
+                if let Some(node_id) = self.locate_physical_node_id(attached_device, false) {
+                    debug!("Attaching {:?} to {:?}", attached_device, device.description.name);
+                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(UnmanagedNode(node_id), Filter(device.description.id)));
+                }
+            }
+        }
+
+        sleep(Duration::from_secs(1)).await;
+        for device in &self.profile.devices.targets.physical_devices {
+            for attached_device in &device.attached_devices {
+                if let Some(node_id) = self.locate_physical_node_id(attached_device, true) {
+                    debug!("Attaching {:?} to {:?}", attached_device, device.description.name);
+                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(Filter(device.description.id), UnmanagedNode(node_id)));
+                }
             }
         }
     }
@@ -354,7 +370,7 @@ impl PipewireManager {
     async fn remove_route(&mut self, source: Ulid, destination: Ulid) {}
 }
 
-pub async fn run_pipewire_manager() {
-    let mut manager = PipewireManager::new();
+pub async fn run_pipewire_manager(command_receiver: mpsc::Receiver<ManagerMessage>) {
+    let mut manager = PipewireManager::new(command_receiver);
     manager.run().await;
 }

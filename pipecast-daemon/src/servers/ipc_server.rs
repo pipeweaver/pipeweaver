@@ -3,7 +3,7 @@ use anyhow::{bail, Result};
 use interprocess::local_socket::tokio::prelude::{LocalSocketListener, LocalSocketStream};
 use interprocess::local_socket::traits::tokio::{Listener, Stream};
 use interprocess::local_socket::{
-    GenericFilePath, ListenerOptions, ToFsName, ToNsName,
+    GenericFilePath, ListenerOptions, ToFsName,
 };
 use log::{debug, info, warn};
 use pipecast_ipc::clients::ipc::ipc_socket::Socket;

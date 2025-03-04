@@ -1,11 +1,14 @@
 use crate::handler::messaging::DaemonMessage;
 use crate::handler::pipewire::manager::run_pipewire_manager;
+use crate::handler::primary_worker::ManagerMessage::Execute;
 use crate::servers::http_server::PatchEvent;
 use crate::stop::Stop;
 use log::{debug, info};
-use pipecast_ipc::commands::{DaemonResponse, DaemonStatus};
+use pipecast_ipc::commands::{
+    DaemonResponse, DaemonStatus, PipewireCommand, PipewireCommandResponse,
+};
 use tokio::sync::broadcast::Sender;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio::{select, task};
 
 pub struct PrimaryWorker {
@@ -17,7 +20,6 @@ pub struct PrimaryWorker {
     update_receiver: mpsc::Receiver<()>,
 
     shutdown: Stop,
-
 }
 
 impl PrimaryWorker {
@@ -37,12 +39,17 @@ impl PrimaryWorker {
     async fn run(&mut self, mut message_receiver: mpsc::Receiver<DaemonMessage>) {
         info!("[PrimaryWorker] Starting Primary Worker..");
 
-        task::spawn(run_pipewire_manager());
+
+        // Used to pass messages into the Pipewire Manager
+        let (pipewire_sender, pipewire_receiver) = mpsc::channel(32);
+
+        debug!("[PrimaryWorker] Spawning Pipewire Task..");
+        task::spawn(run_pipewire_manager(pipewire_receiver));
 
         loop {
             select! {
                 Some(message) = message_receiver.recv() => {
-                    self.handle_message(message).await;
+                    self.handle_message(&pipewire_sender, message).await;
                 }
                 _ = self.shutdown.recv() => {
                     debug!("Shutdown Received!");
@@ -54,7 +61,7 @@ impl PrimaryWorker {
         info!("[PrimaryWorker] Stopped");
     }
 
-    async fn handle_message(&mut self, message: DaemonMessage) {
+    async fn handle_message(&mut self, pw_tx: &mpsc::Sender<ManagerMessage>, message: DaemonMessage) {
         let mut update = false;
 
         match message {
@@ -66,9 +73,28 @@ impl PrimaryWorker {
                 let _ = tx.send(DaemonResponse::Ok);
                 update = true;
             }
-            DaemonMessage::RunPipewire(_, _) => {}
+            DaemonMessage::RunPipewire(command, response) => {
+                let (tx, rx) = oneshot::channel();
+                if let Err(e) = pw_tx.send(Execute(command, tx)).await {
+                    let _ = response.send(PipewireCommandResponse::Err(e.to_string()));
+                    return;
+                }
+                match rx.await {
+                    Ok(command_response) => {
+                        let _ = response.send(command_response);
+                    }
+                    Err(e) => {
+                        let _ = response.send(PipewireCommandResponse::Err(e.to_string()));
+                    }
+                }
+            }
         }
     }
+}
+
+#[derive(Debug)]
+pub enum ManagerMessage {
+    Execute(PipewireCommand, oneshot::Sender<PipewireCommandResponse>),
 }
 
 pub async fn start_primary_worker(
