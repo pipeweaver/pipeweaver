@@ -1,5 +1,7 @@
 use pipecast_pipewire::{FilterHandler, FilterProperty, FilterValue};
 
+const POWER_FACTOR: f32 = 3.8;
+
 pub struct VolumeFilter {
     volume: u8,
     volume_inner: f32,
@@ -10,8 +12,12 @@ impl VolumeFilter {
         // Grab and clamp the volumes
         let (volume, volume_inner) = if volume >= 100 {
             (100, 1.)
+        } else if volume == 0 {
+            (0, 0.)
         } else {
-            (volume, volume as f32 / 100.)
+            let change = 20.0 * (volume as f32 / 100.).powf(POWER_FACTOR).log10();
+            let scale = 10.0_f32.powf(change / 20.);
+            (volume, scale)
         };
 
         Self {
@@ -49,9 +55,16 @@ impl FilterHandler for VolumeFilter {
                     if value >= 100 {
                         self.volume = 100;
                         self.volume_inner = 1.;
+                    } else if value == 0 {
+                        self.volume = 0;
+                        self.volume_inner = 0.;
                     } else {
                         self.volume = value;
-                        self.volume_inner = value as f32 / 100.;
+
+                        let change = 20.0 * (value as f32 / 100.).powf(POWER_FACTOR).log10();
+                        let scale = 10.0_f32.powf(change / 20.);
+
+                        self.volume_inner = scale;
                     }
                 } else {
                     panic!("Attempted to Set Volume as non-percentage");
