@@ -1,5 +1,6 @@
 use crate::{DeviceDescription, Devices, Mix, MuteState, MuteStates, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice, Profile, SourceDevices, TargetDevices, VirtualSourceDevice, VirtualTargetDevice};
 use enum_map::enum_map;
+use pipecast_shared::Colour;
 use ulid::Ulid;
 
 impl Profile {
@@ -24,6 +25,11 @@ impl Profile {
                             description: DeviceDescription {
                                 id: mic_id,
                                 name: "Microphone".to_string(),
+                                colour: Colour {
+                                    red: 47,
+                                    green: 24,
+                                    blue: 71
+                                },
                             },
                             mute_states: MuteStates {
                                 mute_state: MuteState::Unmuted,
@@ -34,22 +40,27 @@ impl Profile {
                                 Mix::B => 99,
                             },
                             attached_devices: vec![
-                                PhysicalDeviceDescriptor {
-                                    name: None,
-                                    description: Some(String::from("BEACN Mic Microphone")),
-                                    nickname: None,
-                                },
-                                PhysicalDeviceDescriptor {
-                                    name: None,
-                                    description: Some(String::from("Elgato XLR Dock Mono")),
-                                    nickname: None,
-                                }
+                                // PhysicalDeviceDescriptor {
+                                //     name: None,
+                                //     description: Some(String::from("BEACN Mic Microphone")),
+                                //     nickname: None,
+                                // },
+                                // PhysicalDeviceDescriptor {
+                                //     name: None,
+                                //     description: Some(String::from("Elgato XLR Dock Mono")),
+                                //     nickname: None,
+                                // }
                             ],
                         },
                         PhysicalSourceDevice {
                             description: DeviceDescription {
                                 id: pc_line_in_id,
                                 name: "PC Line In".to_string(),
+                                colour: Colour {
+                                    red: 98,
+                                    green: 17,
+                                    blue: 99
+                                },
                             },
                             mute_states: MuteStates {
                                 mute_state: MuteState::Unmuted,
@@ -60,11 +71,11 @@ impl Profile {
                                 Mix::B => 100,
                             },
                             attached_devices: vec![
-                                PhysicalDeviceDescriptor {
-                                    name: Some(String::from("alsa_input.pci-0000_2f_00.4.analog-stereo")),
-                                    description: None,
-                                    nickname: None,
-                                },
+                                // PhysicalDeviceDescriptor {
+                                //     name: Some(String::from("alsa_input.pci-0000_2f_00.4.analog-stereo")),
+                                //     description: None,
+                                //     nickname: None,
+                                // },
                             ],
                         }
                     ],
@@ -73,6 +84,11 @@ impl Profile {
                             description: DeviceDescription {
                                 id: system_id,
                                 name: "System".to_string(),
+                                colour: Colour {
+                                    red: 153,
+                                    green: 98,
+                                    blue: 30
+                                },
                             },
                             mute_states: MuteStates {
                                 mute_state: MuteState::Unmuted,
@@ -87,6 +103,11 @@ impl Profile {
                             description: DeviceDescription {
                                 id: browser_id,
                                 name: "Browser".to_string(),
+                                colour: Colour {
+                                    red: 211,
+                                    green: 139,
+                                    blue: 93
+                                },
                             },
                             mute_states: MuteStates {
                                 mute_state: MuteState::Unmuted,
@@ -101,6 +122,11 @@ impl Profile {
                             description: DeviceDescription {
                                 id: game_id,
                                 name: "Game".to_string(),
+                                colour: Colour {
+                                    red: 243,
+                                    green: 255,
+                                    blue: 182
+                                },
                             },
                             mute_states: MuteStates {
                                 mute_state: MuteState::Unmuted,
@@ -115,6 +141,11 @@ impl Profile {
                             description: DeviceDescription {
                                 id: music_id,
                                 name: "Music".to_string(),
+                                colour: Colour {
+                                    red: 115,
+                                    green: 158,
+                                    blue: 130
+                                },
                             },
                             mute_states: MuteStates {
                                 mute_state: MuteState::Unmuted,
@@ -129,6 +160,11 @@ impl Profile {
                             description: DeviceDescription {
                                 id: chat_id,
                                 name: "Chat".to_string(),
+                                colour: Colour {
+                                    red: 44,
+                                    green: 85,
+                                    blue: 48
+                                },
                             },
                             mute_states: MuteStates {
                                 mute_state: MuteState::Unmuted,
@@ -147,25 +183,26 @@ impl Profile {
                             description: DeviceDescription {
                                 id: headphones_id,
                                 name: "Headphones".to_string(),
+                                colour: Default::default(),
                             },
                             volume: 99,
                             mix: Mix::A,
                             attached_devices: vec![
-                                PhysicalDeviceDescriptor {
-                                    name: None,
-                                    description: Some(String::from("BEACN Mic Headphones")),
-                                    nickname: None,
-                                },
+                                // PhysicalDeviceDescriptor {
+                                //     name: None,
+                                //     description: Some(String::from("BEACN Mic Headphones")),
+                                //     nickname: None,
+                                // },
                                 PhysicalDeviceDescriptor {
                                     name: None,
                                     description: Some(String::from("GoXLR System")),
                                     nickname: None,
                                 },
-                                PhysicalDeviceDescriptor {
-                                    name: None,
-                                    description: Some(String::from("Elgato XLR Dock Analog Stereo")),
-                                    nickname: None,
-                                }
+                                // PhysicalDeviceDescriptor {
+                                //     name: None,
+                                //     description: Some(String::from("Elgato XLR Dock Analog Stereo")),
+                                //     nickname: None,
+                                // }
                             ],
                         },
                     ],
@@ -174,6 +211,11 @@ impl Profile {
                             description: DeviceDescription {
                                 id: stream_mix_id,
                                 name: "Stream Mix".to_string(),
+                                colour: Colour {
+                                    red: 19,
+                                    green: 64,
+                                    blue: 116
+                                },
                             },
                             volume: 99,
                             mix: Mix::B,
@@ -182,6 +224,11 @@ impl Profile {
                             description: DeviceDescription {
                                 id: vod_mix_id,
                                 name: "VOD".to_string(),
+                                colour: Colour {
+                                    red: 19,
+                                    green: 49,
+                                    blue: 92
+                                },
                             },
                             volume: 99,
                             mix: Mix::B,
@@ -190,6 +237,11 @@ impl Profile {
                             description: DeviceDescription {
                                 id: chat_mic_id,
                                 name: "Chat Mic".to_string(),
+                                colour: Colour {
+                                    red: 11,
+                                    green: 37,
+                                    blue: 69
+                                },
                             },
                             volume: 99,
                             mix: Mix::A,

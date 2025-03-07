@@ -23,3 +23,20 @@ pub enum MuteTarget {
     TargetA,
     TargetB,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Colour {
+    pub red: u8,
+    pub green: u8,
+    pub blue: u8,
+}
+
+impl Default for Colour {
+    fn default() -> Self {
+        Colour {
+            red: 255,
+            green: 255,
+            blue: 0,
+        }
+    }
+}

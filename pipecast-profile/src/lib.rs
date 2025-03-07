@@ -1,7 +1,7 @@
 mod default;
 
 use enum_map::{Enum, EnumMap};
-use pipecast_shared::{Mix, MuteState, MuteTarget};
+use pipecast_shared::{Colour, Mix, MuteState, MuteTarget};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use ulid::Ulid;
@@ -45,6 +45,8 @@ pub struct TargetDevices {
 pub struct DeviceDescription {
     pub id: Ulid,
     pub name: String,
+
+    pub colour: Colour,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
