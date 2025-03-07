@@ -5,7 +5,7 @@ use enum_map::{enum_map, EnumMap};
 use log::{debug, info};
 use pipecast_ipc::commands::{AudioConfiguration, PipewireCommand, PipewireCommandResponse};
 use pipecast_pipewire::LinkType::{Filter, UnmanagedNode};
-use pipecast_pipewire::{oneshot, FilterProperties, LinkType, MediaClass, NodeProperties, PipecastNode, PipewireMessage, PipewireRunner};
+use pipecast_pipewire::{oneshot, FilterProperties, FilterValue, LinkType, MediaClass, NodeProperties, PipecastNode, PipewireMessage, PipewireRunner};
 use pipecast_profile::{DeviceDescription, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice, Profile, VirtualSourceDevice, VirtualTargetDevice};
 use pipecast_shared::Mix;
 use std::collections::HashMap;
@@ -66,13 +66,50 @@ impl PipewireManager {
         debug!("Loading Profile");
         self.load_profile().await;
 
-        loop {
+        'main: loop {
             select!(
                 Some(command) = self.command_receiver.recv() => {
                     match command {
                         ManagerMessage::Execute(command, tx) => {
-                            debug!("Received Command: {:?}", command);
-                            let _ = tx.send(PipewireCommandResponse::Ok);
+                            match command {
+                                PipewireCommand::SetVolume(id, mix, volume) => {
+                                    if let Some(source) = self.source_map.get(&id) {
+                                        let node = source[mix];
+                                        let message = PipewireMessage::SetFilterValue(node, 0, FilterValue::UInt8(volume));
+                                        let _ = self.pipewire.send_message(message);
+                                        
+                                        let _ = tx.send(PipewireCommandResponse::Ok);
+                                        continue;
+                                    }
+                                    
+                                    // Check the Virtual Targets for this node
+                                    if let Some(node) = self.target_map.get(&id) {
+                                        let message = PipewireMessage::SetFilterValue(*node, 0, FilterValue::UInt8(volume));
+                                        let _ = self.pipewire.send_message(message);
+                                        
+                                        let _ = tx.send(PipewireCommandResponse::Ok);
+                                        continue;
+                                    }
+                                    
+                                    // Finally, check the physical targets
+                                    for device in &self.profile.devices.targets.physical_devices {
+                                        if device.description.id == id {
+                                            let message = PipewireMessage::SetFilterValue(id, 0, FilterValue::UInt8(volume));
+                                            let _ = self.pipewire.send_message(message);
+                                        
+                                            let _ = tx.send(PipewireCommandResponse::Ok);
+                                            continue 'main;
+                                        }
+                                    }
+    
+                                    let _ = tx.send(PipewireCommandResponse::Err(String::from("Unknown ID")));
+                                }
+                                _ => {
+                                    debug!("Received Command: {:?}", command);
+                                }
+                            }
+                            
+                            //let _ = tx.send(PipewireCommandResponse::Ok);
                         }
                         ManagerMessage::GetConfig(tx) => {
                             debug!("Sending Audio Config");
@@ -149,6 +186,7 @@ impl PipewireManager {
         let filter_description = DeviceDescription {
             id: id_a,
             name: format!("{} A", device.description.name),
+            colour: Default::default(),
         };
         self.create_volume_filter(filter_description, device.volumes[Mix::A]).await;
 
@@ -156,6 +194,7 @@ impl PipewireManager {
         let filter_description = DeviceDescription {
             id: id_b,
             name: format!("{} B", device.description.name),
+            colour: Default::default(),
         };
         self.create_volume_filter(filter_description, device.volumes[Mix::B]).await;
 
@@ -180,6 +219,7 @@ impl PipewireManager {
         let filter_description = DeviceDescription {
             id: id_a,
             name: format!("{} A", device.description.name),
+            colour: Default::default(),
         };
         self.create_volume_filter(filter_description, device.volumes[Mix::A]).await;
 
@@ -187,6 +227,7 @@ impl PipewireManager {
         let filter_description = DeviceDescription {
             id: id_b,
             name: format!("{} B", device.description.name),
+            colour: Default::default(),
         };
         self.create_volume_filter(filter_description, device.volumes[Mix::B]).await;
 
@@ -218,6 +259,7 @@ impl PipewireManager {
         let filter_description = DeviceDescription {
             id,
             name: device.description.name.to_string(),
+            colour: Default::default(),
         };
         self.create_volume_filter(filter_description, device.volume).await;
 
