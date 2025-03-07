@@ -8,8 +8,10 @@ use log::{debug, error, info, warn};
 use pipecast_ipc::commands::{
     AudioConfiguration, DaemonResponse, DaemonStatus, PipewireCommand, PipewireCommandResponse,
 };
+use std::time::Duration;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::{mpsc, oneshot};
+use tokio::time::sleep;
 use tokio::{select, task};
 
 type Manage = mpsc::Sender<ManagerMessage>;
@@ -47,6 +49,10 @@ impl PrimaryWorker {
 
         debug!("[PrimaryWorker] Spawning Pipewire Task..");
         task::spawn(run_pipewire_manager(pipewire_receiver));
+
+        // Until we're doing this properly...
+        sleep(Duration::from_secs(3)).await;
+        self.update_status(&pipewire_sender).await;
 
         loop {
             select! {
