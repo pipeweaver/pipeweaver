@@ -3,7 +3,7 @@ use crate::handler::pipewire::filters::volume::VolumeFilter;
 use crate::handler::primary_worker::ManagerMessage;
 use enum_map::{enum_map, EnumMap};
 use log::{debug, info};
-use pipecast_ipc::commands::{PipewireCommand, PipewireCommandResponse};
+use pipecast_ipc::commands::{AudioConfiguration, PipewireCommand, PipewireCommandResponse};
 use pipecast_pipewire::LinkType::{Filter, UnmanagedNode};
 use pipecast_pipewire::{oneshot, FilterProperties, LinkType, MediaClass, NodeProperties, PipecastNode, PipewireMessage, PipewireRunner};
 use pipecast_profile::{DeviceDescription, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice, Profile, VirtualSourceDevice, VirtualTargetDevice};
@@ -45,6 +45,12 @@ impl PipewireManager {
         }
     }
 
+    async fn get_config(&self) -> AudioConfiguration {
+        AudioConfiguration {
+            profile: self.profile.clone()
+        }
+    }
+
     pub async fn run(&mut self) {
         debug!("[Pipewire Runner] Starting Event Loop");
 
@@ -67,6 +73,10 @@ impl PipewireManager {
                         ManagerMessage::Execute(command, tx) => {
                             debug!("Received Command: {:?}", command);
                             let _ = tx.send(PipewireCommandResponse::Ok);
+                        }
+                        ManagerMessage::GetConfig(tx) => {
+                            debug!("Sending Audio Config");
+                            let _ = tx.send(self.get_config().await);
                         }
                     }
                 }
@@ -233,7 +243,7 @@ impl PipewireManager {
         // The description is *GENERALLY* unique, and represents how the device is displayed
         // in things like pavucontrol, Gnome's and KDE's audio settings, etc., but uniqueness
         // is less guaranteed here. This is often useful in situations where (for example)
-        // the device is plugged into a different USB port, so it's description has changed
+        // the device is plugged into a different USB port, so it's name has changed
         if device.description.is_some() {
             for node in &self.node_list {
                 if device.description == node.description && ((input && node.inputs != 0) || (!input && node.outputs != 0)) {

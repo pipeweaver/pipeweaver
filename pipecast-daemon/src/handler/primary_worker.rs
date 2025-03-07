@@ -1,15 +1,18 @@
 use crate::handler::messaging::DaemonMessage;
 use crate::handler::pipewire::manager::run_pipewire_manager;
-use crate::handler::primary_worker::ManagerMessage::Execute;
+use crate::handler::primary_worker::ManagerMessage::{Execute, GetConfig};
 use crate::servers::http_server::PatchEvent;
 use crate::stop::Stop;
-use log::{debug, info};
+use json_patch::diff;
+use log::{debug, error, info, warn};
 use pipecast_ipc::commands::{
-    DaemonResponse, DaemonStatus, PipewireCommand, PipewireCommandResponse,
+    AudioConfiguration, DaemonResponse, DaemonStatus, PipewireCommand, PipewireCommandResponse,
 };
 use tokio::sync::broadcast::Sender;
 use tokio::sync::{mpsc, oneshot};
 use tokio::{select, task};
+
+type Manage = mpsc::Sender<ManagerMessage>;
 
 pub struct PrimaryWorker {
     last_status: DaemonStatus,
@@ -39,7 +42,6 @@ impl PrimaryWorker {
     async fn run(&mut self, mut message_receiver: mpsc::Receiver<DaemonMessage>) {
         info!("[PrimaryWorker] Starting Primary Worker..");
 
-
         // Used to pass messages into the Pipewire Manager
         let (pipewire_sender, pipewire_receiver) = mpsc::channel(32);
 
@@ -49,7 +51,9 @@ impl PrimaryWorker {
         loop {
             select! {
                 Some(message) = message_receiver.recv() => {
-                    self.handle_message(&pipewire_sender, message).await;
+                    if self.handle_message(&pipewire_sender, message).await {
+                        self.update_status(&pipewire_sender).await;
+                    }
                 }
                 _ = self.shutdown.recv() => {
                     debug!("Shutdown Received!");
@@ -61,13 +65,12 @@ impl PrimaryWorker {
         info!("[PrimaryWorker] Stopped");
     }
 
-    async fn handle_message(&mut self, pw_tx: &mpsc::Sender<ManagerMessage>, message: DaemonMessage) {
+    async fn handle_message(&mut self, pw_tx: &Manage, message: DaemonMessage) -> bool {
         let mut update = false;
 
         match message {
             DaemonMessage::GetStatus(tx) => {
                 let _ = tx.send(self.last_status.clone());
-                update = true;
             }
             DaemonMessage::RunDaemon(_command, tx) => {
                 let _ = tx.send(DaemonResponse::Ok);
@@ -77,7 +80,7 @@ impl PrimaryWorker {
                 let (tx, rx) = oneshot::channel();
                 if let Err(e) = pw_tx.send(Execute(command, tx)).await {
                     let _ = response.send(PipewireCommandResponse::Err(e.to_string()));
-                    return;
+                    return false;
                 }
                 match rx.await {
                     Ok(command_response) => {
@@ -89,12 +92,43 @@ impl PrimaryWorker {
                 }
             }
         }
+        update
+    }
+
+    async fn update_status(&mut self, pw_tx: &Manage) {
+        let mut status = DaemonStatus::default();
+
+        let (cmd_tx, cmd_rx) = oneshot::channel();
+
+        if pw_tx.send(GetConfig(cmd_tx)).await.is_err() {
+            warn!("Unable to Send GetConfig Request");
+            return;
+        }
+
+        let Ok(config) = cmd_rx.await else {
+            error!("Unable to Obtain Audio Configuration from Pipewire Manager");
+            return;
+        };
+
+        status.audio = config;
+
+        let previous = serde_json::to_value(&self.last_status).unwrap();
+        let new = serde_json::to_value(&status).unwrap();
+
+        let patch = diff(&previous, &new);
+        if !patch.0.is_empty() {
+            // Something has changed in our config, broadcast it to listeners
+            let _ = self.patch_broadcast.send(PatchEvent { data: patch });
+        }
+
+        self.last_status = status;
     }
 }
 
 #[derive(Debug)]
 pub enum ManagerMessage {
     Execute(PipewireCommand, oneshot::Sender<PipewireCommandResponse>),
+    GetConfig(oneshot::Sender<AudioConfiguration>),
 }
 
 pub async fn start_primary_worker(

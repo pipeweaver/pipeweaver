@@ -1,4 +1,5 @@
 use json_patch::Patch;
+use pipecast_profile::Profile;
 use pipecast_shared::Mix;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
@@ -53,6 +54,12 @@ pub enum PipewireCommandResponse {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct DaemonStatus {
     pub config: DaemonConfig,
+    pub audio: AudioConfiguration,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct AudioConfiguration {
+    pub profile: Profile,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]

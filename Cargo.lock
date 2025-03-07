@@ -1542,6 +1542,7 @@ dependencies = [
  "futures",
  "interprocess",
  "json-patch",
+ "pipecast-profile",
  "pipecast-shared",
  "reqwest",
  "serde",

@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 # Local Dependencies
 pipecast-shared = { path = "../pipecast-shared" }
+pipecast-profile = { path = "../pipecast-profile" }
 
 ### Inherited Dependencies ###
 anyhow = { workspace = true }
