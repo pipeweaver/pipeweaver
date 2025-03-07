@@ -1,0 +1,16 @@
+body {
+    background-color: #252927;
+    padding: 0;
+    margin: 0;
+}
+
+
+#app {
+    font-family: sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    color: #fff;
+    font-size: 0.8em;
+    margin-top: 10px;
+    user-select: none;
+}
