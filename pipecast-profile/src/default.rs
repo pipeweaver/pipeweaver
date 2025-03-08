@@ -35,7 +35,7 @@ impl Profile {
                                 mute_state: MuteState::Unmuted,
                                 mute_targets: Default::default(),
                             },
-                            volume: Volumes {
+                            volumes: Volumes {
                                 volume: enum_map! {
                                     Mix::A => 99,
                                     Mix::B => 99,
@@ -69,7 +69,7 @@ impl Profile {
                                 mute_state: MuteState::Unmuted,
                                 mute_targets: Default::default(),
                             },
-                            volume: Volumes {
+                            volumes: Volumes {
                                 volume: enum_map! {
                                     Mix::A => 99,
                                     Mix::B => 99,
@@ -100,7 +100,7 @@ impl Profile {
                                 mute_state: MuteState::Unmuted,
                                 mute_targets: Default::default(),
                             },
-                            volume: Volumes {
+                            volumes: Volumes {
                                 volume: enum_map! {
                                     Mix::A => 99,
                                     Mix::B => 99,
@@ -122,7 +122,7 @@ impl Profile {
                                 mute_state: MuteState::Unmuted,
                                 mute_targets: Default::default(),
                             },
-                            volume: Volumes {
+                            volumes: Volumes {
                                 volume: enum_map! {
                                     Mix::A => 99,
                                     Mix::B => 99,
@@ -144,7 +144,7 @@ impl Profile {
                                 mute_state: MuteState::Unmuted,
                                 mute_targets: Default::default(),
                             },
-                            volume: Volumes {
+                            volumes: Volumes {
                                 volume: enum_map! {
                                     Mix::A => 99,
                                     Mix::B => 99,
@@ -166,7 +166,7 @@ impl Profile {
                                 mute_state: MuteState::Unmuted,
                                 mute_targets: Default::default(),
                             },
-                            volume: Volumes {
+                            volumes: Volumes {
                                 volume: enum_map! {
                                     Mix::A => 99,
                                     Mix::B => 99,
@@ -188,7 +188,7 @@ impl Profile {
                                 mute_state: MuteState::Unmuted,
                                 mute_targets: Default::default(),
                             },
-                            volume: Volumes {
+                            volumes: Volumes {
                                 volume: enum_map! {
                                     Mix::A => 99,
                                     Mix::B => 99,

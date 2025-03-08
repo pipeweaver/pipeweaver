@@ -53,7 +53,7 @@ pub struct DeviceDescription {
 pub struct VirtualSourceDevice {
     pub description: DeviceDescription,
     pub mute_states: MuteStates,
-    pub volume: Volumes,
+    pub volumes: Volumes,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -73,7 +73,7 @@ pub struct PhysicalDeviceDescriptor {
 pub struct PhysicalSourceDevice {
     pub description: DeviceDescription,
     pub mute_states: MuteStates,
-    pub volume: Volumes,
+    pub volumes: Volumes,
 
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
