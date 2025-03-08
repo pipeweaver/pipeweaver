@@ -91,6 +91,7 @@ impl PrimaryWorker {
                 match rx.await {
                     Ok(command_response) => {
                         let _ = response.send(command_response);
+                        update = true;
                     }
                     Err(e) => {
                         let _ = response.send(PipewireCommandResponse::Err(e.to_string()));
