@@ -53,9 +53,7 @@ pub struct DeviceDescription {
 pub struct VirtualSourceDevice {
     pub description: DeviceDescription,
     pub mute_states: MuteStates,
-    
-    pub volumes: EnumMap<Mix, u8>,
-    pub volumes_linked: Option<f32>,
+    pub volume: Volumes,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -75,8 +73,8 @@ pub struct PhysicalDeviceDescriptor {
 pub struct PhysicalSourceDevice {
     pub description: DeviceDescription,
     pub mute_states: MuteStates,
+    pub volume: Volumes,
 
-    pub volumes: EnumMap<Mix, u8>,
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
 
@@ -98,4 +96,9 @@ pub struct PhysicalTargetDevice {
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
 
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct Volumes {
+    pub volume: EnumMap<Mix, u8>,
+    pub volumes_linked: Option<f32>,
+}
 

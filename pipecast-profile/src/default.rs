@@ -1,4 +1,4 @@
-use crate::{DeviceDescription, Devices, Mix, MuteState, MuteStates, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice, Profile, SourceDevices, TargetDevices, VirtualSourceDevice, VirtualTargetDevice};
+use crate::{DeviceDescription, Devices, Mix, MuteState, MuteStates, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice, Profile, SourceDevices, TargetDevices, VirtualSourceDevice, VirtualTargetDevice, Volumes};
 use enum_map::enum_map;
 use pipecast_shared::Colour;
 use ulid::Ulid;
@@ -35,9 +35,12 @@ impl Profile {
                                 mute_state: MuteState::Unmuted,
                                 mute_targets: Default::default(),
                             },
-                            volumes: enum_map! {
-                                Mix::A => 99,
-                                Mix::B => 99,
+                            volume: Volumes {
+                                volume: enum_map! {
+                                    Mix::A => 99,
+                                    Mix::B => 99,
+                                },
+                                volumes_linked: Some(1.)
                             },
                             attached_devices: vec![
                                 // PhysicalDeviceDescriptor {
@@ -66,9 +69,12 @@ impl Profile {
                                 mute_state: MuteState::Unmuted,
                                 mute_targets: Default::default(),
                             },
-                            volumes: enum_map! {
-                                Mix::A => 100,
-                                Mix::B => 100,
+                            volume: Volumes {
+                                volume: enum_map! {
+                                    Mix::A => 99,
+                                    Mix::B => 99,
+                                },
+                                volumes_linked: Some(1.)
                             },
                             attached_devices: vec![
                                 // PhysicalDeviceDescriptor {
@@ -94,11 +100,13 @@ impl Profile {
                                 mute_state: MuteState::Unmuted,
                                 mute_targets: Default::default(),
                             },
-                            volumes: enum_map! {
-                                Mix::A => 99,
-                                Mix::B => 99,
+                            volume: Volumes {
+                                volume: enum_map! {
+                                    Mix::A => 99,
+                                    Mix::B => 99,
+                                },
+                                volumes_linked: Some(1.)
                             },
-                            volumes_linked: Some(1.)
                         },
                         VirtualSourceDevice {
                             description: DeviceDescription {
@@ -114,11 +122,13 @@ impl Profile {
                                 mute_state: MuteState::Unmuted,
                                 mute_targets: Default::default(),
                             },
-                            volumes: enum_map! {
-                                Mix::A => 99,
-                                Mix::B => 99,
+                            volume: Volumes {
+                                volume: enum_map! {
+                                    Mix::A => 99,
+                                    Mix::B => 99,
+                                },
+                                volumes_linked: Some(1.)
                             },
-                            volumes_linked: Some(1.)
                         },
                         VirtualSourceDevice {
                             description: DeviceDescription {
@@ -134,11 +144,13 @@ impl Profile {
                                 mute_state: MuteState::Unmuted,
                                 mute_targets: Default::default(),
                             },
-                            volumes: enum_map! {
-                                Mix::A => 99,
-                                Mix::B => 99,
+                            volume: Volumes {
+                                volume: enum_map! {
+                                    Mix::A => 99,
+                                    Mix::B => 99,
+                                },
+                                volumes_linked: Some(1.)
                             },
-                            volumes_linked: Some(1.)
                         },
                         VirtualSourceDevice {
                             description: DeviceDescription {
@@ -154,11 +166,13 @@ impl Profile {
                                 mute_state: MuteState::Unmuted,
                                 mute_targets: Default::default(),
                             },
-                            volumes: enum_map! {
-                                Mix::A => 99,
-                                Mix::B => 99,
+                            volume: Volumes {
+                                volume: enum_map! {
+                                    Mix::A => 99,
+                                    Mix::B => 99,
+                                },
+                                volumes_linked: Some(1.)
                             },
-                            volumes_linked: Some(1.)
                         },
                         VirtualSourceDevice {
                             description: DeviceDescription {
@@ -174,11 +188,13 @@ impl Profile {
                                 mute_state: MuteState::Unmuted,
                                 mute_targets: Default::default(),
                             },
-                            volumes: enum_map! {
-                                Mix::A => 99,
-                                Mix::B => 99,
+                            volume: Volumes {
+                                volume: enum_map! {
+                                    Mix::A => 99,
+                                    Mix::B => 99,
+                                },
+                                volumes_linked: Some(1.)
                             },
-                            volumes_linked: Some(1.)
                         },
                     ],
                 },
