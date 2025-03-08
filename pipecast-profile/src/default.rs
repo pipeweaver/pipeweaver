@@ -98,6 +98,7 @@ impl Profile {
                                 Mix::A => 99,
                                 Mix::B => 99,
                             },
+                            volumes_linked: Some(1.)
                         },
                         VirtualSourceDevice {
                             description: DeviceDescription {
@@ -117,6 +118,7 @@ impl Profile {
                                 Mix::A => 99,
                                 Mix::B => 99,
                             },
+                            volumes_linked: Some(1.)
                         },
                         VirtualSourceDevice {
                             description: DeviceDescription {
@@ -136,6 +138,7 @@ impl Profile {
                                 Mix::A => 99,
                                 Mix::B => 99,
                             },
+                            volumes_linked: Some(1.)
                         },
                         VirtualSourceDevice {
                             description: DeviceDescription {
@@ -155,6 +158,7 @@ impl Profile {
                                 Mix::A => 99,
                                 Mix::B => 99,
                             },
+                            volumes_linked: Some(1.)
                         },
                         VirtualSourceDevice {
                             description: DeviceDescription {
@@ -174,6 +178,7 @@ impl Profile {
                                 Mix::A => 99,
                                 Mix::B => 99,
                             },
+                            volumes_linked: Some(1.)
                         },
                     ],
                 },

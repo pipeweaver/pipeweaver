@@ -53,7 +53,9 @@ pub struct DeviceDescription {
 pub struct VirtualSourceDevice {
     pub description: DeviceDescription,
     pub mute_states: MuteStates,
+    
     pub volumes: EnumMap<Mix, u8>,
+    pub volumes_linked: Option<f32>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
