@@ -74,10 +74,13 @@ export default {
       // We'll start with a base 'full' slider height
       let size = Math.max(this.window_size - 400, 220)
 
-      // If sub-mixes are available, cut 30px for the link icon
-      if (this.hasMix()) {
-        size -= 30
-      }
+      // Remove 30px for either the Link item on Inputs, or the Mix Option on Outputs
+      size -= 30
+
+      // // If sub-mixes are available, cut 30px for the link icon
+      // if (this.hasMix()) {
+      //   size -= 30
+      // }
 
       // Cut 30 for the first button (if applicable)
       if (this.hasBasicMute()) {
@@ -139,6 +142,18 @@ export default {
       return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)
     },
 
+    isActiveMix: function (mix) {
+      return this.getDevice().mix === mix;
+    },
+
+    getMixAColour: function () {
+      // If the channel doesn't have a Mix B, check it's assigned mix
+      if (!this.hasMix() && this.getDevice().mix !== "A") {
+        return "#E07C24";
+      }
+      return "#59b1b6";
+    },
+
     volume_changed: function (mix, force, e) {
       if ((!force && !this.update_locked) || force) {
         this.update_locked = true;
@@ -191,9 +206,9 @@ export default {
     <div class="top" @click="colour_clicked"></div>
     <div class="faders">
       <ChannelColumnVolume
+        :colour1="getMixAColour()"
         :current-value="getVolume()"
         :height="calculateHeight()"
-        colour1="#59b1b6"
         colour2="#252927"
         @change="event => volume_changed('A', false, event)"
         @input="event => volume_changed('A', true, event)"
@@ -212,6 +227,10 @@ export default {
     <div v-if="hasMix()" class="link">
       <img v-if="isLinked()" alt="Linked" src="/images/submix/linked-white.png"/>
       <img v-else alt="Unlinked" src="/images/submix/unlinked-dimmed.png"/>
+    </div>
+    <div v-if="!hasMix()" class="assignment">
+      A:<input :checked="isActiveMix('A')" :name="`mix-${getId()}`" type="radio">
+      B:<input :checked="isActiveMix('B')" :name="`mix-${getId()}`" type="radio">
     </div>
     <div class="bottom"></div>
     <div v-if="hasMute()" :class="[!hasComplexMute() ? 'small' : '']" class="mute">
@@ -276,6 +295,11 @@ export default {
 
 .link img {
   height: 20px;
+}
+
+.assignment {
+  text-align: center;
+  height: 30px;
 }
 
 .bottom {
