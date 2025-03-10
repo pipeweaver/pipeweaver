@@ -1,4 +1,4 @@
-use anyhow::{Result};
+use anyhow::Result;
 use log::{debug, info, LevelFilter};
 use pipecast_pipewire::oneshot::Sender;
 use pipecast_pipewire::ulid::Ulid;
@@ -262,7 +262,7 @@ impl FilterHandler for VolumeFilter {
             0 => FilterProperty {
                 id: 0,
                 name: "Volume".into(),
-                value: FilterValue::Float32(self.volume)
+                value: FilterValue::Float32(self.volume),
             },
             _ => panic!("Attempted to lookup non-existent property!")
         }
@@ -307,6 +307,8 @@ fn get_filter_properties(id: Ulid, name: &str, volume: f32, tx: Sender<()>) -> F
         filter_name: "Volume".into(),
         filter_nick: name.to_string(),
         filter_description: format!("pipecast/{}", name.to_string().to_lowercase().replace(" ", "-")),
+
+        class: MediaClass::Duplex,
         app_id: "com.frostycoolslug".to_string(),
         app_name: "pipecast".to_string(),
         linger: false,

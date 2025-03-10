@@ -284,24 +284,28 @@ impl PipewireManager {
         let mut input_ports = vec![];
         let mut output_ports = vec![];
 
-        debug!("[{}] Registering Input Ports", props.filter_id);
-        for i in ["FL", "FR"] {
-            input_ports.push(filter.add_port(
-                Direction::Input,
-                PortFlags::MAP_BUFFERS,
-                properties! {*FORMAT_DSP => "32 bit float mono audio", *PORT_NAME => format!("input_{}", i), *AUDIO_CHANNEL => i},
-                &mut params,
-            ).expect("Filter Input Creation Failed"));
+        if props.class == MediaClass::Source || props.class == MediaClass::Duplex {
+            debug!("[{}] Registering Input Ports", props.filter_id);
+            for i in ["FL", "FR"] {
+                input_ports.push(filter.add_port(
+                    Direction::Input,
+                    PortFlags::MAP_BUFFERS,
+                    properties! {*FORMAT_DSP => "32 bit float mono audio", *PORT_NAME => format!("input_{}", i), *AUDIO_CHANNEL => i},
+                    &mut params,
+                ).expect("Filter Input Creation Failed"));
+            }
         }
 
-        debug!("[{}] Registering Output Ports", props.filter_id);
-        for i in ["FL", "FR"] {
-            output_ports.push(filter.add_port(
-                Direction::Output,
-                PortFlags::MAP_BUFFERS,
-                properties! {*FORMAT_DSP => "32 bit float mono audio", *PORT_NAME => format!("output_{}", i), *AUDIO_CHANNEL => i},
-                &mut params,
-            ).expect("Filter Output Creation Failed"));
+        if props.class == MediaClass::Sink || props.class == MediaClass::Duplex {
+            debug!("[{}] Registering Output Ports", props.filter_id);
+            for i in ["FL", "FR"] {
+                output_ports.push(filter.add_port(
+                    Direction::Output,
+                    PortFlags::MAP_BUFFERS,
+                    properties! {*FORMAT_DSP => "32 bit float mono audio", *PORT_NAME => format!("output_{}", i), *AUDIO_CHANNEL => i},
+                    &mut params,
+                ).expect("Filter Output Creation Failed"));
+            }
         }
 
         // Use a RWLock provided by parking-lot here, so we can safely grab the filter to change

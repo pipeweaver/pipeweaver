@@ -148,12 +148,14 @@ pub struct FilterProperties {
     pub app_id: String,
     pub app_name: String,
 
+    pub class: MediaClass,
     pub linger: bool,
     pub callback: Box<dyn FilterHandler>,
 
     pub ready_sender: oneshot::Sender<()>,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum MediaClass {
     Source,
     Sink,
