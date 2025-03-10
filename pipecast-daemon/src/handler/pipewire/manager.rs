@@ -1,12 +1,13 @@
 use crate::handler::pipewire::filters::pass_through::PassThroughFilter;
 use crate::handler::pipewire::filters::volume::VolumeFilter;
 use crate::handler::primary_worker::ManagerMessage;
+use anyhow::{bail, Result};
 use enum_map::{enum_map, EnumMap};
 use log::{debug, info};
 use pipecast_ipc::commands::{AudioConfiguration, PipewireCommand, PipewireCommandResponse};
 use pipecast_pipewire::LinkType::{Filter, UnmanagedNode};
 use pipecast_pipewire::{oneshot, FilterProperties, FilterValue, LinkType, MediaClass, NodeProperties, PipecastNode, PipewireMessage, PipewireRunner};
-use pipecast_profile::{DeviceDescription, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice, Profile, VirtualSourceDevice, VirtualTargetDevice};
+use pipecast_profile::{DeviceDescription, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice, Profile, VirtualSourceDevice, VirtualTargetDevice, Volumes};
 use pipecast_shared::Mix;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -66,50 +67,26 @@ impl PipewireManager {
         debug!("Loading Profile");
         self.load_profile().await;
 
-        'main: loop {
+        loop {
             select!(
                 Some(command) = self.command_receiver.recv() => {
                     match command {
                         ManagerMessage::Execute(command, tx) => {
-                            match command {
+                            let result = match command {
                                 PipewireCommand::SetVolume(id, mix, volume) => {
-                                    if let Some(source) = self.source_map.get(&id) {
-                                        let node = source[mix];
-                                        let message = PipewireMessage::SetFilterValue(node, 0, FilterValue::UInt8(volume));
-                                        let _ = self.pipewire.send_message(message);
-                                        
-                                        let _ = tx.send(PipewireCommandResponse::Ok);
-                                        continue;
-                                    }
-                                    
-                                    // Check the Virtual Targets for this node
-                                    if let Some(node) = self.target_map.get(&id) {
-                                        let message = PipewireMessage::SetFilterValue(*node, 0, FilterValue::UInt8(volume));
-                                        let _ = self.pipewire.send_message(message);
-                                        
-                                        let _ = tx.send(PipewireCommandResponse::Ok);
-                                        continue;
-                                    }
-                                    
-                                    // Finally, check the physical targets
-                                    for device in &self.profile.devices.targets.physical_devices {
-                                        if device.description.id == id {
-                                            let message = PipewireMessage::SetFilterValue(id, 0, FilterValue::UInt8(volume));
-                                            let _ = self.pipewire.send_message(message);
-                                        
-                                            let _ = tx.send(PipewireCommandResponse::Ok);
-                                            continue 'main;
-                                        }
-                                    }
-    
-                                    let _ = tx.send(PipewireCommandResponse::Err(String::from("Unknown ID")));
+                                    self.set_volume(id, mix, volume).await
                                 }
                                 _ => {
                                     debug!("Received Command: {:?}", command);
+                                    Ok(())
                                 }
-                            }
+                            };
                             
-                            //let _ = tx.send(PipewireCommandResponse::Ok);
+                            // Map the result to a PW Response and send it
+                            let _ = tx.send(match result {
+                                Ok(_) => PipewireCommandResponse::Ok,
+                                Err(e) => PipewireCommandResponse::Err(e.to_string())
+                            });
                         }
                         ManagerMessage::GetConfig(tx) => {
                             debug!("Sending Audio Config");
@@ -120,6 +97,52 @@ impl PipewireManager {
             );
         }
     }
+
+    async fn set_volume(&mut self, id: Ulid, mix: Mix, volume: u8) -> Result<()> {
+        let volume = volume.clamp(0, 100);
+
+        if let Some(source) = self.source_map.get(&id) {
+            let node = source[mix];
+            let message = PipewireMessage::SetFilterValue(node, 0, FilterValue::UInt8(volume));
+            let _ = self.pipewire.send_message(message);
+
+
+            if let Some(volumes) = self.get_volumes_by_id(id) {
+                volumes.volume[mix] = volume;
+            }
+
+
+            return Ok(());
+        }
+
+        // Check the Virtual Targets for this node
+        if let Some(node) = self.target_map.get(&id) {
+            let message = PipewireMessage::SetFilterValue(*node, 0, FilterValue::UInt8(volume));
+            let _ = self.pipewire.send_message(message);
+
+            if let Some(config) = self.get_virtual_target_by_id(id) {
+                config.volume = volume;
+            }
+
+            return Ok(());
+        }
+
+        // Finally, check the physical targets
+        for device in &self.profile.devices.targets.physical_devices {
+            if device.description.id == id {
+                let message = PipewireMessage::SetFilterValue(id, 0, FilterValue::UInt8(volume));
+                let _ = self.pipewire.send_message(message);
+
+                if let Some(config) = self.get_physical_target_by_id(id) {
+                    config.volume = volume;
+                }
+
+                return Ok(());
+            }
+        }
+        bail!("Device Not Found")
+    }
+
 
     async fn load_profile(&mut self) {
         // Ok, load the physical sources first
@@ -188,7 +211,7 @@ impl PipewireManager {
             name: format!("{} A", device.description.name),
             colour: Default::default(),
         };
-        self.create_volume_filter(filter_description, device.volumes[Mix::A]).await;
+        self.create_volume_filter(filter_description, device.volumes.volume[Mix::A]).await;
 
         let id_b = Ulid::new();
         let filter_description = DeviceDescription {
@@ -196,7 +219,7 @@ impl PipewireManager {
             name: format!("{} B", device.description.name),
             colour: Default::default(),
         };
-        self.create_volume_filter(filter_description, device.volumes[Mix::B]).await;
+        self.create_volume_filter(filter_description, device.volumes.volume[Mix::B]).await;
 
         // Store these Mix Node IDs
         self.source_map.insert(device.description.id, enum_map! {
@@ -221,7 +244,7 @@ impl PipewireManager {
             name: format!("{} A", device.description.name),
             colour: Default::default(),
         };
-        self.create_volume_filter(filter_description, device.volumes[Mix::A]).await;
+        self.create_volume_filter(filter_description, device.volumes.volume[Mix::A]).await;
 
         let id_b = Ulid::new();
         let filter_description = DeviceDescription {
@@ -229,7 +252,7 @@ impl PipewireManager {
             name: format!("{} B", device.description.name),
             colour: Default::default(),
         };
-        self.create_volume_filter(filter_description, device.volumes[Mix::B]).await;
+        self.create_volume_filter(filter_description, device.volumes.volume[Mix::B]).await;
 
         // Store these Mix Node IDs
         self.source_map.insert(device.description.id, enum_map! {
@@ -343,6 +366,8 @@ impl PipewireManager {
             filter_name: "Volume".into(),
             filter_nick: device.name.to_string(),
             filter_description: format!("pipecast/{}", description),
+
+            class: MediaClass::Duplex,
             app_id: "com.frostycoolslug".to_string(),
             app_name: "pipecast".to_string(),
             linger: false,
@@ -363,6 +388,8 @@ impl PipewireManager {
             filter_name: "Pass".into(),
             filter_nick: device.name.to_string(),
             filter_description: format!("pipecast/{}", description),
+
+            class: MediaClass::Duplex,
             app_id: "com.frostycoolslug".to_string(),
             app_name: "pipecast".to_string(),
             linger: false,
@@ -421,6 +448,52 @@ impl PipewireManager {
     }
 
     async fn remove_route(&mut self, source: Ulid, destination: Ulid) {}
+
+    fn get_volumes_by_id(&mut self, id: Ulid) -> Option<&mut Volumes> {
+        // Determine which device contains the volumes first, without returning references
+        let device_id = if self.get_physical_source_by_id(id).is_some() {
+            DeviceType::Physical
+        } else if self.get_virtual_source_by_id(id).is_some() {
+            DeviceType::Virtual
+        } else {
+            DeviceType::None
+        };
+
+        // Retrieve the volumes based on the resolved device type
+        match device_id {
+            DeviceType::Physical => self.get_physical_source_by_id(id).map(|device| &mut device.volumes),
+            DeviceType::Virtual => self.get_virtual_source_by_id(id).map(|device| &mut device.volumes),
+            DeviceType::None => None,
+        }
+    }
+
+
+    /**
+     * These are basically helper functions for finding specific devices by ID as they may
+     * occur in different places, they're used primarily for allowing easy grabbing of 'common'
+     * structures.
+     **/
+    fn get_physical_source_by_id(&mut self, id: Ulid) -> Option<&mut PhysicalSourceDevice> {
+        self.profile.devices.sources.physical_devices.iter_mut().find(|device| device.description.id == id)
+    }
+
+    fn get_virtual_source_by_id(&mut self, id: Ulid) -> Option<&mut VirtualSourceDevice> {
+        self.profile.devices.sources.virtual_devices.iter_mut().find(|device| device.description.id == id)
+    }
+
+    fn get_physical_target_by_id(&mut self, id: Ulid) -> Option<&mut PhysicalTargetDevice> {
+        self.profile.devices.targets.physical_devices.iter_mut().find(|device| device.description.id == id)
+    }
+
+    fn get_virtual_target_by_id(&mut self, id: Ulid) -> Option<&mut VirtualTargetDevice> {
+        self.profile.devices.targets.virtual_devices.iter_mut().find(|device| device.description.id == id)
+    }
+}
+
+enum DeviceType {
+    Physical,
+    Virtual,
+    None,
 }
 
 pub async fn run_pipewire_manager(command_receiver: mpsc::Receiver<ManagerMessage>) {
