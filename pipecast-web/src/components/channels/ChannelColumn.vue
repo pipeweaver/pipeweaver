@@ -106,13 +106,13 @@ export default {
         return this.getDevice().volume;
       }
 
-      return this.getDevice().volumes.A
+      return this.getDevice().volumes.volume.A
     },
     getMixVolume: function () {
       if (!is_source(this.type)) {
         return 0;
       }
-      return this.getDevice().volumes.B
+      return this.getDevice().volumes.volume.B
     },
     getMute: function () {
       //return store.getActiveDevice().config.device.channels.configs[this.getChannelName()]
@@ -148,7 +148,7 @@ export default {
 
     getMixAColour: function () {
       // If the channel doesn't have a Mix B, check it's assigned mix
-      if (!this.hasMix() && this.getDevice().mix !== "A") {
+      if (!this.hasMix() && this.isActiveMix("A")) {
         return "#E07C24";
       }
       return "#59b1b6";
