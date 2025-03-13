@@ -1,13 +1,13 @@
-use crate::registry::PipewireRegistry;
+use crate::registry::{PipewireRegistry, RegistryLink};
 use crate::store::{FilterStore, LinkStore, NodeStore, Store};
 use crate::{registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties, PipecastNode};
 use crate::{MediaClass, PWReceiver, PipewireMessage};
 use anyhow::anyhow;
 use log::{debug, error};
 use pipewire::core::Core;
-use pipewire::filter::{Filter, FilterFlags, FilterState, PortFlags};
+use pipewire::filter::{Filter, FilterFlags, FilterPort, FilterState, PortFlags};
 use pipewire::keys::{APP_ICON_NAME, APP_ID, APP_NAME, AUDIO_CHANNEL, AUDIO_CHANNELS, CLIENT_ID, CLIENT_NAME, DEVICE_DESCRIPTION, DEVICE_ICON_NAME, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_ALWAYS_PROCESS, NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_ID, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_DIRECTION, PORT_MONITOR, PORT_NAME};
-use pipewire::link::Link;
+use pipewire::link::{Link, LinkListener, LinkState};
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
 use pipewire::proxy::ProxyT;
@@ -23,11 +23,17 @@ use std::cell::RefCell;
 
 use parking_lot::RwLock;
 use std::rc::Rc;
+use std::thread::sleep;
+use std::time::Duration;
+use tokio::sync::oneshot;
+use tokio::sync::oneshot::Sender;
 use ulid::Ulid;
 
 pub(crate) struct FilterData {
     pub callback: Box<dyn FilterHandler>,
 }
+
+struct Test {}
 
 struct PipewireManager {
     core: Core,
@@ -254,7 +260,7 @@ impl PipewireManager {
             ready_sender: Some(properties.ready_sender),
         };
 
-        self.store.borrow_mut().add_node(store);
+        self.store.borrow_mut().node_add(store);
     }
 
     pub fn create_filter(&mut self, props: FilterProperties) {
@@ -281,13 +287,13 @@ impl PipewireManager {
         let mut params = [];
 
         // Create port storage
-        let mut input_ports = vec![];
-        let mut output_ports = vec![];
+        let input_ports = Rc::new(RefCell::new(vec![]));
+        let output_ports = Rc::new(RefCell::new(vec![]));
 
         if props.class == MediaClass::Source || props.class == MediaClass::Duplex {
             debug!("[{}] Registering Input Ports", props.filter_id);
             for i in ["FL", "FR"] {
-                input_ports.push(filter.add_port(
+                input_ports.borrow_mut().push(filter.add_port(
                     Direction::Input,
                     PortFlags::MAP_BUFFERS,
                     properties! {*FORMAT_DSP => "32 bit float mono audio", *PORT_NAME => format!("input_{}", i), *AUDIO_CHANNEL => i},
@@ -299,7 +305,7 @@ impl PipewireManager {
         if props.class == MediaClass::Sink || props.class == MediaClass::Duplex {
             debug!("[{}] Registering Output Ports", props.filter_id);
             for i in ["FL", "FR"] {
-                output_ports.push(filter.add_port(
+                output_ports.borrow_mut().push(filter.add_port(
                     Direction::Output,
                     PortFlags::MAP_BUFFERS,
                     properties! {*FORMAT_DSP => "32 bit float mono audio", *PORT_NAME => format!("output_{}", i), *AUDIO_CHANNEL => i},
@@ -336,17 +342,17 @@ impl PipewireManager {
 
                 let mut input_list = vec![];
                 let mut output_list = vec![];
-                for input in &listener_input_ports {
+                for input in listener_input_ports.borrow().iter() {
                     let in_buffer = filter.get_dsp_buffer::<f32>(input, samples);
                     input_list.push(in_buffer.unwrap());
                 }
 
-                for output in &listener_output_ports {
+                for output in listener_output_ports.borrow().iter() {
                     let out_buffer = filter.get_dsp_buffer::<f32>(output, samples);
                     output_list.push(out_buffer.unwrap());
                 }
 
-                data.read().callback.process_samples(input_list, output_list);
+                data.write().callback.process_samples(input_list, output_list);
             })
             .register()
             .expect("Filter Borked.");
@@ -378,15 +384,20 @@ impl PipewireManager {
             data,
 
             id: props.filter_id,
-            _filter: filter,
             _listener: listener,
+            _filter: filter,
+
             input_ports,
             output_ports,
 
             ready_sender: Some(props.ready_sender),
         };
 
-        self.store.borrow_mut().add_filter(store);
+        self.store.borrow_mut().filter_add(store);
+    }
+
+    pub fn remove_filter(&mut self, id: Ulid) {
+        self.store.borrow_mut().filter_remove(id);
     }
 
     pub fn set_filter_value(&mut self, id: Ulid, key: u32, value: FilterValue) {
@@ -394,7 +405,7 @@ impl PipewireManager {
         self.store.borrow_mut().filter_set_parameter(id, key, value);
     }
 
-    pub fn create_link(&mut self, source: LinkType, destination: LinkType) {
+    pub fn create_link(&mut self, source: LinkType, destination: LinkType, sender: Sender<()>) {
         // Locate the Source Node..
         let src = self.get_ports(source);
         let dest = self.get_ports(destination);
@@ -403,6 +414,8 @@ impl PipewireManager {
         // Still making assumptions about the Ports and their mapping, we should check for the
         // canonical setup.
         for i in 0..2 {
+            let id = Ulid::new();
+
             // Check whether we have a mono source, if so we need to map it to stereo
             let src_port = if i == 1 && src.2 == 1 {
                 0
@@ -417,18 +430,41 @@ impl PipewireManager {
                 i
             };
 
-            let link = self.create_port_link(src.0, src_port as u32, dest.0, dest_port as u32);
+            let (link, listener) = self.create_port_link(id, src.0, src_port as u32, dest.0, dest_port as u32);
+            let (tx, mut rx) = oneshot::channel();
+
             let store = LinkStore {
                 link,
+                _listener: listener,
 
                 source,
                 src_port_id: i,
 
                 destination,
                 dest_port_id: i,
+
+                ready_sender: Some(tx),
             };
-            self.store.borrow_mut().add_link(store);
+            self.store.borrow_mut().link_add(id, store);
+
+            let mut i = 0;
+            // while rx.try_recv().is_err() {
+            //     i += 1;
+            //     if i == 10 {
+            //         break;
+            //     }
+            //     sleep(Duration::from_millis(5));
+            // }
+            // if i == 10 {
+            //     debug!("Timeout Creating Listener..");
+            // }
         }
+
+        let _ = sender.send(());
+    }
+
+    pub fn remove_link(&mut self, source: LinkType, destination: LinkType) {
+        self.store.borrow_mut().link_remove(source, destination);
     }
 
     fn get_ports(&self, link: LinkType) -> (u32, usize, usize) {
@@ -438,7 +474,7 @@ impl PipewireManager {
         match link {
             LinkType::Node(id) => {
                 let store = self.store.borrow();
-                let node = store.get_node(id).unwrap();
+                let node = store.node_get(id).unwrap();
 
                 let id = node.pw_id.unwrap();
                 let input_port_count = node.input_ports.len();
@@ -448,17 +484,17 @@ impl PipewireManager {
             }
             LinkType::Filter(id) => {
                 let store = self.store.borrow();
-                let filter = store.get_filter(id).unwrap();
+                let filter = store.filter_get(id).unwrap();
 
                 let id = filter.pw_id.unwrap();
-                let input_port_count = filter.input_ports.len();
-                let output_port_count = filter.output_ports.len();
+                let input_port_count = filter.input_ports.borrow().len();
+                let output_port_count = filter.output_ports.borrow().len();
 
                 (id, input_port_count, output_port_count)
             }
             LinkType::UnmanagedNode(id) => {
                 let mut store = self.store.borrow_mut();
-                let node = store.get_unmanaged_node(id).expect("Invalid NodeID");
+                let node = store.unamanged_node_get(id).expect("Invalid NodeID");
 
                 let input_port_count = node.ports[registry::Direction::In].len();
                 let output_port_count = node.ports[registry::Direction::Out].len();
@@ -470,13 +506,16 @@ impl PipewireManager {
 
     fn create_port_link(
         &self,
+        id: Ulid,
         src_node: u32,
         src_port: u32,
         dest_node: u32,
         dest_port: u32,
-    ) -> Link {
-        self.core
-            .create_object::<pipewire::link::Link>(
+    ) -> (Link, LinkListener) {
+        debug!("Creating Link..");
+        let listener_info_store = self.store.clone();
+        let link = self.core
+            .create_object::<Link>(
                 "link-factory",
                 &properties! {
                     *LINK_OUTPUT_NODE => src_node.to_string(),
@@ -494,7 +533,16 @@ impl PipewireManager {
                     *NODE_PASSIVE => "false",
                 },
             )
-            .expect("Failed to create link")
+            .expect("Failed to create link");
+
+        let link_listener = link.add_listener_local().info(move |link| {
+            if let LinkState::Active = link.state() {
+                // We're alive, let the store know
+                listener_info_store.borrow_mut().link_ready(id);
+            }
+        }).register();
+
+        (link, link_listener)
     }
 
     fn get_usable_nodes(&self) -> Vec<PipecastNode> {
@@ -554,9 +602,17 @@ pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Res
             PipewireMessage::CreateFilterNode(props) => {
                 manager.borrow_mut().create_filter(props);
             }
-            PipewireMessage::CreateDeviceLink(source, destination) => {
-                manager.borrow_mut().create_link(source, destination);
+            PipewireMessage::CreateDeviceLink(source, destination, sender) => {
+                manager.borrow_mut().create_link(source, destination, sender);
             }
+
+            PipewireMessage::RemoveDeviceLink(source, destination) => {
+                manager.borrow_mut().remove_link(source, destination);
+            }
+            PipewireMessage::RemoveFilterNode(ulid) => {
+                manager.borrow_mut().remove_filter(ulid);
+            }
+
             PipewireMessage::GetUsableNodes(sender) => {
                 sender.send(manager.borrow().get_usable_nodes()).expect("Broken Response Sender!");
             }

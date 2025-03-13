@@ -1,4 +1,4 @@
-pub extern crate oneshot;
+pub extern crate tokio;
 pub extern crate ulid;
 mod store;
 mod manager;
@@ -9,7 +9,9 @@ use anyhow::{anyhow, bail, Result};
 use log::{info, warn};
 use std::sync::mpsc;
 use std::thread;
-use std::thread::JoinHandle;
+use std::thread::{sleep, JoinHandle};
+use std::time::Duration;
+use tokio::sync::oneshot;
 use ulid::Ulid;
 
 type PWSender = pipewire::channel::Sender<PipewireMessage>;
@@ -21,7 +23,10 @@ type Receiver = mpsc::Receiver<PipewireMessage>;
 pub enum PipewireMessage {
     CreateDeviceNode(NodeProperties),
     CreateFilterNode(FilterProperties),
-    CreateDeviceLink(LinkType, LinkType),
+    CreateDeviceLink(LinkType, LinkType, oneshot::Sender<()>),
+
+    RemoveFilterNode(Ulid),
+    RemoveDeviceLink(LinkType, LinkType),
 
     GetUsableNodes(oneshot::Sender<Vec<PipecastNode>>),
     SetFilterValue(Ulid, u32, FilterValue),
@@ -49,20 +54,24 @@ impl PipewireRunner {
         let (tx, rx) = mpsc::channel();
 
         // This channel lets us call back once the pipewire code is ready
-        let (start_tx, start_rx) = oneshot::channel();
+        let (start_tx, mut start_rx) = oneshot::channel();
 
         // Next, spawn up the pipewire mainloop in a separate thread
         let pipewire_handle = thread::spawn(|| run_pw_main_loop(pw_rx, start_tx));
 
         // Await a response from that thread to indicate we're ready to handle messages
-        match start_rx.recv() {
-            Ok(Ok(())) => {}
-            Ok(Err(error)) => {
-                warn!("Error Starting Pipewire Manager: {}", error);
-                bail!(error);
-            }
-            Err(error) => {
-                panic!("OneShot Channel is broken! {}", error);
+        loop {
+            match start_rx.try_recv() {
+                Ok(Ok(())) => {
+                    break;
+                }
+                Ok(Err(error)) => {
+                    warn!("Error Starting Pipewire Manager: {}", error);
+                    bail!(error.to_string());
+                }
+                Err(e) => {
+                    sleep(Duration::from_millis(5));
+                }
             }
         }
 
@@ -162,7 +171,7 @@ pub enum MediaClass {
     Duplex,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum LinkType {
     Node(Ulid),
     Filter(Ulid),
@@ -176,7 +185,7 @@ pub trait FilterHandler: Send + 'static {
     fn get_property(&self, id: u32) -> FilterProperty;
     fn set_property(&mut self, id: u32, value: FilterValue);
 
-    fn process_samples(&self, inputs: Vec<&mut [f32]>, outputs: Vec<&mut [f32]>);
+    fn process_samples(&mut self, inputs: Vec<&mut [f32]>, outputs: Vec<&mut [f32]>);
 }
 
 // We need these because while *WE* know what values are coming in and out, rust doesn't

@@ -1,20 +1,30 @@
 use crate::handler::pipewire::filters::pass_through::PassThroughFilter;
 use crate::handler::pipewire::filters::volume::VolumeFilter;
+use crate::handler::pipewire::filters::waker::WakerFilter;
 use crate::handler::primary_worker::ManagerMessage;
 use anyhow::{bail, Result};
 use enum_map::{enum_map, EnumMap};
+use futures::stream::{FuturesUnordered, StreamExt};
 use log::{debug, info};
 use pipecast_ipc::commands::{AudioConfiguration, PipewireCommand, PipewireCommandResponse};
+use pipecast_pipewire::tokio::sync::oneshot::Receiver;
 use pipecast_pipewire::LinkType::{Filter, UnmanagedNode};
-use pipecast_pipewire::{oneshot, FilterProperties, FilterValue, LinkType, MediaClass, NodeProperties, PipecastNode, PipewireMessage, PipewireRunner};
+use pipecast_pipewire::{FilterProperties, FilterValue, LinkType, MediaClass, NodeProperties, PipecastNode, PipewireMessage, PipewireRunner};
 use pipecast_profile::{DeviceDescription, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice, Profile, VirtualSourceDevice, VirtualTargetDevice, Volumes};
 use pipecast_shared::Mix;
 use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::select;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio::time::sleep;
 use ulid::Ulid;
+
+struct Waker {
+    id: Ulid,
+    node_id: u32,
+    class: MediaClass,
+    created: Instant,
+}
 
 pub(crate) struct PipewireManager {
     command_receiver: mpsc::Receiver<ManagerMessage>,
@@ -24,6 +34,9 @@ pub(crate) struct PipewireManager {
     profile: Profile,
     source_map: HashMap<Ulid, EnumMap<Mix, Ulid>>,
     target_map: HashMap<Ulid, Ulid>,
+
+    wakers: HashMap<Ulid, Waker>,
+    parkers: HashMap<Ulid, Ulid>,
 
     node_list: Vec<PipecastNode>,
 }
@@ -41,6 +54,9 @@ impl PipewireManager {
 
             source_map: HashMap::default(),
             target_map: HashMap::default(),
+
+            wakers: HashMap::default(),
+            parkers: HashMap::default(),
 
             node_list: Default::default(),
         }
@@ -65,7 +81,8 @@ impl PipewireManager {
         }
 
         debug!("Loading Profile");
-        self.load_profile().await;
+        let mut wakers = FuturesUnordered::new();
+        self.load_profile(&mut wakers).await;
 
         loop {
             select!(
@@ -81,7 +98,7 @@ impl PipewireManager {
                                     Ok(())
                                 }
                             };
-                            
+
                             // Map the result to a PW Response and send it
                             let _ = tx.send(match result {
                                 Ok(_) => PipewireCommandResponse::Ok,
@@ -91,6 +108,36 @@ impl PipewireManager {
                         ManagerMessage::GetConfig(tx) => {
                             debug!("Sending Audio Config");
                             let _ = tx.send(self.get_config().await);
+                        }
+                    }
+                }
+                Some(result) = wakers.next() => {
+                    if let Ok(id) = result {
+                        if let Some(waker) = self.wakers.get(&id) {
+                            debug!("[{}] Device Woke up In {:?}, attaching to tree..", id, waker.created.elapsed());
+
+                            let (source, destination) = match waker.class {
+                                MediaClass::Source => (UnmanagedNode(waker.node_id), Filter(id)),
+                                MediaClass::Sink => (Filter(id), UnmanagedNode(waker.node_id)),
+                                MediaClass::Duplex => panic!("Unexpected Duplex!")
+                            };
+
+                            // Attach the Original Node to Tree...
+                            let (tx, rx) = oneshot::channel();
+                            let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(source, destination, tx));
+                            let _ = rx.await;
+
+                            // Give it a moment to attach (TODO: Properly!)
+                            // sleep(Duration::from_millis(300)).await;
+
+                            // Remove the links for the wake node...
+                            let (source, destination) = match waker.class {
+                                MediaClass::Source => (UnmanagedNode(waker.node_id), Filter(waker.id)),
+                                MediaClass::Sink => (Filter(waker.id), UnmanagedNode(waker.node_id)),
+                                MediaClass::Duplex => panic!("Unexpected Duplex!")
+                            };
+                            let _ = self.pipewire.send_message(PipewireMessage::RemoveDeviceLink(source, destination));
+                            let _ = self.pipewire.send_message(PipewireMessage::RemoveFilterNode(waker.id));
                         }
                     }
                 }
@@ -144,7 +191,7 @@ impl PipewireManager {
     }
 
 
-    async fn load_profile(&mut self) {
+    async fn load_profile(&mut self, wakers: &mut FuturesUnordered<Receiver<Ulid>>) {
         // Ok, load the physical sources first
         debug!("Creating Physical Source Filters");
         for device in self.profile.devices.sources.physical_devices.clone() {
@@ -181,18 +228,46 @@ impl PipewireManager {
         for device in &self.profile.devices.sources.physical_devices {
             for attached_device in &device.attached_devices {
                 if let Some(node_id) = self.locate_physical_node_id(attached_device, false) {
-                    debug!("Attaching {:?} to {:?}", attached_device, device.description.name);
-                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(UnmanagedNode(node_id), Filter(device.description.id)));
+                    // Create a 'Wake' filter, and attach this node to it
+                    let (filter_id, receiver) = self.create_wake_filter(&device.description, MediaClass::Source).await;
+                    debug!("Waiting for NodeId {} to wake..", node_id);
+                    self.wakers.insert(device.description.id, Waker {
+                        id: filter_id,
+                        class: MediaClass::Source,
+                        node_id,
+                        created: Instant::now(),
+                    });
+                    wakers.push(receiver);
+
+                    debug!("Attaching {:?} to Wake Node..", attached_device);
+                    let (tx, rx) = oneshot::channel();
+                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(UnmanagedNode(node_id), Filter(filter_id), tx));
+                    let _ = rx.await;
                 }
             }
         }
 
-        sleep(Duration::from_secs(1)).await;
         for device in &self.profile.devices.targets.physical_devices {
             for attached_device in &device.attached_devices {
                 if let Some(node_id) = self.locate_physical_node_id(attached_device, true) {
+                    debug!("Waiting for NodeId {} to Wake..", node_id);
+                    // let (filter_id, receiver) = self.create_wake_filter(&device.description, MediaClass::Sink).await;
+                    // self.wakers.insert(device.description.id, Waker {
+                    //     id: filter_id,
+                    //     class: MediaClass::Sink,
+                    //     node_id,
+                    //     created: Instant::now(),
+                    // });
+                    // wakers.push(receiver);
+                    //
+                    // debug!("Attaching {:?} to Wake Node", attached_device);
+                    // let (tx, rx) = oneshot::channel();
+                    // let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(Filter(filter_id), UnmanagedNode(node_id), tx));
+                    // let _ = rx.await;
+
                     debug!("Attaching {:?} to {:?}", attached_device, device.description.name);
-                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(Filter(device.description.id), UnmanagedNode(node_id)));
+                    let (tx, rx) = oneshot::channel();
+                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(Filter(device.description.id), UnmanagedNode(node_id), tx));
                 }
             }
         }
@@ -401,6 +476,33 @@ impl PipewireManager {
         let _ = recv.await;
     }
 
+    async fn create_wake_filter(&self, device: &DeviceDescription, class: MediaClass) -> (Ulid, Receiver<Ulid>) {
+        let (send, recv) = oneshot::channel();
+        let (wake_tx, wake_rx) = oneshot::channel();
+
+        let filter_id = Ulid::new();
+
+        let description = device.name.to_lowercase().replace(" ", "-");
+        let props = FilterProperties {
+            filter_id,
+            filter_name: "Wake".into(),
+            filter_nick: device.name.to_string(),
+            filter_description: format!("pipecast/{}", description),
+
+            class,
+            app_id: "com.frostycoolslug".to_string(),
+            app_name: "pipecast".to_string(),
+            linger: false,
+            callback: Box::new(WakerFilter::new(device.id, wake_tx, class)),
+            ready_sender: send,
+        };
+
+        let _ = self.pipewire.send_message(PipewireMessage::CreateFilterNode(props));
+        let _ = recv.await;
+
+        (filter_id, wake_rx)
+    }
+
     async fn remove_filter(&mut self, id: Ulid) {}
 
     async fn create_device_route(&mut self, source: Ulid, target: Ulid) {
@@ -444,7 +546,9 @@ impl PipewireManager {
 
     async fn create_route(&mut self, source: LinkType, target: LinkType) {
         // Relatively simple, just send a new route message...
-        let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(source, target));
+        let (tx, rx) = oneshot::channel();
+        let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(source, target, tx));
+        let _ = rx.await;
     }
 
     async fn remove_route(&mut self, source: Ulid, destination: Ulid) {}

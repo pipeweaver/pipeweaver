@@ -19,6 +19,9 @@ pipecast-profile = { path = "../pipecast-profile" }
 pipecast-pipewire = { path = "../pipecast-pipewire" }
 pipecast-shared = { path = "../pipecast-shared" }
 
+### Used for managing device wakers
+futures = "0.3.31"
+
 ### Enum Handling
 enum-map = { workspace = true }
 strum = { workspace = true }

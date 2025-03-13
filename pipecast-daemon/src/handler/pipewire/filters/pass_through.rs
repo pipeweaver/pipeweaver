@@ -21,7 +21,7 @@ impl FilterHandler for PassThroughFilter {
         panic!("Attempted to set non-existent property");
     }
 
-    fn process_samples(&self, inputs: Vec<&mut [f32]>, mut outputs: Vec<&mut [f32]>) {
+    fn process_samples(&mut self, inputs: Vec<&mut [f32]>, mut outputs: Vec<&mut [f32]>) {
         for (i, input) in inputs.iter().enumerate() {
             if input.is_empty() || outputs[i].is_empty() {
                 continue;

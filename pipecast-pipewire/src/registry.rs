@@ -1,11 +1,7 @@
 use crate::store::Store;
 use enum_map::{Enum, EnumMap};
 use log::debug;
-use pipewire::keys::{
-    APP_ID, APP_NAME, APP_PROCESS_ID, AUDIO_CHANNEL, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME,
-    DEVICE_NICK, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, PORT_DIRECTION, PORT_ID,
-    PORT_MONITOR, PORT_NAME,
-};
+use pipewire::keys::{APP_ID, APP_NAME, APP_PROCESS_ID, AUDIO_CHANNEL, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, LINK_ID, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, PORT_DIRECTION, PORT_ID, PORT_MONITOR, PORT_NAME};
 use pipewire::registry::Listener;
 use pipewire::registry::Registry;
 use pipewire::types::ObjectType;
@@ -55,7 +51,7 @@ impl PipewireRegistry {
 
                                 // Create the Device
                                 let device = RegistryDevice::new(nick, desc, name);
-                                store.add_unmanaged_device(id, device);
+                                store.unmanaged_device_add(id, device);
                             }
                         }
                         ObjectType::Node => {
@@ -67,7 +63,7 @@ impl PipewireRegistry {
 
                                 // Can we attach this to a Device?
                                 if let Some(device) = device.and_then(|s| s.parse::<u32>().ok()) {
-                                    if let Some(device) = store.get_unmanaged_device(device) {
+                                    if let Some(device) = store.unmanaged_device_get(device) {
                                         let node = RegistryNode::new(nick, desc, name);
                                         device.add_node(id, node);
                                     }
@@ -114,7 +110,7 @@ impl PipewireRegistry {
                                 // We need to extract the NodeID and PortID from the data..
                                 if let Some(node_id) = node_id.and_then(|s| s.parse::<u32>().ok()) {
                                     if let Some(port_id) = pid.and_then(|s| s.parse::<u32>().ok()) {
-                                        if let Some(node) = store.get_unmanaged_node(node_id) {
+                                        if let Some(node) = store.unamanged_node_get(node_id) {
                                             node.add_port(
                                                 port_id,
                                                 direction,
@@ -127,10 +123,26 @@ impl PipewireRegistry {
                         }
 
                         ObjectType::Link => {
-                            // I don't know whether we need to track these for now, it would ideally
-                            // let us know if something has changed (especially with our managed
-                            // nodes), but at most it would need to be separate from our main tree
-                            if let Some(props) = global.props {}
+                            // We need to track links, to allow callbacks when links are created.
+                            if let Some(props) = global.props {
+                                let link_id = props.get(*LINK_ID).and_then(|s| s.parse::<u32>().ok());
+                                let input_node = props.get(*LINK_INPUT_NODE).and_then(|s| s.parse::<u32>().ok());
+                                let input_port = props.get(*LINK_INPUT_PORT).and_then(|s| s.parse::<u32>().ok());
+                                let output_node = props.get(*LINK_OUTPUT_NODE).and_then(|s| s.parse::<u32>().ok());
+                                let output_port = props.get(*LINK_OUTPUT_PORT).and_then(|s| s.parse::<u32>().ok());
+
+                                // All these variables need to be set..
+                                if link_id.is_none() || input_node.is_none() || input_port.is_none() || output_node.is_none() || output_port.is_none() {
+                                    return;
+                                }
+                                store.unmanaged_link_add(link_id.unwrap(),
+                                                         RegistryLink {
+                                                             input_node: input_node.unwrap(),
+                                                             input_port: input_port.unwrap(),
+                                                             output_node: output_node.unwrap(),
+                                                             output_port: output_port.unwrap(),
+                                                         });
+                            }
                         }
 
                         // ObjectType::Client => {}
@@ -260,4 +272,10 @@ impl RegistryPort {
     }
 }
 
-pub(crate) struct RegistryLink {}
+#[derive(Debug, PartialEq)]
+pub(crate) struct RegistryLink {
+    pub input_node: u32,
+    pub input_port: u32,
+    pub output_node: u32,
+    pub output_port: u32,
+}

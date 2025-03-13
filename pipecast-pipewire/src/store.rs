@@ -1,25 +1,29 @@
 use crate::manager::FilterData;
-use crate::registry::{Direction, RegistryDevice, RegistryNode};
+use crate::registry::{Direction, RegistryDevice, RegistryLink, RegistryNode};
 use crate::{FilterValue, LinkType, PipecastNode};
 use log::debug;
-use oneshot::Sender;
 use parking_lot::RwLock;
 use pipewire::filter::{Filter, FilterListener, FilterPort};
-use pipewire::link::Link;
+use pipewire::link::{Link, LinkListener};
 use pipewire::node::{Node, NodeListener};
 use pipewire::properties::Properties;
 use pipewire::proxy::ProxyListener;
 use pipewire::spa::param::ParamType;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use tokio::sync::oneshot::Sender;
 use ulid::Ulid;
 
 pub struct Store {
     managed_nodes: HashMap<Ulid, NodeStore>,
     managed_filters: HashMap<Ulid, FilterStore>,
-    managed_links: Vec<LinkStore>,
+    managed_links: HashMap<Ulid, LinkStore>,
 
     unmanaged_devices: HashMap<u32, RegistryDevice>,
+    unmanaged_links: HashMap<u32, RegistryLink>,
+
+    link_listeners: Vec<LinkListener>,
 
 }
 
@@ -29,18 +33,13 @@ impl Store {
             // core,
             managed_nodes: HashMap::new(),
             managed_filters: HashMap::new(),
-            managed_links: vec![],
+            managed_links: HashMap::new(),
 
             unmanaged_devices: HashMap::new(),
-        }
-    }
+            unmanaged_links: HashMap::new(),
 
-    pub fn add_unmanaged_device(&mut self, id: u32, device: RegistryDevice) {
-        // Only add this if the node isn't already managed
-        if self.is_managed_node(id) {
-            return;
+            link_listeners: vec![],
         }
-        self.unmanaged_devices.insert(id, device);
     }
 
     pub fn is_managed_node(&self, id: u32) -> bool {
@@ -54,11 +53,23 @@ impl Store {
         false
     }
 
-    pub fn get_unmanaged_device(&mut self, id: u32) -> Option<&mut RegistryDevice> {
+    pub fn unmanaged_device_add(&mut self, id: u32, device: RegistryDevice) {
+        // Only add this if the node isn't already managed
+        if self.is_managed_node(id) {
+            return;
+        }
+        self.unmanaged_devices.insert(id, device);
+    }
+
+    pub fn unmanaged_devices_get(&self) -> &HashMap<u32, RegistryDevice> {
+        &self.unmanaged_devices
+    }
+
+    pub fn unmanaged_device_get(&mut self, id: u32) -> Option<&mut RegistryDevice> {
         self.unmanaged_devices.get_mut(&id)
     }
 
-    pub fn get_unmanaged_node(&mut self, id: u32) -> Option<&mut RegistryNode> {
+    pub fn unamanged_node_get(&mut self, id: u32) -> Option<&mut RegistryNode> {
         // We need to find this node inside the unmanaged devices..
         for device in self.unmanaged_devices.values_mut() {
             for (node_id, node) in &mut device.nodes {
@@ -70,16 +81,16 @@ impl Store {
         None
     }
 
-    pub fn get_unmanaged_devices(&self) -> &HashMap<u32, RegistryDevice> {
-        &self.unmanaged_devices
+    pub fn unmanaged_link_add(&mut self, id: u32, link: RegistryLink) {
+        self.unmanaged_links.insert(id, link);
     }
 
-    pub fn add_node(&mut self, node: NodeStore) {
+    pub fn node_add(&mut self, node: NodeStore) {
         debug!("[{}] Device Added to Store, waiting for data", &node.id);
         self.managed_nodes.insert(node.id, node);
     }
 
-    pub fn get_node(&self, id: Ulid) -> Option<&NodeStore> {
+    pub fn node_get(&self, id: Ulid) -> Option<&NodeStore> {
         self.managed_nodes.get(&id)
     }
 
@@ -125,13 +136,18 @@ impl Store {
         }
     }
 
-    pub fn add_filter(&mut self, filter: FilterStore) {
+    pub fn filter_add(&mut self, filter: FilterStore) {
         debug!("[{}] Filter Added to Store", &filter.id);
         self.managed_filters.insert(filter.id, filter);
     }
 
-    pub fn get_filter(&self, id: Ulid) -> Option<&FilterStore> {
+    pub fn filter_get(&self, id: Ulid) -> Option<&FilterStore> {
         self.managed_filters.get(&id)
+    }
+
+    pub fn filter_remove(&mut self, filter: Ulid) {
+        self.link_remove_for_type(LinkType::Filter(filter));
+        self.managed_filters.remove(&filter);
     }
 
     pub fn filter_set_pw_id(&mut self, id: Ulid, pw_id: u32) {
@@ -148,8 +164,31 @@ impl Store {
         filter.data.write().callback.set_property(key, value);
     }
 
-    pub fn add_link(&mut self, link: LinkStore) {
-        self.managed_links.push(link);
+    pub fn link_add(&mut self, id: Ulid, link: LinkStore) {
+        self.managed_links.insert(id, link);
+    }
+
+    pub fn link_ready(&mut self, id: Ulid) {
+        if let Some(link) = self.managed_links.get_mut(&id) {
+            let sender = link.ready_sender.take();
+            if let Some(sender) = sender {
+                let _ = sender.send(());
+            }
+        }
+    }
+
+    pub fn link_remove(&mut self, source: LinkType, destination: LinkType) {
+        debug!("Removing Link..");
+        self.managed_links.retain(|_, link| {
+            link.source != source || link.destination != destination
+        })
+    }
+
+    pub fn link_remove_for_type(&mut self, id: LinkType) {
+        debug!("Dropping Link Type..");
+        self.managed_links.retain(|_, link| {
+            link.source != id && link.destination != id
+        });
     }
 
     /// This function returns a list of nodes which can be linked to and from inside PipeCast
@@ -219,17 +258,18 @@ pub struct FilterStore {
     /// The Pipewire Node ID for this Filter
     pub(crate) pw_id: Option<u32>,
 
+    pub(crate) _listener: FilterListener<Rc<RwLock<FilterData>>>,
+
     /// The PipeCast Ulid Identifier
     pub(crate) id: Ulid,
 
     /// Details of the ports assigned to this filter
-    pub(crate) input_ports: Vec<FilterPort>,
-    pub(crate) output_ports: Vec<FilterPort>,
+    pub(crate) input_ports: Rc<RefCell<Vec<FilterPort>>>,
+    pub(crate) output_ports: Rc<RefCell<Vec<FilterPort>>>,
 
     /// These two fields need to exist purely to prevent the filter and the listener from
     /// being dropped, they're never directly accessed, they're just a store.
     pub(crate) _filter: Filter,
-    pub(crate) _listener: FilterListener<Rc<RwLock<FilterData>>>,
 
     /// The 'Ready Sender' is called once the filter is setup and ready-to-go
     pub(crate) ready_sender: Option<Sender<()>>,
@@ -238,13 +278,21 @@ pub struct FilterStore {
     pub data: Rc<RwLock<FilterData>>,
 }
 
-#[derive(Debug)]
 pub struct LinkStore {
     pub(crate) link: Link,
+    pub(crate) _listener: LinkListener,
 
     pub(crate) source: LinkType,
     pub(crate) src_port_id: usize,
 
     pub(crate) destination: LinkType,
     pub(crate) dest_port_id: usize,
+
+    pub(crate) ready_sender: Option<Sender<()>>,
 }
+
+// #[derive(Debug)]
+// pub struct LinkListener {
+//     link: RegistryLink,
+//     listener: oneshot::Sender<()>,
+// }

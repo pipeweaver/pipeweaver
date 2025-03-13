@@ -43,16 +43,16 @@ impl Profile {
                                 volumes_linked: Some(1.)
                             },
                             attached_devices: vec![
-                                // PhysicalDeviceDescriptor {
-                                //     name: None,
-                                //     description: Some(String::from("BEACN Mic Microphone")),
-                                //     nickname: None,
-                                // },
-                                // PhysicalDeviceDescriptor {
-                                //     name: None,
-                                //     description: Some(String::from("Elgato XLR Dock Mono")),
-                                //     nickname: None,
-                                // }
+                                PhysicalDeviceDescriptor {
+                                    name: None,
+                                    description: Some(String::from("BEACN Mic Microphone")),
+                                    nickname: None,
+                                },
+                                PhysicalDeviceDescriptor {
+                                    name: None,
+                                    description: Some(String::from("Elgato XLR Dock Mono")),
+                                    nickname: None,
+                                }
                             ],
                         },
                         PhysicalSourceDevice {
@@ -77,11 +77,11 @@ impl Profile {
                                 volumes_linked: Some(1.)
                             },
                             attached_devices: vec![
-                                // PhysicalDeviceDescriptor {
-                                //     name: Some(String::from("alsa_input.pci-0000_2f_00.4.analog-stereo")),
-                                //     description: None,
-                                //     nickname: None,
-                                // },
+                                PhysicalDeviceDescriptor {
+                                    name: Some(String::from("alsa_input.pci-0000_2f_00.4.analog-stereo")),
+                                    description: None,
+                                    nickname: None,
+                                },
                             ],
                         }
                     ],
@@ -209,21 +209,21 @@ impl Profile {
                             volume: 99,
                             mix: Mix::A,
                             attached_devices: vec![
-                                // PhysicalDeviceDescriptor {
-                                //     name: None,
-                                //     description: Some(String::from("BEACN Mic Headphones")),
-                                //     nickname: None,
-                                // },
+                                PhysicalDeviceDescriptor {
+                                    name: None,
+                                    description: Some(String::from("BEACN Mic Headphones")),
+                                    nickname: None,
+                                },
                                 PhysicalDeviceDescriptor {
                                     name: None,
                                     description: Some(String::from("GoXLR System")),
                                     nickname: None,
                                 },
-                                // PhysicalDeviceDescriptor {
-                                //     name: None,
-                                //     description: Some(String::from("Elgato XLR Dock Analog Stereo")),
-                                //     nickname: None,
-                                // }
+                                PhysicalDeviceDescriptor {
+                                    name: None,
+                                    description: Some(String::from("Elgato XLR Dock Analog Stereo")),
+                                    nickname: None,
+                                }
                             ],
                         },
                     ],
