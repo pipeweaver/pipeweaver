@@ -405,7 +405,7 @@ impl PipewireManager {
         self.store.borrow_mut().filter_set_parameter(id, key, value);
     }
 
-    pub fn create_link(&mut self, source: LinkType, destination: LinkType, sender: Sender<()>) {
+    pub fn create_link(&mut self, source: LinkType, destination: LinkType) {
         // Locate the Source Node..
         let src = self.get_ports(source);
         let dest = self.get_ports(destination);
@@ -459,8 +459,6 @@ impl PipewireManager {
             //     debug!("Timeout Creating Listener..");
             // }
         }
-
-        let _ = sender.send(());
     }
 
     pub fn remove_link(&mut self, source: LinkType, destination: LinkType) {
@@ -512,7 +510,6 @@ impl PipewireManager {
         dest_node: u32,
         dest_port: u32,
     ) -> (Link, LinkListener) {
-        debug!("Creating Link..");
         let listener_info_store = self.store.clone();
         let link = self.core
             .create_object::<Link>(
@@ -602,8 +599,8 @@ pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Res
             PipewireMessage::CreateFilterNode(props) => {
                 manager.borrow_mut().create_filter(props);
             }
-            PipewireMessage::CreateDeviceLink(source, destination, sender) => {
-                manager.borrow_mut().create_link(source, destination, sender);
+            PipewireMessage::CreateDeviceLink(source, destination) => {
+                manager.borrow_mut().create_link(source, destination);
             }
 
             PipewireMessage::RemoveDeviceLink(source, destination) => {

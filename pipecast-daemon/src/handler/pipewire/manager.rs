@@ -123,12 +123,7 @@ impl PipewireManager {
                             };
 
                             // Attach the Original Node to Tree...
-                            let (tx, rx) = oneshot::channel();
-                            let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(source, destination, tx));
-                            let _ = rx.await;
-
-                            // Give it a moment to attach (TODO: Properly!)
-                            // sleep(Duration::from_millis(300)).await;
+                            let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(source, destination));
 
                             // Remove the links for the wake node...
                             let (source, destination) = match waker.class {
@@ -240,9 +235,7 @@ impl PipewireManager {
                     wakers.push(receiver);
 
                     debug!("Attaching {:?} to Wake Node..", attached_device);
-                    let (tx, rx) = oneshot::channel();
-                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(UnmanagedNode(node_id), Filter(filter_id), tx));
-                    let _ = rx.await;
+                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(UnmanagedNode(node_id), Filter(filter_id)));
                 }
             }
         }
@@ -266,8 +259,7 @@ impl PipewireManager {
                     // let _ = rx.await;
 
                     debug!("Attaching {:?} to {:?}", attached_device, device.description.name);
-                    let (tx, rx) = oneshot::channel();
-                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(Filter(device.description.id), UnmanagedNode(node_id), tx));
+                    let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(Filter(device.description.id), UnmanagedNode(node_id)));
                 }
             }
         }
@@ -546,9 +538,7 @@ impl PipewireManager {
 
     async fn create_route(&mut self, source: LinkType, target: LinkType) {
         // Relatively simple, just send a new route message...
-        let (tx, rx) = oneshot::channel();
-        let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(source, target, tx));
-        let _ = rx.await;
+        let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(source, target));
     }
 
     async fn remove_route(&mut self, source: Ulid, destination: Ulid) {}

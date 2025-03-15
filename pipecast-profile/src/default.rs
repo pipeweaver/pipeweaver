@@ -78,7 +78,7 @@ impl Profile {
                             },
                             attached_devices: vec![
                                 PhysicalDeviceDescriptor {
-                                    name: Some(String::from("alsa_input.pci-0000_2f_00.4.analog-stereo")),
+                                    name: Some(String::from("alsa_input.pci-0000_31_00.4.analog-stereo")),
                                     description: None,
                                     nickname: None,
                                 },
