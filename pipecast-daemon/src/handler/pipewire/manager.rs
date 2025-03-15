@@ -42,7 +42,6 @@ pub(crate) struct PipewireManager {
     target_map: HashMap<Ulid, Ulid>,
 
     wakers: HashMap<Ulid, Waker>,
-    parkers: HashMap<Ulid, Ulid>,
 
     node_list: Vec<PipecastNode>,
 }
@@ -62,7 +61,6 @@ impl PipewireManager {
             target_map: HashMap::default(),
 
             wakers: HashMap::default(),
-            parkers: HashMap::default(),
 
             node_list: Default::default(),
         }
