@@ -23,6 +23,7 @@ pub enum MuteState {
     Unmuted,
     MuteTargetA,
     MuteTargetB,
+    MuteAllTargets,
 }
 
 #[derive(Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize)]
