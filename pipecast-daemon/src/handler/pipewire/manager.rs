@@ -2,7 +2,7 @@ use crate::handler::pipewire::filters::pass_through::PassThroughFilter;
 use crate::handler::pipewire::filters::volume::VolumeFilter;
 use crate::handler::pipewire::filters::waker::WakerFilter;
 use crate::handler::primary_worker::ManagerMessage;
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use enum_map::{enum_map, EnumMap};
 use futures::stream::{FuturesUnordered, StreamExt};
 use log::{debug, info};
@@ -17,7 +17,7 @@ use pipecast_profile::{
     DeviceDescription, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice,
     Profile, VirtualSourceDevice, VirtualTargetDevice, Volumes,
 };
-use pipecast_shared::{Mix, NodeType};
+use pipecast_shared::{Mix, MuteState, NodeType};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::select;
@@ -99,9 +99,12 @@ impl PipewireManager {
                                 PipewireCommand::SetVolume(node_type, id, mix, volume) => {
                                     self.set_volume(node_type, id, mix, volume).await
                                 }
+                                PipewireCommand::SetMuteState(node_type, id, state) => {
+                                    self.set_mute_state(node_type, id, state).await
+                                }
                                 _ => {
                                     debug!("Received Command: {:?}", command);
-                                    Ok(())
+                                    Err(anyhow!("Command Not Implemented"))
                                 }
                             };
 
@@ -112,7 +115,6 @@ impl PipewireManager {
                             });
                         }
                         ManagerMessage::GetConfig(tx) => {
-                            debug!("Sending Audio Config");
                             let _ = tx.send(self.get_config().await);
                         }
                     }
@@ -202,6 +204,40 @@ impl PipewireManager {
             }
         }
         bail!("Device Not Found")
+    }
+
+    async fn set_mute_state(&mut self, node_type: NodeType, id: Ulid, state: MuteState) -> Result<()> {
+        // For testing, we just change the state in the config
+        match node_type {
+            NodeType::PhysicalSource => {
+                if let Some(device) = self.get_physical_source_by_id(id) {
+                    device.mute_states.mute_state = state;
+                    return Ok(());
+                }
+            }
+            NodeType::VirtualSource => {
+                if let Some(device) = self.get_virtual_source_by_id(id) {
+                    device.mute_states.mute_state = state;
+                    return Ok(());
+                }
+            }
+
+            NodeType::PhysicalTarget => {
+                if let Some(device) = self.get_physical_target_by_id(id) {
+                    device.mute_state = state;
+                    return Ok(());
+                }
+            }
+
+            NodeType::VirtualTarget => {
+                if let Some(device) = self.get_virtual_target_by_id(id) {
+                    device.mute_state = state;
+                    return Ok(());
+                }
+            }
+        }
+
+        bail!("Unable to Locate Device: {}", id);
     }
 
     async fn load_profile(&mut self, wakers: &mut FuturesUnordered<Receiver<Ulid>>) {
