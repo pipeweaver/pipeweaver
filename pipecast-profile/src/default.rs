@@ -206,6 +206,7 @@ impl Profile {
                                 name: "Headphones".to_string(),
                                 colour: Default::default(),
                             },
+                            mute_state: MuteState::Unmuted,
                             volume: 99,
                             mix: Mix::A,
                             attached_devices: vec![
@@ -238,6 +239,7 @@ impl Profile {
                                     blue: 116
                                 },
                             },
+                            mute_state: MuteState::Unmuted,
                             volume: 99,
                             mix: Mix::B,
                         },
@@ -251,6 +253,7 @@ impl Profile {
                                     blue: 92
                                 },
                             },
+                            mute_state: MuteState::Unmuted,
                             volume: 99,
                             mix: Mix::B,
                         },
@@ -264,6 +267,7 @@ impl Profile {
                                     blue: 69
                                 },
                             },
+                            mute_state: MuteState::Unmuted,
                             volume: 99,
                             mix: Mix::A,
                         }

@@ -82,6 +82,7 @@ pub struct PhysicalSourceDevice {
 pub struct VirtualTargetDevice {
     pub description: DeviceDescription,
 
+    pub mute_state: MuteState,
     pub volume: u8,
     pub mix: Mix,
 }
@@ -90,6 +91,7 @@ pub struct VirtualTargetDevice {
 pub struct PhysicalTargetDevice {
     pub description: DeviceDescription,
 
+    pub mute_state: MuteState,
     pub volume: u8,
     pub mix: Mix,
 
