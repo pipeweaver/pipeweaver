@@ -2,6 +2,14 @@ use enum_map::Enum;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumIter};
 
+#[derive(Debug, Display, Copy, Clone, PartialEq, Enum, EnumIter, Serialize, Deserialize)]
+pub enum NodeType {
+    PhysicalSource,
+    PhysicalTarget,
+    VirtualSource,
+    VirtualTarget,
+}
+
 #[derive(Default, Debug, Display, Copy, Clone, Enum, EnumIter, Serialize, Deserialize)]
 pub enum Mix {
     #[default]

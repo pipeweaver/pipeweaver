@@ -1,28 +1,28 @@
 import {store} from "@/pipecast/store.js";
 
 export const DeviceType = Object.freeze({
-  PHYSICAL_SOURCE: Symbol(''),
-  VIRTUAL_SOURCE: Symbol(''),
+  PhysicalSource: 'PhysicalSource',
+  VirtualSource: 'VirtualSource',
 
-  PHYSICAL_TARGET: Symbol(''),
-  VIRTUAL_TARGET: Symbol(''),
+  PhysicalTarget: 'PhysicalTarget',
+  VirtualTarget: 'VirtualTarget',
 });
 
 export function get_devices(type) {
-  if (type === DeviceType.PHYSICAL_SOURCE) {
+  if (type === DeviceType.PhysicalSource) {
     return store.getProfile().devices.sources.physical_devices;
   }
-  if (type === DeviceType.VIRTUAL_SOURCE) {
+  if (type === DeviceType.VirtualSource) {
     return store.getProfile().devices.sources.virtual_devices;
   }
-  if (type === DeviceType.PHYSICAL_TARGET) {
+  if (type === DeviceType.PhysicalTarget) {
     return store.getProfile().devices.targets.physical_devices;
   }
-  if (type === DeviceType.VIRTUAL_TARGET) {
+  if (type === DeviceType.VirtualTarget) {
     return store.getProfile().devices.targets.virtual_devices;
   }
 }
 
 export function is_source(type) {
-  return (type === DeviceType.PHYSICAL_SOURCE || type === DeviceType.VIRTUAL_SOURCE)
+  return (type === DeviceType.PhysicalSource || type === DeviceType.VirtualSource)
 }

@@ -40,6 +40,7 @@ export default {
     },
 
     getDevice: function () {
+      console.log(this.type);
       return get_devices(this.type)[this.index];
     },
 
@@ -158,9 +159,9 @@ export default {
       if ((!force && !this.update_locked) || force) {
         this.update_locked = true;
 
-        // SetVolume(Ulid, Mix, u8),
+        // SetVolume(DeviceType, Ulid, Mix, u8),
         let command = {
-          "SetVolume": [this.getId(), mix, parseInt(e.target.value)]
+          "SetVolume": [this.type, this.getId(), mix, parseInt(e.target.value)]
         }
         console.log(command);
 

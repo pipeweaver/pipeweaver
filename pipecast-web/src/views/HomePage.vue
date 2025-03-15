@@ -7,24 +7,24 @@ import ChannelColumn from "@/components/channels/ChannelColumn.vue";
 <template>
   <div class="wrapper">
     <div class="mixer">
-      <div v-for="id in get_devices(DeviceType.PHYSICAL_SOURCE).keys()">
-        <ChannelColumn :index=id :type='DeviceType.PHYSICAL_SOURCE'/>
+      <div v-for="id in get_devices(DeviceType.PhysicalSource).keys()">
+        <ChannelColumn :index=id :type='DeviceType.PhysicalSource'/>
       </div>
     </div>
     <div class="mixer">
-      <div v-for="id in get_devices(DeviceType.VIRTUAL_SOURCE).keys()">
-        <ChannelColumn :index=id :type='DeviceType.VIRTUAL_SOURCE'/>
+      <div v-for="id in get_devices(DeviceType.VirtualSource).keys()">
+        <ChannelColumn :index=id :type='DeviceType.VirtualSource'/>
       </div>
     </div>
 
     <div class="mixer">
-      <div v-for="id in get_devices(DeviceType.PHYSICAL_TARGET).keys()">
-        <ChannelColumn :index=id :type='DeviceType.PHYSICAL_TARGET'/>
+      <div v-for="id in get_devices(DeviceType.PhysicalTarget).keys()">
+        <ChannelColumn :index=id :type='DeviceType.PhysicalTarget'/>
       </div>
     </div>
     <div class="mixer">
-      <div v-for="id in get_devices(DeviceType.VIRTUAL_TARGET).keys()">
-        <ChannelColumn :index=id :type='DeviceType.VIRTUAL_TARGET'/>
+      <div v-for="id in get_devices(DeviceType.VirtualTarget).keys()">
+        <ChannelColumn :index=id :type='DeviceType.VirtualTarget'/>
       </div>
     </div>
   </div>
