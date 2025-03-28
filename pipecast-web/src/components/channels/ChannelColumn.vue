@@ -276,7 +276,7 @@ export default {
           <span v-if="isOutput()">Mute Channel</span>
           <span v-else>Mute to All</span>
         </button>
-        <button>
+        <button v-if="!isOutput()">
           <font-awesome-icon :icon="['fas', 'angle-down']"/>
         </button>
       </div>
