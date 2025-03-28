@@ -32,7 +32,7 @@ impl Profile {
                                 },
                             },
                             mute_states: MuteStates {
-                                mute_state: MuteState::Unmuted,
+                                mute_state: vec![],
                                 mute_targets: Default::default(),
                             },
                             volumes: Volumes {
@@ -66,7 +66,7 @@ impl Profile {
                                 },
                             },
                             mute_states: MuteStates {
-                                mute_state: MuteState::Unmuted,
+                                mute_state: vec![],
                                 mute_targets: Default::default(),
                             },
                             volumes: Volumes {
@@ -97,7 +97,7 @@ impl Profile {
                                 },
                             },
                             mute_states: MuteStates {
-                                mute_state: MuteState::Unmuted,
+                                mute_state: vec![],
                                 mute_targets: Default::default(),
                             },
                             volumes: Volumes {
@@ -119,7 +119,7 @@ impl Profile {
                                 },
                             },
                             mute_states: MuteStates {
-                                mute_state: MuteState::Unmuted,
+                                mute_state: vec![],
                                 mute_targets: Default::default(),
                             },
                             volumes: Volumes {
@@ -141,7 +141,7 @@ impl Profile {
                                 },
                             },
                             mute_states: MuteStates {
-                                mute_state: MuteState::Unmuted,
+                                mute_state: vec![],
                                 mute_targets: Default::default(),
                             },
                             volumes: Volumes {
@@ -163,7 +163,7 @@ impl Profile {
                                 },
                             },
                             mute_states: MuteStates {
-                                mute_state: MuteState::Unmuted,
+                                mute_state: vec![],
                                 mute_targets: Default::default(),
                             },
                             volumes: Volumes {
@@ -185,7 +185,7 @@ impl Profile {
                                 },
                             },
                             mute_states: MuteStates {
-                                mute_state: MuteState::Unmuted,
+                                mute_state: vec![],
                                 mute_targets: Default::default(),
                             },
                             volumes: Volumes {

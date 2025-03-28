@@ -96,14 +96,12 @@ export const store = reactive({
 
   // eslint-disable-next-line no-unused-vars
   patchData(json) {
-    if (this.have_device) {
-      for (let patch of json.Patch) {
-        if (this.pausedPaths.includes(patch.path)) {
-          continue
-        }
-
-        applyOperation(this.status, patch, true, true, false)
+    for (let patch of json.Patch) {
+      if (this.pausedPaths.includes(patch.path)) {
+        continue
       }
+
+      applyOperation(this.status, patch, true, true, false)
     }
   },
 

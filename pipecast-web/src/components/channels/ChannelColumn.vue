@@ -4,10 +4,11 @@ import MuteState from '@/components/channels/MuteState.vue'
 import ChannelColumnVolume from '@/components/channels/ChannelColumnVolume.vue'
 import {DeviceType, get_devices, is_source} from "@/pipecast/util.js";
 import {websocket} from "@/pipecast/sockets.js";
+import {FontAwesomeIcon} from "@fortawesome/vue-fontawesome";
 
 export default {
   name: 'ChannelColumn',
-  components: {ChannelColumnVolume, ColourSettings, MuteState},
+  components: {FontAwesomeIcon, ChannelColumnVolume, ColourSettings, MuteState},
   props: {
     type: DeviceType,
     index: Number,
@@ -40,7 +41,6 @@ export default {
     },
 
     getDevice: function () {
-      console.log(this.type);
       return get_devices(this.type)[this.index];
     },
 
@@ -56,19 +56,6 @@ export default {
         green: color.green,
         blue: color.blue
       }
-    },
-
-    isMutePressActive: function () {
-      return this.getMute().mute_state === 'Pressed'
-    },
-    isMuteHoldActive: function () {
-      return this.getMute().mute_state === 'Held'
-    },
-    getMutePressTargets: function () {
-      return this.getMute().mute_actions.Press
-    },
-    getMuteHoldTargets: function () {
-      return this.getMute().mute_actions.Hold
     },
 
     calculateHeight: function () {
@@ -115,8 +102,33 @@ export default {
       }
       return this.getDevice().volumes.volume.B
     },
-    getMute: function () {
-      //return store.getActiveDevice().config.device.channels.configs[this.getChannelName()]
+
+    getMuteState: function () {
+      if (is_source(this.type)) {
+        return this.getDevice().mute_states.mute_state
+      } else {
+        return this.getDevice().mute_state
+      }
+    },
+
+    isOutput: function () {
+      return (this.type === DeviceType.VirtualTarget || this.type === DeviceType.PhysicalTarget)
+    },
+
+
+    isMuteA: function () {
+      if (this.isOutput()) {
+        let state = this.getMuteState();
+        return state === "Muted"
+      }
+
+      let state = this.getMuteState();
+      return state.includes("TargetA");
+    },
+
+    isMuteB: function () {
+      let state = this.getMuteState();
+      return state.includes("TargetB");
     },
 
     getChannelName: function () {
@@ -163,12 +175,32 @@ export default {
         let command = {
           "SetVolume": [this.type, this.getId(), mix, parseInt(e.target.value)]
         }
-        console.log(command);
-
         websocket.send_command(command).then(() => {
           this.update_locked = false
         });
       }
+    },
+
+    mute_click: function (target, e) {
+      // Get the current mute state for this target
+      let current = this.getMuteState();
+
+      let new_status = "Muted"
+      let mute_target = (target === "A") ? "TargetA" : "TargetB";
+
+      if (this.isOutput()) {
+        new_status = (current === "Muted") ? "Unmuted" : "Muted";
+      } else {
+        if (current.includes(mute_target)) {
+          new_status = "Unmuted"
+        }
+      }
+
+
+      let command = {
+        "SetMuteState": [this.type, this.getId(), mute_target, new_status],
+      }
+      websocket.send_command(command);
     },
 
     colour_clicked: function (e) {
@@ -235,21 +267,24 @@ export default {
     </div>
     <div class="bottom"></div>
     <div v-if="hasMute()" :class="[!hasComplexMute() ? 'small' : '']" class="mute">
-      <div v-if="hasBasicMute()" class="buttons">
-        <button>
-          <span>
-            <img alt="Press" src="/images/hold.svg"/>
+      <div v-if="hasBasicMute()" :class="{active: isMuteA()}" class="buttons">
+        <button @click="event => mute_click('A', event)">
+          <span style="width: 16px">
+            <font-awesome-icon v-if="isMuteA()" :icon="['fas', 'volume-xmark']"/>
+            <font-awesome-icon v-else :icon="['fas', 'volume-high']"/>
           </span>
-          <span>Mute to All</span>
+          <span v-if="isOutput()">Mute Channel</span>
+          <span v-else>Mute to All</span>
         </button>
         <button>
           <font-awesome-icon :icon="['fas', 'angle-down']"/>
         </button>
       </div>
-      <div v-if="hasComplexMute()" class="buttons">
-        <button>
-          <span>
-            <img alt="Press" src="/images/press.svg"/>
+      <div v-if="hasComplexMute()" :class="{active: isMuteB()}" class="buttons">
+        <button @click="event => mute_click('B', event)">
+          <span style="width: 16px">
+            <font-awesome-icon v-if="isMuteB()" :icon="['fas', 'volume-xmark']"/>
+            <font-awesome-icon v-else :icon="['fas', 'volume-high']"/>
           </span>
           <span class="label">Mute to Headphones</span>
         </button>
@@ -339,7 +374,7 @@ export default {
 
 .mute .buttons div,
 .mute .buttons button {
-  background-color: rgba(80, 80, 80, 0.8);
+  background-color: rgba(80, 80, 80, 0.6);
   overflow: hidden;
 
   border: 1px solid #666;
@@ -348,6 +383,10 @@ export default {
 
   display: flex;
   align-items: center;
+}
+
+.mute .active {
+  background-color: rgba(255, 0, 0, 0.6);
 }
 
 .mute .buttons button span {

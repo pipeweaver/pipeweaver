@@ -17,7 +17,7 @@ use pipecast_profile::{
     DeviceDescription, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice,
     Profile, VirtualSourceDevice, VirtualTargetDevice, Volumes,
 };
-use pipecast_shared::{Mix, MuteState, NodeType};
+use pipecast_shared::{Mix, MuteState, MuteTarget, NodeType};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::select;
@@ -41,7 +41,7 @@ pub(crate) struct PipewireManager {
     source_map: HashMap<Ulid, EnumMap<Mix, Ulid>>,
     target_map: HashMap<Ulid, Ulid>,
 
-    wakers: HashMap<Ulid, Waker>,
+    wake_filters: HashMap<Ulid, Waker>,
 
     node_list: Vec<PipecastNode>,
 }
@@ -60,7 +60,7 @@ impl PipewireManager {
             source_map: HashMap::default(),
             target_map: HashMap::default(),
 
-            wakers: HashMap::default(),
+            wake_filters: HashMap::default(),
 
             node_list: Default::default(),
         }
@@ -99,8 +99,8 @@ impl PipewireManager {
                                 PipewireCommand::SetVolume(node_type, id, mix, volume) => {
                                     self.set_volume(node_type, id, mix, volume).await
                                 }
-                                PipewireCommand::SetMuteState(node_type, id, state) => {
-                                    self.set_mute_state(node_type, id, state).await
+                                PipewireCommand::SetMuteState(node_type, id, target, state) => {
+                                    self.set_mute_state(node_type, id, target, state).await
                                 }
                                 _ => {
                                     debug!("Received Command: {:?}", command);
@@ -121,7 +121,7 @@ impl PipewireManager {
                 }
                 Some(result) = wakers.next() => {
                     if let Ok(id) = result {
-                        if let Some(waker) = self.wakers.get(&id) {
+                        if let Some(waker) = self.wake_filters.get(&id) {
                             debug!("[{}] Device Woke up In {:?}, attaching to tree..", id, waker.created.elapsed());
 
                             let (source, destination) = match waker.class {
@@ -206,31 +206,53 @@ impl PipewireManager {
         bail!("Device Not Found")
     }
 
-    async fn set_mute_state(&mut self, node_type: NodeType, id: Ulid, state: MuteState) -> Result<()> {
+    async fn set_mute_state(&mut self, node_type: NodeType, id: Ulid, target: MuteTarget, state: MuteState) -> Result<()> {
+        debug!("Setting: {}, {}, {:?}, {:?}", node_type, id, target, state);
         // For testing, we just change the state in the config
         match node_type {
-            NodeType::PhysicalSource => {
-                if let Some(device) = self.get_physical_source_by_id(id) {
-                    device.mute_states.mute_state = state;
+            NodeType::PhysicalSource | NodeType::VirtualSource => {
+                // We don't really need to compare device type here, while it would be negligibly
+                // faster to actual check the node_type, we can instead live with this as it's
+                // not something that occurs particularly often.
+                let mute_state = if let Some(device) = self.get_physical_source_by_id(id) {
+                    &mut device.mute_states
+                } else if let Some(device) = self.get_virtual_source_by_id(id) {
+                    &mut device.mute_states
+                } else {
+                    bail!("Device Not Found");
+                };
+
+                let current_state = &mute_state.mute_state;
+
+                // Check whether a change has actually occurred here
+                if (state == MuteState::Muted) == current_state.contains(&target) {
                     return Ok(());
                 }
-            }
-            NodeType::VirtualSource => {
-                if let Some(device) = self.get_virtual_source_by_id(id) {
-                    device.mute_states.mute_state = state;
-                    return Ok(());
+
+
+                // So to handle this, we need to start with our current state, and determine
+                // what's changed
+
+
+                // Update the Config State
+                if state == MuteState::Unmuted && mute_state.mute_state.contains(&target) {
+                    mute_state.mute_state.retain(|e| e != &target);
                 }
+                if state == MuteState::Muted && !mute_state.mute_state.contains(&target) {
+                    mute_state.mute_state.push(target);
+                }
+                return Ok(());
             }
 
             NodeType::PhysicalTarget => {
-                if let Some(device) = self.get_physical_target_by_id(id) {
+                if let Some(device) = &mut self.get_physical_target_by_id(id) {
                     device.mute_state = state;
                     return Ok(());
                 }
             }
 
             NodeType::VirtualTarget => {
-                if let Some(device) = self.get_virtual_target_by_id(id) {
+                if let Some(device) = &mut self.get_virtual_target_by_id(id) {
                     device.mute_state = state;
                     return Ok(());
                 }
@@ -282,7 +304,7 @@ impl PipewireManager {
                         .create_wake_filter(&device.description, MediaClass::Source)
                         .await;
                     debug!("Waiting for NodeId {} to wake..", node_id);
-                    self.wakers.insert(
+                    self.wake_filters.insert(
                         device.description.id,
                         Waker {
                             id: filter_id,
@@ -307,19 +329,6 @@ impl PipewireManager {
         for device in &self.profile.devices.targets.physical_devices {
             for attached_device in &device.attached_devices {
                 if let Some(node_id) = self.locate_physical_node_id(attached_device, true) {
-                    // debug!("Waiting for NodeId {} to Wake..", node_id);
-                    // let (filter_id, receiver) = self.create_wake_filter(&device.description, MediaClass::Sink).await;
-                    // self.wakers.insert(device.description.id, Waker {
-                    //     id: filter_id,
-                    //     class: MediaClass::Sink,
-                    //     node_id,
-                    //     created: Instant::now(),
-                    // });
-                    // wakers.push(receiver);
-                    //
-                    // debug!("Attaching {:?} to Wake Node", attached_device);
-                    // let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(Filter(filter_id), UnmanagedNode(node_id)));
-
                     debug!(
                         "Attaching {:?} to {:?}",
                         attached_device, device.description.name

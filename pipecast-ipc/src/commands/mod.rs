@@ -1,6 +1,6 @@
 use json_patch::Patch;
 use pipecast_profile::Profile;
-use pipecast_shared::{Mix, MuteState, NodeType};
+use pipecast_shared::{Mix, MuteState, MuteTarget, NodeType};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
@@ -43,7 +43,7 @@ pub enum DaemonCommand {}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PipewireCommand {
     SetVolume(NodeType, Ulid, Mix, u8),
-    SetMuteState(NodeType, Ulid, MuteState),
+    SetMuteState(NodeType, Ulid, MuteTarget, MuteState),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

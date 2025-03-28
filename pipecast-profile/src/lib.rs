@@ -58,7 +58,7 @@ pub struct VirtualSourceDevice {
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct MuteStates {
-    pub mute_state: MuteState,
+    pub mute_state: Vec<MuteTarget>,
     pub mute_targets: EnumMap<MuteTarget, Vec<Ulid>>,
 }
 

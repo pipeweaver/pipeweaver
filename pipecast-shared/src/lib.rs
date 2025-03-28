@@ -17,16 +17,14 @@ pub enum Mix {
     B,
 }
 
-#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum MuteState {
     #[default]
     Unmuted,
-    MuteTargetA,
-    MuteTargetB,
-    MuteAllTargets,
+    Muted,
 }
 
-#[derive(Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize)]
+#[derive(Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq)]
 pub enum MuteTarget {
     #[default]
     TargetA,
