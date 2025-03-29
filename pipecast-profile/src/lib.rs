@@ -1,9 +1,9 @@
 mod default;
 
-use enum_map::{Enum, EnumMap};
+use enum_map::EnumMap;
 use pipecast_shared::{Colour, Mix, MuteState, MuteTarget};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use ulid::Ulid;
 
 /// Main Profile Node
@@ -11,7 +11,7 @@ use ulid::Ulid;
 pub struct Profile {
     /// A list of devices currently configured in this profile
     pub devices: Devices,
-    pub routes: HashMap<Ulid, Vec<Ulid>>,
+    pub routes: HashMap<Ulid, HashSet<Ulid>>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -58,8 +58,8 @@ pub struct VirtualSourceDevice {
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct MuteStates {
-    pub mute_state: Vec<MuteTarget>,
-    pub mute_targets: EnumMap<MuteTarget, Vec<Ulid>>,
+    pub mute_state: HashSet<MuteTarget>,
+    pub mute_targets: EnumMap<MuteTarget, HashSet<Ulid>>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
