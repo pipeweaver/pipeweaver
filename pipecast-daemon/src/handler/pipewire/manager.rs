@@ -13,12 +13,9 @@ use pipecast_pipewire::{
     FilterProperties, FilterValue, LinkType, MediaClass, NodeProperties, PipecastNode,
     PipewireMessage, PipewireRunner,
 };
-use pipecast_profile::{
-    DeviceDescription, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice,
-    Profile, VirtualSourceDevice, VirtualTargetDevice, Volumes,
-};
+use pipecast_profile::{DeviceDescription, MuteStates, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice, Profile, VirtualSourceDevice, VirtualTargetDevice, Volumes};
 use pipecast_shared::{Mix, MuteState, MuteTarget, NodeType};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
@@ -222,25 +219,79 @@ impl PipewireManager {
                     bail!("Device Not Found");
                 };
 
-                let current_state = &mute_state.mute_state;
-
                 // Check whether a change has actually occurred here
-                if (state == MuteState::Muted) == current_state.contains(&target) {
+                if (state == MuteState::Muted) == mute_state.mute_state.contains(&target) {
                     return Ok(());
                 }
 
+                // Get the current mute targets based on the current state
+                let has_mute_state = !mute_state.mute_state.is_empty();
+                let mute_targets = Self::get_mute_targets(mute_state);
 
-                // So to handle this, we need to start with our current state, and determine
-                // what's changed
-
-
-                // Update the Config State
-                if state == MuteState::Unmuted && mute_state.mute_state.contains(&target) {
-                    mute_state.mute_state.retain(|e| e != &target);
+                // Update the mute state
+                match state {
+                    MuteState::Unmuted => mute_state.mute_state.retain(|&e| e != target),
+                    MuteState::Muted => { mute_state.mute_state.insert(target); }
                 }
-                if state == MuteState::Muted && !mute_state.mute_state.contains(&target) {
-                    mute_state.mute_state.push(target);
+
+                // Let's do this again for the new values
+                let has_new_mute_state = !mute_state.mute_state.is_empty();
+                let new_mute_targets = Self::get_mute_targets(mute_state);
+
+                // Handle transitions
+                if !has_mute_state && has_new_mute_state {
+                    debug!("Transition: Unmuted → Muted");
+
+                    if new_mute_targets.is_empty() {
+                        debug!("Action: Set Volume to 0 for Channel");
+                    } else {
+                        for target in &new_mute_targets {
+                            debug!("Action: Remove Route to {}", target);
+                        }
+                    }
+                } else if has_mute_state && !has_new_mute_state {
+                    debug!("Transition: Muted → Unmuted");
+
+                    if mute_targets.is_empty() {
+                        debug!("Action: Restore Volume for Channel");
+                    } else {
+                        for target in &mute_targets {
+                            debug!("Action: Restore Route to {}", target);
+                        }
+                    }
+                } else if has_mute_state && has_new_mute_state {
+                    debug!("Transition: Muted → Muted with Different Targets");
+
+                    if mute_targets.is_empty() && new_mute_targets.is_empty() {
+                        debug!("Already Muted to All, no changes required.");
+                    } else if mute_targets.is_empty() && !new_mute_targets.is_empty() {
+                        debug!("Transition: Muted (All) → Muted (Some)");
+                        for target in &new_mute_targets {
+                            debug!("Action: Remove Route to {}", target);
+                        }
+                        debug!("Action: Restore Volume for Channel");
+                    } else if !mute_targets.is_empty() && new_mute_targets.is_empty() {
+                        debug!("Transition: Muted (Some) → Muted (All)");
+                        debug!("Action: Set Volume to 0 for Channel");
+                        for target in &mute_targets {
+                            debug!("Action: Restore Route to {}", target);
+                        }
+                    } else {
+                        debug!("Transition: Muted (Some) → Muted (Different Some)");
+                        let restore_routes: Vec<_> = mute_targets.difference(&new_mute_targets).collect();
+                        let remove_routes: Vec<_> = new_mute_targets.difference(&mute_targets).collect();
+
+                        for target in restore_routes {
+                            debug!("Action: Restore Route to {}", target);
+                        }
+                        for target in remove_routes {
+                            debug!("Action: Remove Route to {}", target);
+                        }
+                    }
+                } else {
+                    debug!("Unexpected: Unmuted → Unmuted (No change needed)");
                 }
+
                 return Ok(());
             }
 
@@ -260,6 +311,16 @@ impl PipewireManager {
         }
 
         bail!("Unable to Locate Device: {}", id);
+    }
+
+    fn get_mute_targets(mute_state: &MuteStates) -> HashSet<Ulid> {
+        // Check whether any target is empty, and assume a MuteToAll..
+        if mute_state.mute_state.iter().any(|&target| mute_state.mute_targets[target].is_empty()) {
+            return HashSet::new();
+        }
+
+        // Pull out the specific unique targets from all active Mute States
+        mute_state.mute_state.iter().flat_map(|&target| mute_state.mute_targets[target].iter().copied()).collect()
     }
 
     async fn load_profile(&mut self, wakers: &mut FuturesUnordered<Receiver<Ulid>>) {
