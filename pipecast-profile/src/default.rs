@@ -1,6 +1,7 @@
 use crate::{DeviceDescription, Devices, Mix, MuteState, MuteStates, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice, Profile, SourceDevices, TargetDevices, VirtualSourceDevice, VirtualTargetDevice, Volumes};
 use enum_map::enum_map;
 use pipecast_shared::Colour;
+use std::collections::HashSet;
 use ulid::Ulid;
 
 impl Profile {
@@ -32,7 +33,7 @@ impl Profile {
                                 },
                             },
                             mute_states: MuteStates {
-                                mute_state: vec![],
+                                mute_state: HashSet::new(),
                                 mute_targets: Default::default(),
                             },
                             volumes: Volumes {
@@ -66,7 +67,7 @@ impl Profile {
                                 },
                             },
                             mute_states: MuteStates {
-                                mute_state: vec![],
+                                mute_state: HashSet::new(),
                                 mute_targets: Default::default(),
                             },
                             volumes: Volumes {
@@ -97,7 +98,7 @@ impl Profile {
                                 },
                             },
                             mute_states: MuteStates {
-                                mute_state: vec![],
+                                mute_state: HashSet::new(),
                                 mute_targets: Default::default(),
                             },
                             volumes: Volumes {
@@ -119,7 +120,7 @@ impl Profile {
                                 },
                             },
                             mute_states: MuteStates {
-                                mute_state: vec![],
+                                mute_state: HashSet::new(),
                                 mute_targets: Default::default(),
                             },
                             volumes: Volumes {
@@ -141,7 +142,7 @@ impl Profile {
                                 },
                             },
                             mute_states: MuteStates {
-                                mute_state: vec![],
+                                mute_state: HashSet::new(),
                                 mute_targets: Default::default(),
                             },
                             volumes: Volumes {
@@ -163,7 +164,7 @@ impl Profile {
                                 },
                             },
                             mute_states: MuteStates {
-                                mute_state: vec![],
+                                mute_state: HashSet::new(),
                                 mute_targets: Default::default(),
                             },
                             volumes: Volumes {
@@ -185,7 +186,7 @@ impl Profile {
                                 },
                             },
                             mute_states: MuteStates {
-                                mute_state: vec![],
+                                mute_state: HashSet::new(),
                                 mute_targets: Default::default(),
                             },
                             volumes: Volumes {
@@ -275,12 +276,12 @@ impl Profile {
                 },
             },
             routes: vec![
-                (mic_id, vec![headphones_id, stream_mix_id, chat_mic_id]),
-                (pc_line_in_id, vec![headphones_id, stream_mix_id]),
-                (chat_id, vec![headphones_id, stream_mix_id]),
-                (music_id, vec![headphones_id, stream_mix_id]),
-                (game_id, vec![headphones_id, stream_mix_id]),
-                (system_id, vec![headphones_id]),
+                (mic_id, [headphones_id, stream_mix_id, chat_mic_id].into_iter().collect()),
+                (pc_line_in_id, [headphones_id, stream_mix_id].into_iter().collect()),
+                (chat_id, [headphones_id, stream_mix_id].into_iter().collect()),
+                (music_id, [headphones_id, stream_mix_id].into_iter().collect()),
+                (game_id, [headphones_id, stream_mix_id].into_iter().collect()),
+                (system_id, [headphones_id].into_iter().collect()),
             ].into_iter().collect(),
         }
     }
