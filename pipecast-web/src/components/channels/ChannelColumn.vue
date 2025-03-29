@@ -161,7 +161,7 @@ export default {
 
     getMixAColour: function () {
       // If the channel doesn't have a Mix B, check it's assigned mix
-      if (!this.hasMix() && this.isActiveMix("A")) {
+      if (!this.hasMix() && this.isActiveMix("B")) {
         return "#E07C24";
       }
       return "#59b1b6";
