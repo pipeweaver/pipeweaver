@@ -1,6 +1,7 @@
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::mute::MuteManager;
 use crate::handler::pipewire::components::node::NodeManagement;
+use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{anyhow, bail, Result};
 use log::{debug, warn};
@@ -23,11 +24,12 @@ impl RoutingManagement for PipewireManager {
         let routing = &self.profile.routes;
         for (source, targets) in routing {
             for target in targets {
-                let target = self.get_target_filter_node(*target)?;
-                if !self.is_source_muted_to_some(*source, target).await? {
+                let target_node = self.get_target_filter_node(*target)?;
+                if !self.is_source_muted_to_some(*source, *target).await? {
                     if let Some(map) = self.source_map.get(source).copied() {
-                        self.link_create_filter_to_filter(map[Mix::A], target).await?;
-                        self.link_create_filter_to_filter(map[Mix::B], target).await?;
+                        // Grab the Mix to Route From
+                        let mix = self.get_target_mix(target).await?;
+                        self.link_create_filter_to_filter(map[mix], target_node).await?;
                     }
                 }
             }
@@ -70,12 +72,12 @@ impl RoutingManagement for PipewireManager {
             if enabled {
                 // Only create the route if it's not currently muted
                 if !self.is_source_muted_to_some(source, target).await? {
-                    self.link_create_filter_to_filter(map[Mix::A], target_id).await?;
-                    self.link_create_filter_to_filter(map[Mix::B], target_id).await?;
+                    let mix = self.get_target_mix(&target).await?;
+                    self.link_create_filter_to_filter(map[mix], target_id).await?;
                 }
             } else {
-                self.link_remove_filter_to_filter(map[Mix::A], target_id).await?;
-                self.link_remove_filter_to_filter(map[Mix::B], target_id).await?;
+                let mix = self.get_target_mix(&target).await?;
+                self.link_remove_filter_to_filter(map[mix], target_id).await?;
             }
         } else {
             bail!("Unable to obtain volume map for Source");
@@ -105,4 +107,24 @@ impl RoutingManagement for PipewireManager {
     }
 }
 
-trait RoutingManagementLocal {}
+trait RoutingManagementLocal {
+    async fn get_target_mix(&self, id: &Ulid) -> Result<Mix>;
+}
+
+impl RoutingManagementLocal for PipewireManager {
+    async fn get_target_mix(&self, id: &Ulid) -> Result<Mix> {
+        let error = anyhow!("Cannot Locate Node");
+        let node_type = self.get_node_type(*id).ok_or(error)?;
+        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+            bail!("Provided Target is a Source Node");
+        }
+
+        let err = anyhow!("Failed to Locate Target");
+        let mix = if node_type == NodeType::PhysicalTarget {
+            self.get_physical_target(*id).ok_or(err)?.mix
+        } else {
+            self.get_virtual_target(*id).ok_or(err)?.mix
+        };
+        Ok(mix)
+    }
+}
