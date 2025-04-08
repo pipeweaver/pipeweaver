@@ -211,6 +211,14 @@ export default {
       websocket.send_command(command);
     },
 
+    target_change: function (target, e) {
+      // SetTargetMix(Ulid, Mix),
+      let command = {
+        "SetTargetMix": [this.getId(), target]
+      };
+      websocket.send_command(command);
+    },
+
     colour_clicked: function (e) {
       console.log("Colour Clicked: {}", e);
     }
@@ -270,8 +278,10 @@ export default {
       <img v-else alt="Unlinked" src="/images/submix/unlinked-dimmed.png"/>
     </div>
     <div v-if="!hasMix()" class="assignment">
-      A:<input :checked="isActiveMix('A')" :name="`mix-${getId()}`" type="radio">
-      B:<input :checked="isActiveMix('B')" :name="`mix-${getId()}`" type="radio">
+      A:<input :checked="isActiveMix('A')" :name="`mix-${getId()}`" type="radio"
+               @change="event => target_change('A', event)">
+      B:<input :checked="isActiveMix('B')" :name="`mix-${getId()}`" type="radio"
+               @change="event => target_change('B', event)">
     </div>
     <div class="bottom"></div>
     <div v-if="hasMute()" :class="[!hasComplexMute() ? 'small' : '']" class="mute">
