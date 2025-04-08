@@ -90,7 +90,7 @@ impl PipewireManager {
             // We don't want to set a driver here. If creating a large number of nodes each of them
             // will pick a different device while finding a clock source, resulting in the nodes
             // being spread all over the place. When the node tree starts getting linked together
-            // pipewire needs to pull all the nodes / filters / devices into a single clock source
+            // pipewire needs to pull all the nodes / audio_filters / devices into a single clock source
             // which can cause some pretty aggressive behaviours (I've seen it infinite loop as
             // various nodes fight for clock control).
             //
@@ -102,7 +102,7 @@ impl PipewireManager {
             // https://gitlab.freedesktop.org/pipewire/pipewire/-/wikis/Virtual-Devices
             "audio.position" => "FL,FR",
 
-            // In the case of PipeCast, we're handling the volumes ourselves via filters, so we're
+            // In the case of PipeCast, we're handling the volumes ourselves via audio_filters, so we're
             // going to simply ignore what pipewire says the volume is and monitor at 100%. This
             // should prevent weirdness and unexpected results if the volumes are directly adjusted.
             "monitor.channel-volumes" => "false",
@@ -259,6 +259,10 @@ impl PipewireManager {
         };
 
         self.store.borrow_mut().node_add(store);
+    }
+
+    pub fn remove_node(&mut self, id: Ulid) {
+        self.store.borrow_mut().node_remove(id);
     }
 
     pub fn create_filter(&mut self, props: FilterProperties) {
@@ -520,7 +524,7 @@ impl PipewireManager {
                     *OBJECT_LINGER => "false",
 
                     // No passivity here. While our links may, in some cases, be attached to
-                    // physical sources / sinks, in other cases they're attached to filters which
+                    // physical sources / sinks, in other cases they're attached to audio_filters which
                     // don't have the opportunity to go idle, and implying as such can create a
                     // disconnect between internal and external behaviours.
                     //
@@ -599,6 +603,10 @@ pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Res
             }
             PipewireMessage::CreateDeviceLink(source, destination) => {
                 manager.borrow_mut().create_link(source, destination);
+            }
+
+            PipewireMessage::RemoveDeviceNode(id) => {
+                manager.borrow_mut().remove_node(id);
             }
 
             PipewireMessage::RemoveDeviceLink(source, destination) => {

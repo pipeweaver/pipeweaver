@@ -20,7 +20,7 @@ fn main() -> Result<()> {
     info!("Starting Pipewire Runner..");
     let manager = PipewireRunner::new()?;
 
-    // Ok, define the IDs of all our channels and filters...
+    // Ok, define the IDs of all our channels and audio_filters...
     let system_id = Ulid::new();
     let system_a_id = Ulid::new();
     let system_b_id = Ulid::new();
@@ -44,7 +44,7 @@ fn main() -> Result<()> {
     let mic_a_id = Ulid::new();
     let mic_b_id = Ulid::new();
 
-    // These are 'pass-through' filters
+    // These are 'pass-through' audio_filters
     let headphone_pass_id = Ulid::new();
     let microphone_pass_id = Ulid::new();
 

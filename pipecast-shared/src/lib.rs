@@ -17,7 +17,7 @@ pub enum Mix {
     B,
 }
 
-#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Enum, EnumIter)]
 pub enum MuteState {
     #[default]
     Unmuted,

@@ -20,6 +20,11 @@ use tokio::{join, task};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+// Definitions used during node / filter declarations
+const APP_ID: &str = "io.github.pipecast";
+const APP_NAME: &str = "PipeCast";
+const APP_PREFIX: &str = "pipecast";
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let dirs = ProjectDirs::from("io", "github", "pipecast").ok_or(anyhow!("Unable to locate project directory"))?;

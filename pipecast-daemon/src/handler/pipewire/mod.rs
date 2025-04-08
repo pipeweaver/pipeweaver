@@ -1,2 +1,2 @@
 pub(crate) mod manager;
-mod filters;
+mod components;

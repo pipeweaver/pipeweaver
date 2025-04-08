@@ -94,6 +94,15 @@ impl Store {
         self.managed_nodes.get(&id)
     }
 
+    pub fn node_remove(&mut self, id: Ulid) {
+        // This should cause pipewire to drop the node as soon as it goes out of scope. We don't
+        // check for things like links here, PW will clean them up, so upstream should manage 
+        // anything extra.
+        if self.managed_nodes.contains_key(&id) {
+            self.managed_nodes.remove(&id);
+        }
+    }
+
     pub fn node_set_pw_id(&mut self, id: Ulid, pw_id: u32) {
         let node = self.managed_nodes.get_mut(&id).expect("Broke");
         node.pw_id.replace(pw_id);
@@ -131,7 +140,9 @@ impl Store {
         if node.ports_ready && node.pw_id.is_some() {
             if let Some(sender) = node.ready_sender.take() {
                 debug!("[{}] Device Ready, sending callback", &id);
-                let _ = sender.send(());
+                if let Some(sender) = sender {
+                    let _ = sender.send(());
+                }
             }
         }
     }
@@ -155,7 +166,9 @@ impl Store {
         filter.pw_id = Some(pw_id);
 
         if let Some(sender) = filter.ready_sender.take() {
-            let _ = sender.send(());
+            if let Some(sender) = sender {
+                let _ = sender.send(());
+            }
         }
     }
 
@@ -251,7 +264,7 @@ pub(crate) struct NodeStore {
     pub(crate) input_ports: Vec<u32>,
     pub(crate) output_ports: Vec<u32>,
 
-    pub(crate) ready_sender: Option<Sender<()>>,
+    pub(crate) ready_sender: Option<Option<Sender<()>>>,
 }
 
 pub struct FilterStore {
@@ -272,7 +285,7 @@ pub struct FilterStore {
     pub(crate) _filter: Filter,
 
     /// The 'Ready Sender' is called once the filter is setup and ready-to-go
-    pub(crate) ready_sender: Option<Sender<()>>,
+    pub(crate) ready_sender: Option<Option<Sender<()>>>,
 
     /// The Data related to the filter, including the sample processing callback
     pub data: Rc<RwLock<FilterData>>,

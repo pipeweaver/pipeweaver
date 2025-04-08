@@ -25,6 +25,7 @@ pub enum PipewireMessage {
     CreateFilterNode(FilterProperties),
     CreateDeviceLink(LinkType, LinkType),
 
+    RemoveDeviceNode(Ulid),
     RemoveFilterNode(Ulid),
     RemoveDeviceLink(LinkType, LinkType),
 
@@ -144,7 +145,7 @@ pub struct NodeProperties {
     pub class: MediaClass,
 
     // Ready Sender
-    pub ready_sender: oneshot::Sender<()>,
+    pub ready_sender: Option<oneshot::Sender<()>>,
 }
 
 pub struct FilterProperties {
@@ -161,7 +162,7 @@ pub struct FilterProperties {
     pub linger: bool,
     pub callback: Box<dyn FilterHandler>,
 
-    pub ready_sender: oneshot::Sender<()>,
+    pub ready_sender: Option<oneshot::Sender<()>>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
