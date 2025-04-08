@@ -139,7 +139,7 @@ impl MuteManager for PipewireManager {
 
         // Update the profile mute state
         *current_state = state;
-        
+
         // Attempt to apply the 'Muted' / 'Unmuted' volume to the filter
         match state {
             MuteState::Unmuted => self.filter_volume_set(*target_filter, profile_volume).await?,
@@ -268,22 +268,14 @@ impl MuteManagerLocal for PipewireManager {
         }
 
         let node_type = self.get_node_type(target).ok_or(anyhow!("Cannot Find Node"))?;
-
-        if node_type == NodeType::PhysicalTarget {
-            self.link_remove_filter_to_filter(map[Mix::A], target).await?;
-            self.link_remove_filter_to_filter(map[Mix::B], target).await?;
-        } else if node_type == NodeType::VirtualTarget {
-            let id = self.target_map.get(&target);
-            if let Some(id) = id.copied() {
-                self.link_remove_filter_to_filter(map[Mix::A], id).await?;
-                self.link_remove_filter_to_filter(map[Mix::B], id).await?;
-            } else {
-                warn!("Target Not found in Target Map!");
-            }
-        } else {
-            warn!("Target is not a Target");
+        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+            bail!("Provided Target is a Source Node");
         }
 
+        let target_node = self.get_target_filter_node(target)?;
+        let target_mix = self.get_target_mix(&target).await?;
+
+        self.link_remove_filter_to_filter(map[target_mix], target_node).await?;
         Ok(())
     }
 
@@ -322,22 +314,13 @@ impl MuteManagerLocal for PipewireManager {
         }
 
         let node_type = self.get_node_type(target).ok_or(anyhow!("Cannot Find Node"))?;
-
-        if node_type == NodeType::PhysicalTarget {
-            self.link_create_filter_to_filter(map[Mix::A], target).await?;
-            self.link_create_filter_to_filter(map[Mix::B], target).await?;
-        } else if node_type == NodeType::VirtualTarget {
-            let id = self.target_map.get(&target);
-            if let Some(id) = id.copied() {
-                self.link_create_filter_to_filter(map[Mix::A], id).await?;
-                self.link_create_filter_to_filter(map[Mix::B], id).await?;
-            } else {
-                warn!("Target Not found in Target Map!");
-            }
-        } else {
-            warn!("Target is not a Target");
+        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+            bail!("Provided Target is a Source Node");
         }
 
+        let target_node = self.get_target_filter_node(target)?;
+        let mix = self.get_target_mix(&target).await?;
+        self.link_create_filter_to_filter(map[mix], target_node).await?;
         Ok(())
     }
 }

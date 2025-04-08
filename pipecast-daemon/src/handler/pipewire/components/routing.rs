@@ -13,6 +13,8 @@ pub(crate) trait RoutingManagement {
 
     async fn routing_set_route(&mut self, source: Ulid, target: Ulid, enabled: bool) -> Result<()>;
     async fn routing_route_exists(&self, source: Ulid, target: Ulid) -> Result<bool>;
+
+    async fn get_target_mix(&self, id: &Ulid) -> Result<Mix>;
 }
 
 impl RoutingManagement for PipewireManager {
@@ -105,13 +107,7 @@ impl RoutingManagement for PipewireManager {
 
         Ok(self.profile.routes.get(&source).unwrap().contains(&target))
     }
-}
 
-trait RoutingManagementLocal {
-    async fn get_target_mix(&self, id: &Ulid) -> Result<Mix>;
-}
-
-impl RoutingManagementLocal for PipewireManager {
     async fn get_target_mix(&self, id: &Ulid) -> Result<Mix> {
         let error = anyhow!("Cannot Locate Node");
         let node_type = self.get_node_type(*id).ok_or(error)?;
@@ -128,3 +124,7 @@ impl RoutingManagementLocal for PipewireManager {
         Ok(mix)
     }
 }
+
+trait RoutingManagementLocal {}
+
+impl RoutingManagementLocal for PipewireManager {}
