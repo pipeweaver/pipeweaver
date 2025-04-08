@@ -13,7 +13,7 @@ pub(crate) trait FilterManagement {
 
     async fn filter_volume_create(&mut self, name: String) -> Result<Ulid>;
     async fn filter_volume_create_id(&mut self, name: String, id: Ulid) -> Result<()>;
-    async fn filter_volume_set(&mut self, id: Ulid, volume: u8) -> Result<()>;
+    async fn filter_volume_set(&self, id: Ulid, volume: u8) -> Result<()>;
 
     async fn filter_remove(&mut self, id: Ulid) -> Result<()>;
 }
@@ -40,7 +40,7 @@ impl FilterManagement for PipewireManager {
         let props = self.filter_volume_get_props(name, id);
         self.filter_pw_create(props).await
     }
-    async fn filter_volume_set(&mut self, id: Ulid, volume: u8) -> Result<()> {
+    async fn filter_volume_set(&self, id: Ulid, volume: u8) -> Result<()> {
         if !(0..=100).contains(&volume) {
             bail!("Volume must be between 0 and 100");
         }
