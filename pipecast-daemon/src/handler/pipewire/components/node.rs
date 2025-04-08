@@ -2,7 +2,7 @@ use crate::handler::pipewire::components::filters::FilterManagement;
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME, APP_PREFIX};
-use anyhow::Result;
+use anyhow::{anyhow, bail, Result};
 use enum_map::enum_map;
 use pipecast_pipewire::{MediaClass, NodeProperties, PipewireMessage};
 use pipecast_profile::{DeviceDescription, PhysicalSourceDevice, PhysicalTargetDevice, VirtualSourceDevice, VirtualTargetDevice};
@@ -14,6 +14,7 @@ use ulid::Ulid;
 /// This crate contains everything needed to create a Pipewire node
 pub(crate) trait NodeManagement {
     fn get_node_type(&self, id: Ulid) -> Option<NodeType>;
+    fn get_target_node(&self, id: Ulid) -> Result<Ulid>;
 
     async fn node_new(&mut self, node_type: NodeType, name: String) -> Result<Ulid>;
 
@@ -43,6 +44,21 @@ impl NodeManagement for PipewireManager {
             return Some(NodeType::VirtualSource);
         }
         None
+    }
+
+    fn get_target_node(&self, id: Ulid) -> Result<Ulid> {
+        let err = anyhow!("Target Node not Found");
+        let node_type = self.get_node_type(id).ok_or(err)?;
+        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+            bail!("Provided Target is a Source Node");
+        }
+
+        if node_type == NodeType::PhysicalTarget {
+            Ok(id)
+        } else {
+            let err = anyhow!("Unable to Locate Volume for Target");
+            Ok(*self.target_map.get(&id).ok_or(err)?)
+        }
     }
 
 
