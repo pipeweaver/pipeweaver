@@ -14,7 +14,7 @@ use ulid::Ulid;
 /// This crate contains everything needed to create a Pipewire node
 pub(crate) trait NodeManagement {
     fn get_node_type(&self, id: Ulid) -> Option<NodeType>;
-    fn get_target_node(&self, id: Ulid) -> Result<Ulid>;
+    fn get_target_filter_node(&self, id: Ulid) -> Result<Ulid>;
 
     async fn node_new(&mut self, node_type: NodeType, name: String) -> Result<Ulid>;
 
@@ -46,7 +46,7 @@ impl NodeManagement for PipewireManager {
         None
     }
 
-    fn get_target_node(&self, id: Ulid) -> Result<Ulid> {
+    fn get_target_filter_node(&self, id: Ulid) -> Result<Ulid> {
         let err = anyhow!("Target Node not Found");
         let node_type = self.get_node_type(id).ok_or(err)?;
         if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
