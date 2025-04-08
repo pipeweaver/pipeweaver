@@ -118,7 +118,7 @@ impl LinkManagementLocal for PipewireManager {
     }
 
     async fn remove_link(&self, source: LinkType, target: LinkType) -> Result<()> {
-        let message = PipewireMessage::CreateDeviceLink(source, target);
+        let message = PipewireMessage::RemoveDeviceLink(source, target);
         self.pipewire.send_message(message)
     }
 }
