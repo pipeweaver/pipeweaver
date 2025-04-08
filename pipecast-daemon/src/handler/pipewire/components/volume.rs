@@ -73,13 +73,8 @@ impl VolumeManager for PipewireManager {
         }
         let node_type = self.get_node_type(id).ok_or(anyhow!("Unknown Node"))?;
         if self.get_target_mute_state(id).await? == MuteState::Unmuted {
-            if node_type == NodeType::PhysicalTarget {
-                self.filter_volume_set(id, volume).await?;
-            } else {
-                let err = anyhow!("Unable to Find Device in Target Map");
-                let target = self.target_map.get(&id).ok_or(err)?;
-                self.filter_volume_set(*target, volume).await?;
-            }
+            let filter_target = self.get_target_filter_node(id)?;
+            self.filter_volume_set(filter_target, volume).await?;
         }
 
         // We can safely unwrap here, errors will be thrown by get_target_mute_state if it's wrong
