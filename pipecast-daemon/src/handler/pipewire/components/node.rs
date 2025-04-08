@@ -1,7 +1,7 @@
 use crate::handler::pipewire::components::filters::FilterManagement;
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::manager::PipewireManager;
-use crate::{APP_ID, APP_NAME, APP_PREFIX};
+use crate::{APP_ID, APP_NAME};
 use anyhow::{anyhow, bail, Result};
 use enum_map::enum_map;
 use pipecast_pipewire::{MediaClass, NodeProperties, PipewireMessage};
@@ -38,10 +38,10 @@ impl NodeManagement for PipewireManager {
 
         let targets = &self.profile.devices.targets;
         if targets.physical_devices.iter().any(|d| d.description.id == id) {
-            return Some(NodeType::PhysicalSource);
+            return Some(NodeType::PhysicalTarget);
         }
         if targets.virtual_devices.iter().any(|d| d.description.id == id) {
-            return Some(NodeType::VirtualSource);
+            return Some(NodeType::VirtualTarget);
         }
         None
     }
@@ -427,7 +427,7 @@ impl NodeManagementLocal for PipewireManager {
             node_id: desc.id,
             node_name: identifier.clone(),
             node_nick: identifier,
-            node_description: format!("{} {}", APP_PREFIX, desc.name),
+            node_description: format!("{} {}", APP_NAME, desc.name),
             app_id: APP_ID.to_string(),
             app_name: APP_NAME.to_lowercase(),
             linger: false,
