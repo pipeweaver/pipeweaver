@@ -3,7 +3,7 @@ use crate::handler::pipewire::components::mute::MuteManager;
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{anyhow, bail, Result};
-use log::warn;
+use log::{debug, warn};
 use pipecast_shared::{Mix, NodeType};
 use ulid::Ulid;
 
@@ -18,6 +18,7 @@ impl RoutingManagement for PipewireManager {
     async fn load_routing(&mut self) -> Result<()> {
         // This should be called after all the nodes are set up, we need to check our routing table
         // and establish links between the sources and targets
+        debug!("Loading Routing..");
 
         let routing = &self.profile.routes;
         for (source, targets) in routing {
