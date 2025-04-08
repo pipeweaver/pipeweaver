@@ -6,7 +6,7 @@ use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{anyhow, bail, Result};
-use log::{debug, warn};
+use log::{debug, info, warn};
 use pipecast_profile::MuteStates;
 use pipecast_shared::{Mix, MuteState, MuteTarget, NodeType};
 use std::collections::HashSet;
@@ -14,7 +14,8 @@ use strum::IntoEnumIterator;
 use ulid::Ulid;
 
 pub(crate) trait MuteManager {
-    async fn set_mute_state(&mut self, id: Ulid, target: MuteTarget, state: MuteState) -> Result<()>;
+    async fn set_source_mute_state(&mut self, id: Ulid, target: MuteTarget, state: MuteState) -> Result<()>;
+    async fn set_target_mute_state(&mut self, id: Ulid, state: MuteState) -> Result<()>;
 
     async fn is_source_muted_to_some(&self, source: Ulid, target: Ulid) -> Result<bool>;
     async fn is_source_muted_to_all(&self, source: Ulid) -> Result<bool>;
@@ -22,104 +23,132 @@ pub(crate) trait MuteManager {
 }
 
 impl MuteManager for PipewireManager {
-    async fn set_mute_state(&mut self, id: Ulid, target: MuteTarget, state: MuteState) -> Result<()> {
+    async fn set_source_mute_state(&mut self, id: Ulid, target: MuteTarget, state: MuteState) -> Result<()> {
         let node_type = self.get_node_type(id).ok_or(anyhow!("Unknown Node"))?;
+        if !matches!(node_type, NodeType::PhysicalSource | NodeType::VirtualSource) {
+            bail!("Provided Source is a Target Node");
+        }
 
         debug!("Setting: {}, {}, {:?}, {:?}", node_type, id, target, state);
 
         // For testing, we just change the state in the config
-        match node_type {
-            NodeType::PhysicalSource | NodeType::VirtualSource => {
-                // The following keeps quite a tight lock on the borrowedness of self, so we need
-                // to work around that the best that we can.
-                let err = "Device Not Found";
-                let mute_state = if node_type == NodeType::PhysicalSource {
-                    &mut self.get_physical_source_mut(id).ok_or(anyhow!(err))?.mute_states
-                } else {
-                    &mut self.get_virtual_source_mut(id).ok_or(anyhow!(err))?.mute_states
-                };
+        // The following keeps quite a tight lock on the borrowedness of self, so we need
+        // to work around that the best that we can.
+        let err = "Device Not Found";
+        let mute_state = if node_type == NodeType::PhysicalSource {
+            &mut self.get_physical_source_mut(id).ok_or(anyhow!(err))?.mute_states
+        } else {
+            &mut self.get_virtual_source_mut(id).ok_or(anyhow!(err))?.mute_states
+        };
 
-                // Check whether a change has actually occurred here
-                if (state == MuteState::Muted) == mute_state.mute_state.contains(&target) {
-                    return Ok(());
-                }
-
-                // Get the current mute targets based on the current state
-                let has_mute_state = !mute_state.mute_state.is_empty();
-                let mute_targets = Self::get_mute_targets(mute_state);
-
-                // Update the mute state
-                match state {
-                    MuteState::Unmuted => mute_state.mute_state.retain(|&e| e != target),
-                    MuteState::Muted => { mute_state.mute_state.insert(target); }
-                }
-
-                // Let's do this again for the new values
-                let has_new_mute_state = !mute_state.mute_state.is_empty();
-                let new_mute_targets = Self::get_mute_targets(mute_state);
-
-
-                // Handle transitions
-                if !has_mute_state && has_new_mute_state {
-                    debug!("Transition: Unmuted → Muted");
-
-                    if new_mute_targets.is_empty() {
-                        self.mute_remove_volume(id).await?;
-                    } else {
-                        self.mute_remove_routes(id, &new_mute_targets).await?;
-                    }
-                } else if has_mute_state && !has_new_mute_state {
-                    debug!("Transition: Muted → Unmuted");
-                    if mute_targets.is_empty() {
-                        self.mute_restore_volume(id).await?;
-                    } else {
-                        self.mute_restore_routes(id, &mute_targets).await?;
-                    }
-                } else if has_mute_state && has_new_mute_state {
-                    debug!("Transition: Muted → Muted with Different Targets");
-
-                    if mute_targets.is_empty() && new_mute_targets.is_empty() {
-                        debug!("Already Muted to All, no changes required.");
-                    } else if mute_targets.is_empty() && !new_mute_targets.is_empty() {
-                        debug!("Transition: Muted (All) → Muted (Some)");
-                        self.mute_remove_routes(id, &new_mute_targets).await?;
-                        self.mute_restore_volume(id).await?;
-                    } else if !mute_targets.is_empty() && new_mute_targets.is_empty() {
-                        debug!("Transition: Muted (Some) → Muted (All)");
-                        self.mute_remove_volume(id).await?;
-                        self.mute_restore_routes(id, &mute_targets).await?;
-                    } else {
-                        debug!("Transition: Muted (Some) → Muted (Different Some)");
-                        let restore_routes = mute_targets.difference(&new_mute_targets).copied().collect();
-                        let remove_routes = new_mute_targets.difference(&mute_targets).copied().collect();
-
-                        self.mute_restore_routes(id, &restore_routes).await?;
-                        self.mute_remove_routes(id, &remove_routes).await?;
-                    }
-                } else {
-                    warn!("Unexpected: Unmuted → Unmuted (No change needed)");
-                }
-
-                return Ok(());
-            }
-
-            NodeType::PhysicalTarget => {
-                if let Some(device) = self.get_physical_target_mut(id) {
-                    device.mute_state = state;
-                    return Ok(());
-                }
-            }
-
-            NodeType::VirtualTarget => {
-                if let Some(device) = self.get_virtual_target_mut(id) {
-                    device.mute_state = state;
-                    return Ok(());
-                }
-            }
+        // Check whether a change has actually occurred here
+        if (state == MuteState::Muted) == mute_state.mute_state.contains(&target) {
+            return Ok(());
         }
 
-        bail!("Unable to Locate Device: {}", id);
+        // Get the current mute targets based on the current state
+        let has_mute_state = !mute_state.mute_state.is_empty();
+        let mute_targets = Self::get_mute_targets(mute_state);
+
+        // Update the mute state
+        match state {
+            MuteState::Unmuted => mute_state.mute_state.retain(|&e| e != target),
+            MuteState::Muted => { mute_state.mute_state.insert(target); }
+        }
+
+        // Let's do this again for the new values
+        let has_new_mute_state = !mute_state.mute_state.is_empty();
+        let new_mute_targets = Self::get_mute_targets(mute_state);
+
+
+        // Handle transitions
+        if !has_mute_state && has_new_mute_state {
+            debug!("Transition: Unmuted → Muted");
+
+            if new_mute_targets.is_empty() {
+                self.mute_remove_volume(id).await?;
+            } else {
+                self.mute_remove_routes(id, &new_mute_targets).await?;
+            }
+        } else if has_mute_state && !has_new_mute_state {
+            debug!("Transition: Muted → Unmuted");
+            if mute_targets.is_empty() {
+                self.mute_restore_volume(id).await?;
+            } else {
+                self.mute_restore_routes(id, &mute_targets).await?;
+            }
+        } else if has_mute_state && has_new_mute_state {
+            debug!("Transition: Muted → Muted with Different Targets");
+
+            if mute_targets.is_empty() && new_mute_targets.is_empty() {
+                debug!("Already Muted to All, no changes required.");
+            } else if mute_targets.is_empty() && !new_mute_targets.is_empty() {
+                debug!("Transition: Muted (All) → Muted (Some)");
+                self.mute_remove_routes(id, &new_mute_targets).await?;
+                self.mute_restore_volume(id).await?;
+            } else if !mute_targets.is_empty() && new_mute_targets.is_empty() {
+                debug!("Transition: Muted (Some) → Muted (All)");
+                self.mute_remove_volume(id).await?;
+                self.mute_restore_routes(id, &mute_targets).await?;
+            } else {
+                debug!("Transition: Muted (Some) → Muted (Different Some)");
+                let restore_routes = mute_targets.difference(&new_mute_targets).copied().collect();
+                let remove_routes = new_mute_targets.difference(&mute_targets).copied().collect();
+
+                self.mute_restore_routes(id, &restore_routes).await?;
+                self.mute_remove_routes(id, &remove_routes).await?;
+            }
+        } else {
+            warn!("Unexpected: Unmuted → Unmuted (No change needed)");
+        }
+
+        Ok(())
     }
+
+    async fn set_target_mute_state(&mut self, id: Ulid, state: MuteState) -> Result<()> {
+        let node_type = self.get_node_type(id).ok_or(anyhow!("Unknown Node"))?;
+        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+            bail!("Provided Target is a Source Node");
+        }
+
+        // Fetch the Filter Ulid for this Target
+        let target_filter = &self.get_target_filter_node(id)?;
+
+        // Attempt to Grab the 'Unmuted' Volume for this Target
+        let err = anyhow!("Unable to Locate Target");
+        let profile_volume = if node_type == NodeType::PhysicalTarget {
+            self.get_physical_target(id).ok_or(err)?.volume
+        } else {
+            self.get_virtual_target(id).ok_or(err)?.volume
+        };
+
+        // Get the Current Mute state in a mutable form (we can safely unwrap here, missing nodes
+        // would have failed above)
+        let current_state = if node_type == NodeType::PhysicalTarget {
+            let device = self.get_physical_target_mut(id).unwrap();
+            &mut device.mute_state
+        } else {
+            let device = self.get_virtual_target_mut(id).unwrap();
+            &mut device.mute_state
+        };
+
+        if current_state == &state {
+            info!("No Change Made, new state is same as current state");
+            return Ok(());
+        }
+
+        // Update the profile mute state
+        *current_state = state;
+        
+        // Attempt to apply the 'Muted' / 'Unmuted' volume to the filter
+        match state {
+            MuteState::Unmuted => self.filter_volume_set(*target_filter, profile_volume).await?,
+            MuteState::Muted => self.filter_volume_set(*target_filter, 0).await?
+        }
+
+        Ok(())
+    }
+
 
     async fn is_source_muted_to_some(&self, source: Ulid, target: Ulid) -> Result<bool> {
         let states = self.get_source_mute_states(source)?;
