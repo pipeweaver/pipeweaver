@@ -191,6 +191,7 @@ pub trait FilterHandler: Send + 'static {
 
 // We need these because while *WE* know what values are coming in and out, rust doesn't
 // so gives us a wrapper around some common types that can be read out appropriately by the filter
+#[derive(Debug)]
 pub enum FilterValue {
     Int32(i32),
     Float32(f32),
