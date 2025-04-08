@@ -1,9 +1,9 @@
 mod audio_filters;
 mod filters;
 pub(crate) mod links;
-mod load_profile;
-mod node;
-mod routing;
+pub(crate) mod load_profile;
 mod mute;
+mod node;
+pub(crate) mod profile;
+mod routing;
 mod volume;
-mod profile;
