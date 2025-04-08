@@ -1,8 +1,9 @@
+use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::primary_worker::ManagerMessage;
 use anyhow::{anyhow, Error, Result};
 use enum_map::EnumMap;
 use futures::stream::{FuturesUnordered, StreamExt};
-use log::debug;
+use log::{debug, error};
 use pipecast_ipc::commands::{AudioConfiguration, PipewireCommandResponse};
 use pipecast_pipewire::tokio::sync::oneshot::Receiver;
 use pipecast_pipewire::LinkType::{Filter, UnmanagedNode};
@@ -90,7 +91,10 @@ impl PipewireManager {
 
         debug!("Loading Profile");
         let mut wakers: FuturesUnordered<Receiver<Ulid>> = FuturesUnordered::new();
-        // self.load_profile(&mut wakers).await;
+        if let Err(e) = self.load_profile().await {
+            error!("Error Loading Profile: {}", e);
+        }
+
 
         loop {
             select!(
