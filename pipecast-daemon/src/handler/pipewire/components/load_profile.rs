@@ -1,5 +1,6 @@
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::routing::RoutingManagement;
+use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::Result;
 use pipecast_shared::NodeType;
@@ -11,6 +12,7 @@ pub(crate) trait LoadProfile {
 impl LoadProfile for PipewireManager {
     async fn load_profile(&mut self) -> Result<()> {
         self.profile_create_nodes().await?;
+        self.profile_load_volumes().await?;
         self.profile_apply_routing().await?;
 
         Ok(())
@@ -19,6 +21,7 @@ impl LoadProfile for PipewireManager {
 
 trait LoadProfileLocal {
     async fn profile_create_nodes(&mut self) -> Result<()>;
+    async fn profile_load_volumes(&mut self) -> Result<()>;
     async fn profile_apply_routing(&mut self) -> Result<()>;
 }
 
@@ -44,7 +47,11 @@ impl LoadProfileLocal for PipewireManager {
         Ok(())
     }
 
+    async fn profile_load_volumes(&mut self) -> Result<()> {
+        self.volumes_load().await
+    }
+
     async fn profile_apply_routing(&mut self) -> Result<()> {
-        self.load_routing().await
+        self.routing_load().await
     }
 }
