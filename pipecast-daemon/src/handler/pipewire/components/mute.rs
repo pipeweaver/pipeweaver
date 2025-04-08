@@ -273,7 +273,7 @@ impl MuteManagerLocal for PipewireManager {
         }
 
         let target_node = self.get_target_filter_node(target)?;
-        let target_mix = self.get_target_mix(&target).await?;
+        let target_mix = self.routing_get_target_mix(&target).await?;
 
         self.link_remove_filter_to_filter(map[target_mix], target_node).await?;
         Ok(())
@@ -319,7 +319,7 @@ impl MuteManagerLocal for PipewireManager {
         }
 
         let target_node = self.get_target_filter_node(target)?;
-        let mix = self.get_target_mix(&target).await?;
+        let mix = self.routing_get_target_mix(&target).await?;
         self.link_create_filter_to_filter(map[mix], target_node).await?;
         Ok(())
     }

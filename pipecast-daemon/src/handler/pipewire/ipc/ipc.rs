@@ -16,28 +16,31 @@ pub(crate) trait IPCHandler {
 impl IPCHandler for PipewireManager {
     async fn handle_command(&mut self, command: Cmd) -> Result<Resp, Error> {
         match command {
-            PipeCastCommand::CreateNode(node_type, id) => {
+            Cmd::CreateNode(node_type, id) => {
                 self.node_new(node_type, id).await.map(Resp::Id)
             }
-            PipeCastCommand::RemoveNode(id) => {
+            Cmd::RemoveNode(id) => {
                 self.node_remove(id).await.map(|_| Resp::Ok)
             }
-            PipeCastCommand::SetSourceVolume(id, mix, volume) => {
+            Cmd::SetSourceVolume(id, mix, volume) => {
                 self.set_source_node_volume(id, mix, volume).await.map(|_| Resp::Ok)
             }
-            PipeCastCommand::SetTargetVolume(id, volume) => {
+            Cmd::SetTargetVolume(id, volume) => {
                 self.set_target_node_volume(id, volume).await.map(|_| Resp::Ok)
             }
-            PipeCastCommand::SetRoute(source, target, enabled) => {
+            Cmd::SetTargetMix(target, mix) => {
+                self.routing_set_target_mix(target, mix).await.map(|_| Resp::Ok)
+            }
+            Cmd::SetRoute(source, target, enabled) => {
                 self.routing_set_route(source, target, enabled).await.map(|_| Resp::Ok)
             }
-            PipeCastCommand::AddSourceMuteTarget(id, target) => {
+            Cmd::AddSourceMuteTarget(id, target) => {
                 self.set_source_mute_state(id, target, Muted).await.map(|_| Resp::Ok)
             }
-            PipeCastCommand::DelSourceMuteTarget(id, target) => {
+            Cmd::DelSourceMuteTarget(id, target) => {
                 self.set_source_mute_state(id, target, Unmuted).await.map(|_| Resp::Ok)
             }
-            PipeCastCommand::SetTargetMuteState(id, state) => {
+            Cmd::SetTargetMuteState(id, state) => {
                 self.set_target_mute_state(id, state).await.map(|r| Resp::Ok)
             }
         }

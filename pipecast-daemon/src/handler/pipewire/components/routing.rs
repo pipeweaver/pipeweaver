@@ -14,7 +14,8 @@ pub(crate) trait RoutingManagement {
     async fn routing_set_route(&mut self, source: Ulid, target: Ulid, enabled: bool) -> Result<()>;
     async fn routing_route_exists(&self, source: Ulid, target: Ulid) -> Result<bool>;
 
-    async fn get_target_mix(&self, id: &Ulid) -> Result<Mix>;
+    async fn routing_get_target_mix(&self, id: &Ulid) -> Result<Mix>;
+    async fn routing_set_target_mix(&mut self, target: Ulid, mix: Mix) -> Result<()>;
 }
 
 impl RoutingManagement for PipewireManager {
@@ -30,7 +31,7 @@ impl RoutingManagement for PipewireManager {
                 if !self.is_source_muted_to_some(*source, *target).await? {
                     if let Some(map) = self.source_map.get(source).copied() {
                         // Grab the Mix to Route From
-                        let mix = self.get_target_mix(target).await?;
+                        let mix = self.routing_get_target_mix(target).await?;
                         self.link_create_filter_to_filter(map[mix], target_node).await?;
                     }
                 }
@@ -74,11 +75,11 @@ impl RoutingManagement for PipewireManager {
             if enabled {
                 // Only create the route if it's not currently muted
                 if !self.is_source_muted_to_some(source, target).await? {
-                    let mix = self.get_target_mix(&target).await?;
+                    let mix = self.routing_get_target_mix(&target).await?;
                     self.link_create_filter_to_filter(map[mix], target_id).await?;
                 }
             } else {
-                let mix = self.get_target_mix(&target).await?;
+                let mix = self.routing_get_target_mix(&target).await?;
                 self.link_remove_filter_to_filter(map[mix], target_id).await?;
             }
         } else {
@@ -108,7 +109,7 @@ impl RoutingManagement for PipewireManager {
         Ok(self.profile.routes.get(&source).unwrap().contains(&target))
     }
 
-    async fn get_target_mix(&self, id: &Ulid) -> Result<Mix> {
+    async fn routing_get_target_mix(&self, id: &Ulid) -> Result<Mix> {
         let error = anyhow!("Cannot Locate Node");
         let node_type = self.get_node_type(*id).ok_or(error)?;
         if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
@@ -122,6 +123,46 @@ impl RoutingManagement for PipewireManager {
             self.get_virtual_target(*id).ok_or(err)?.mix
         };
         Ok(mix)
+    }
+
+    async fn routing_set_target_mix(&mut self, target: Ulid, mix: Mix) -> Result<()> {
+        let current = self.routing_get_target_mix(&target).await?;
+
+        // Ok, first thing's first, lets see if this is actually changed
+        if current == mix {
+            bail!("Nothing to Do, Mixes Match");
+        }
+
+        let error = anyhow!("Cannot Locate Node");
+        let node_type = self.get_node_type(target).ok_or(error)?;
+        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+            bail!("Provided Target is a Source Node");
+        }
+
+        let target_node = self.get_target_filter_node(target)?;
+
+        // Next, grab all the routes to this target
+        for (source, targets) in &self.profile.routes {
+            if targets.contains(&target) {
+                // This source to this Target exists, check whether this route is muted
+                if !self.is_source_muted_to_some(*source, target).await? {
+                    // We need to detach the link from this source, and attach it to a new one
+                    if let Some(map) = self.source_map.get(source).copied() {
+                        // Switch the Link between the mixes
+                        self.link_remove_filter_to_filter(map[current], target_node).await?;
+                        self.link_create_filter_to_filter(map[mix], target_node).await?;
+                    }
+                }
+            }
+        }
+
+        // Update the Profile
+        if node_type == NodeType::PhysicalTarget {
+            self.get_physical_target_mut(target).ok_or(anyhow!("Unknown Node"))?.mix = mix;
+        } else {
+            self.get_virtual_target_mut(target).ok_or(anyhow!("Unknown Node"))?.mix = mix;
+        }
+        Ok(())
     }
 }
 

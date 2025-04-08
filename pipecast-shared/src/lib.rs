@@ -10,7 +10,7 @@ pub enum NodeType {
     VirtualTarget,
 }
 
-#[derive(Default, Debug, Display, Copy, Clone, Enum, EnumIter, Serialize, Deserialize)]
+#[derive(Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq)]
 pub enum Mix {
     #[default]
     A,

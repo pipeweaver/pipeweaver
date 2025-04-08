@@ -47,10 +47,10 @@ pub enum PipeCastCommand {
 
     SetSourceVolume(Ulid, Mix, u8),
     SetTargetVolume(Ulid, u8),
+    SetTargetMix(Ulid, Mix),
 
     SetRoute(Ulid, Ulid, bool),
 
-    //SetSourceMuteState(Ulid, MuteTarget, MuteState),
     AddSourceMuteTarget(Ulid, MuteTarget),
     DelSourceMuteTarget(Ulid, MuteTarget),
 
