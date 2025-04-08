@@ -172,9 +172,17 @@ export default {
         this.update_locked = true;
 
         // SetVolume(DeviceType, Ulid, Mix, u8),
-        let command = {
-          "SetVolume": [this.type, this.getId(), mix, parseInt(e.target.value)]
+        let command = null;
+        if (is_source(this.type)) {
+          command = {
+            "SetSourceVolume": [this.getId(), mix, parseInt(e.target.value)]
+          };
+        } else {
+          command = {
+            "SetTargetVolume": [this.getId(), parseInt(e.target.value)]
+          };
         }
+
         websocket.send_command(command).then(() => {
           this.update_locked = false
         });

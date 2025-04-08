@@ -13,7 +13,7 @@ pub enum DaemonRequest {
     GetStatus,
 
     Daemon(DaemonCommand),
-    Pipewire(PipewireCommand),
+    Pipewire(PipeCastCommand),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,14 +41,26 @@ pub struct WebsocketResponse {
 pub enum DaemonCommand {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum PipewireCommand {
-    SetVolume(NodeType, Ulid, Mix, u8),
-    SetMuteState(NodeType, Ulid, MuteTarget, MuteState),
+pub enum PipeCastCommand {
+    CreateNode(NodeType, String),
+    RemoveNode(Ulid),
+
+    SetSourceVolume(Ulid, Mix, u8),
+    SetTargetVolume(Ulid, u8),
+
+    SetRoute(Ulid, Ulid, bool),
+
+    //SetSourceMuteState(Ulid, MuteTarget, MuteState),
+    AddSourceMuteTarget(Ulid, MuteTarget),
+    DelSourceMuteTarget(Ulid, MuteTarget),
+
+    SetTargetMuteState(Ulid, MuteState),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PipewireCommandResponse {
     Ok,
+    Id(Ulid),
     Err(String),
 }
 

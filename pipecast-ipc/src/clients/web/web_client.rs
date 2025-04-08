@@ -1,7 +1,7 @@
 use crate::client::Client;
 use anyhow::Result;
 
-use crate::commands::{DaemonRequest, DaemonResponse, DaemonStatus, PipewireCommand, PipewireCommandResponse};
+use crate::commands::{DaemonRequest, DaemonResponse, DaemonStatus, PipeCastCommand, PipewireCommandResponse};
 use anyhow::bail;
 use async_trait::async_trait;
 
@@ -45,6 +45,7 @@ impl Client for WebClient {
             DaemonResponse::Err(error) => bail!("{}", error),
             DaemonResponse::Patch(_) => bail!("Received PATCH!"),
             DaemonResponse::Pipewire(response) => match response {
+                PipewireCommandResponse::Id(_) => Ok(()),
                 PipewireCommandResponse::Ok => Ok(()),
                 PipewireCommandResponse::Err(error) => bail!("{}", error),
             },
@@ -55,7 +56,7 @@ impl Client for WebClient {
         self.send(DaemonRequest::GetStatus).await
     }
 
-    async fn command(&mut self, command: PipewireCommand) -> anyhow::Result<()> {
+    async fn command(&mut self, command: PipeCastCommand) -> anyhow::Result<()> {
         let command = DaemonRequest::Pipewire(command);
         self.send(command).await
     }

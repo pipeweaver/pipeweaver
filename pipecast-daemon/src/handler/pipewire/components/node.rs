@@ -175,8 +175,8 @@ impl NodeManagementLocal for PipewireManager {
         let (mix_a, mix_b) = self.node_create_a_b_volumes(desc).await?;
 
         // Now we need to link our filter to the Mixes
-        self.link_create_filter_to_filter(desc.id, mix_a).await?;
-        self.link_create_filter_to_filter(desc.id, mix_b).await?;
+        // self.link_create_filter_to_filter(desc.id, mix_a).await?;
+        // self.link_create_filter_to_filter(desc.id, mix_b).await?;
 
         // Create a map for this ID to the mixes
         self.source_map.insert(desc.id, enum_map! { Mix::A => mix_a, Mix::B => mix_b });

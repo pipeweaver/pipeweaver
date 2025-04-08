@@ -1,6 +1,6 @@
 use crate::client::Client;
 use crate::clients::ipc::ipc_socket::Socket;
-use crate::commands::{DaemonRequest, DaemonResponse, DaemonStatus, HttpSettings, PipewireCommand};
+use crate::commands::{DaemonRequest, DaemonResponse, DaemonStatus, HttpSettings, PipeCastCommand};
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 
@@ -57,7 +57,7 @@ impl Client for IPCClient {
         self.send(DaemonRequest::GetStatus).await
     }
 
-    async fn command(&mut self, command: PipewireCommand) -> Result<()> {
+    async fn command(&mut self, command: PipeCastCommand) -> Result<()> {
         self.send(DaemonRequest::Pipewire(command))
             .await
     }

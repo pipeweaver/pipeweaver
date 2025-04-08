@@ -6,7 +6,7 @@ use crate::stop::Stop;
 use json_patch::diff;
 use log::{debug, error, info, warn};
 use pipecast_ipc::commands::{
-    AudioConfiguration, DaemonResponse, DaemonStatus, PipewireCommand, PipewireCommandResponse,
+    AudioConfiguration, DaemonResponse, DaemonStatus, PipeCastCommand, PipewireCommandResponse,
 };
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
@@ -134,7 +134,7 @@ impl PrimaryWorker {
 
 #[derive(Debug)]
 pub enum ManagerMessage {
-    Execute(PipewireCommand, oneshot::Sender<PipewireCommandResponse>),
+    Execute(PipeCastCommand, oneshot::Sender<PipewireCommandResponse>),
     GetConfig(oneshot::Sender<AudioConfiguration>),
 }
 
