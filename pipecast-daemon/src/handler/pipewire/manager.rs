@@ -1,4 +1,5 @@
 use crate::handler::pipewire::components::load_profile::LoadProfile;
+use crate::handler::pipewire::ipc::ipc::IPCHandler;
 use crate::handler::primary_worker::ManagerMessage;
 use anyhow::{anyhow, Error, Result};
 use enum_map::EnumMap;
@@ -101,23 +102,11 @@ impl PipewireManager {
                 Some(command) = self.command_receiver.recv() => {
                     match command {
                         ManagerMessage::Execute(command, tx) => {
-                            let result: Result<(), Error> = match command {
-                                // PipewireCommand::SetVolume(node_type, id, mix, volume) => {
-                                //     self.set_volume(node_type, id, mix, volume).await
-                                // }
-                                // PipewireCommand::SetMuteState(node_type, id, target, state) => {
-                                //     //self.set_mute_state(node_type, id, target, state).await
-                                //     //Ok(())
-                                // }
-                                _ => {
-                                    debug!("Received Command: {:?}", command);
-                                    Err(anyhow!("Command Not Implemented"))
-                                }
-                            };
+                            let result = self.handle_command(command).await;
 
                             // Map the result to a PW Response and send it
                             let _ = tx.send(match result {
-                                Ok(_) => PipewireCommandResponse::Ok,
+                                Ok(response) => response,
                                 Err(e) => PipewireCommandResponse::Err(e.to_string())
                             });
                         }

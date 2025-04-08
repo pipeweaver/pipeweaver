@@ -1,3 +1,1 @@
-mod filters;
-mod nodes;
-mod links;
+pub(crate) mod ipc;
