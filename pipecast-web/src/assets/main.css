@@ -11,6 +11,6 @@ body {
     -moz-osx-font-smoothing: grayscale;
     color: #fff;
     font-size: 0.8em;
-    margin-top: 10px;
+    height: 100vh;
     user-select: none;
 }

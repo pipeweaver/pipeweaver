@@ -1,6 +1,5 @@
 <script>
 import ColourSettings from '@/components/channels/ColourSettings.vue'
-import MuteState from '@/components/channels/MuteState.vue'
 import ChannelColumnVolume from '@/components/channels/ChannelColumnVolume.vue'
 import {DeviceType, get_devices, is_source} from "@/pipecast/util.js";
 import {websocket} from "@/pipecast/sockets.js";
@@ -8,7 +7,7 @@ import {FontAwesomeIcon} from "@fortawesome/vue-fontawesome";
 
 export default {
   name: 'ChannelColumn',
-  components: {FontAwesomeIcon, ChannelColumnVolume, ColourSettings, MuteState},
+  components: {FontAwesomeIcon, ChannelColumnVolume, ColourSettings},
   props: {
     type: DeviceType,
     index: Number,
@@ -112,7 +111,7 @@ export default {
     },
 
     isOutput: function () {
-      return (this.type === DeviceType.VirtualTarget || this.type === DeviceType.PhysicalTarget)
+      return !is_source(this.type);
     },
 
 
@@ -190,25 +189,41 @@ export default {
     },
 
     mute_click: function (target, e) {
-      // Get the current mute state for this target
-      let current = this.getMuteState();
+      /*
+        AddSourceMuteTarget(Ulid, MuteTarget),
+        DelSourceMuteTarget(Ulid, MuteTarget),
 
-      let new_status = "Muted"
+        SetTargetMuteState(Ulid, MuteState),
+       */
+
       let mute_target = (target === "A") ? "TargetA" : "TargetB";
+      let state = this.getMuteState();
 
-      if (this.isOutput()) {
-        new_status = (current === "Muted") ? "Unmuted" : "Muted";
-      } else {
-        if (current.includes(mute_target)) {
-          new_status = "Unmuted"
+      if (!is_source(this.type)) {
+        let new_status = (state === "Unmuted") ? "Muted" : "Unmuted";
+        let command = {
+          "SetTargetMuteState": [this.getId(), new_status]
         }
+        websocket.send_command(command);
+      } else {
+        console.log(state);
+        let type = (!state.includes(mute_target)) ? "AddSourceMuteTarget" : "DelSourceMuteTarget";
+        let command = {
+          [type]: [this.getId(), mute_target],
+        }
+        websocket.send_command(command);
       }
+    },
 
-
-      let command = {
-        "SetMuteState": [this.type, this.getId(), mute_target, new_status],
+    remove_click: function (e) {
+      let result = confirm("Are you sure you want to remove this channel?");
+      if (result) {
+        // CreateNode(NodeType, String),
+        let command = {
+          "RemoveNode": this.getId()
+        }
+        websocket.send_command(command)
       }
-      websocket.send_command(command);
     },
 
     target_change: function (target, e) {
@@ -251,7 +266,15 @@ export default {
 
 <template>
   <div class="mix">
-    <div class="title">{{ getChannelName() }}</div>
+    <div class="title">
+      <div class="start"></div>
+      <div class="name">{{ getChannelName() }}</div>
+      <div class="end">
+        <button @click="remove_click">
+          <font-awesome-icon :icon="['fas', 'xmark']"/>
+        </button>
+      </div>
+    </div>
     <div class="top" @click="colour_clicked"></div>
     <div class="faders">
       <ChannelColumnVolume
@@ -323,11 +346,39 @@ export default {
 }
 
 .title {
+  display: flex;
+  flex-direction: row;
   padding: 8px;
   text-align: center;
   font-weight: bold;
   background: v-bind(titleBackground);
 }
+
+.title .start {
+  width: 20px;
+}
+
+.title .name {
+  flex: 1;
+}
+
+.title .end {
+  width: 20px;
+}
+
+.title .end button {
+  all: unset;
+  border: 0;
+  background-color: transparent;
+  color: #fff;
+  padding: 0;
+  margin: 0;
+}
+
+.title .end button:hover {
+  cursor: pointer;
+}
+
 
 .top {
   background-color: v-bind(colour);

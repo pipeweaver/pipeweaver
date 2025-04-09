@@ -9,6 +9,10 @@ export const DeviceType = Object.freeze({
 });
 
 export function get_devices(type) {
+  if (store.getProfile().devices === undefined) {
+    return [];
+  }
+
   if (type === DeviceType.PhysicalSource) {
     return store.getProfile().devices.sources.physical_devices;
   }

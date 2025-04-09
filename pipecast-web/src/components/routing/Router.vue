@@ -1,0 +1,152 @@
+<script>
+
+import {DeviceType, get_devices} from "@/pipecast/util.js";
+import RoutingCell from "@/components/routing/RoutingCell.vue";
+import {store} from "@/pipecast/store.js";
+import {websocket} from "@/pipecast/sockets.js";
+
+export default {
+  name: 'Router',
+  components: {RoutingCell},
+
+  methods: {
+    getSourceCount: function () {
+      return get_devices(DeviceType.PhysicalSource).length + get_devices(DeviceType.VirtualSource).length;
+    },
+
+    getTargetCount: function () {
+      return get_devices(DeviceType.PhysicalTarget).length + get_devices(DeviceType.VirtualTarget).length;
+    },
+
+    getFullSourceList: function () {
+      let list = this.getNamesForDevices(get_devices(DeviceType.PhysicalSource));
+      return list.concat(this.getNamesForDevices(get_devices(DeviceType.VirtualSource)));
+    },
+
+    getFullTargetList: function () {
+      let list = this.getNamesForDevices(get_devices(DeviceType.PhysicalTarget));
+      return list.concat(this.getNamesForDevices(get_devices(DeviceType.VirtualTarget)));
+    },
+
+    getNamesForDevices: function (devices) {
+      let list = [];
+      for (let device of devices) {
+        list.push({
+          id: device.description.id,
+          name: device.description.name,
+        });
+      }
+      return list;
+    },
+
+    isEnabled: function (source, target) {
+      if (store.getProfile().routes === undefined) {
+        return false
+      }
+
+      if (store.getProfile().routes[source] === undefined) {
+        return false
+      }
+
+      return store.getProfile().routes[source].includes(target);
+    },
+
+    handleClick: function (source, target) {
+      // SetRoute(Ulid, Ulid, bool)
+      let enabled = !this.isEnabled(source, target);
+      let command = {
+        "SetRoute": [source, target, enabled]
+      };
+      websocket.send_command(command);
+    }
+  }
+}
+</script>
+
+<template>
+  <div class="routing">
+    <table>
+      <thead>
+      <tr>
+        <th class="hidden" colspan="2">&nbsp;</th>
+        <th :colspan="getSourceCount()">Sources</th>
+      </tr>
+      <tr class="subHeader">
+        <th class="hidden" colspan="2">&nbsp;</th>
+        <th v-for="source in getFullSourceList()" :key="source">{{ source.name }}</th>
+      </tr>
+      </thead>
+      <tr v-for="(target, index) of getFullTargetList()" :key="target">
+
+        <!-- Draw the 'Targets' Cell down the left on first iteration -->
+        <th v-if="index === 0" :rowspan="getTargetCount()" class="rotated">
+          <span>Targets</span>
+        </th>
+
+        <!-- Output the Channel Name -->
+        <th>{{ target.name }}</th>
+
+        <!-- Output the Source cells for this Target -->
+        <RoutingCell v-for="source in getFullSourceList()" :key="source"
+                     :enabled="isEnabled(source.id, target.id)" :source="source.id"
+                     :target="target.id" @clicked="handleClick"/>
+      </tr>
+    </table>
+  </div>
+</template>
+
+<style scoped>
+.routing {
+  background-color: #212624;
+  margin: auto;
+  width: fit-content;
+
+  padding: 15px;
+  display: flex;
+  flex-direction: row;
+  gap: 15px;
+}
+
+
+table {
+  color: #fff;
+  font-stretch: condensed;
+  border-spacing: 4px;
+  border-collapse: separate;
+}
+
+th {
+  font-weight: normal;
+  padding: 6px;
+}
+
+thead th:not(.subHeader) {
+  background-color: #3b413f;
+}
+
+thead .subHeader th {
+  background-color: #353937;
+  min-width: 75px;
+}
+
+tr th {
+  background-color: #353937;
+}
+
+
+.rotated {
+  background-color: #3b413f;
+  text-align: center;
+  width: 15px;
+}
+
+.rotated span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+}
+
+.hidden {
+  background-color: transparent !important;
+}
+</style>
