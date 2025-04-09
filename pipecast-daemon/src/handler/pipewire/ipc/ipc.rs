@@ -25,6 +25,9 @@ impl IPCHandler for PipewireManager {
             Cmd::SetSourceVolume(id, mix, volume) => {
                 self.set_source_node_volume(id, mix, volume).await.map(|_| Resp::Ok)
             }
+            Cmd::SetSourceVolumeLinked(id, linked) => {
+                self.set_source_volume_linked(id, linked).await.map(|_| Resp::Ok)
+            }
             Cmd::SetTargetVolume(id, volume) => {
                 self.set_target_node_volume(id, volume).await.map(|_| Resp::Ok)
             }

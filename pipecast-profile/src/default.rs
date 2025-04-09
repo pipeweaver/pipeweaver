@@ -133,7 +133,7 @@ impl Profile {
                                     Mix::A => 99,
                                     Mix::B => 99,
                                 },
-                                volumes_linked: Some(1.)
+                                volumes_linked: None,
                             },
                         },
                         VirtualSourceDevice {

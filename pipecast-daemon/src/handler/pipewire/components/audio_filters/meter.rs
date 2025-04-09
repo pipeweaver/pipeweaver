@@ -38,7 +38,7 @@ impl FilterHandler for MeterFilter {
         }
 
         let db = 20.0 * rms.log10(); // Convert to dB
-        let meter = ((db + 60.0) / 60.0 * 100.0).clamp(0.0, 100.0); // Normalize to a percentage
+        let meter = ((db + 60.0) / 60.0 * 100.0).clamp(0.0, 100.0) as u8; // Normalize to a percentage
 
         // We can meter as u8 here to get a 'percentage'
     }

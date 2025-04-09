@@ -142,6 +142,15 @@ export default {
       }
       return this.getDevice().volumes.volumes_linked !== null;
     },
+    toggleLinked: function () {
+      // SetSourceVolumeLinked(Ulid, bool),
+      let new_state = !this.isLinked();
+      let command = {
+        "SetSourceVolumeLinked": [this.getId(), new_state]
+      };
+      websocket.send_command(command);
+
+    },
     hasBasicMute: function () {
       return true;
     },
@@ -299,7 +308,7 @@ export default {
         @input="event => volume_changed('B', true, event)"
       />
     </div>
-    <div v-if="hasMix()" class="link">
+    <div v-if="hasMix()" class="link" @click="toggleLinked">
       <img v-if="isLinked()" alt="Linked" src="/images/submix/linked-white.png"/>
       <img v-else alt="Unlinked" src="/images/submix/unlinked-dimmed.png"/>
     </div>

@@ -46,6 +46,7 @@ pub enum PipeCastCommand {
     RemoveNode(Ulid),
 
     SetSourceVolume(Ulid, Mix, u8),
+    SetSourceVolumeLinked(Ulid, bool),
     SetTargetVolume(Ulid, u8),
     SetTargetMix(Ulid, Mix),
 

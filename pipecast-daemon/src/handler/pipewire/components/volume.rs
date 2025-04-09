@@ -4,6 +4,8 @@ use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{anyhow, bail, Result};
+use log::debug;
+use pipecast_profile::Volumes;
 use pipecast_shared::{Mix, MuteState, NodeType};
 use ulid::Ulid;
 
@@ -11,6 +13,8 @@ pub(crate) trait VolumeManager {
     async fn volumes_load(&self) -> Result<()>;
 
     async fn set_source_node_volume(&mut self, id: Ulid, mix: Mix, volume: u8) -> Result<()>;
+    async fn set_source_volume_linked(&mut self, id: Ulid, linked: bool) -> Result<()>;
+
     async fn set_target_node_volume(&mut self, id: Ulid, volume: u8) -> Result<()>;
     fn get_node_volume(&self, id: Ulid, mix: Mix) -> Result<u8>;
 }
@@ -37,17 +41,9 @@ impl VolumeManager for PipewireManager {
         if !(0..=100).contains(&volume) {
             bail!("Volume Must be between 0 and 100");
         }
-        let node_type = self.get_node_type(id).ok_or(anyhow!("Node Not Found"))?;
-        if !matches!(node_type, NodeType::PhysicalSource | NodeType::VirtualSource) {
-            bail!("Provided Source is a Target Node");
-        }
 
         // Now, pull out the correct part of the profile..
-        let volumes = if node_type == NodeType::PhysicalSource {
-            &mut self.get_physical_source_mut(id).ok_or(anyhow!("Node not Found"))?.volumes
-        } else {
-            &mut self.get_virtual_source_mut(id).ok_or(anyhow!("Node not Found"))?.volumes
-        };
+        let volumes = self.get_volumes(id)?;
 
         // Set the New volume for this mix
         volumes.volume[mix] = volume;
@@ -72,6 +68,31 @@ impl VolumeManager for PipewireManager {
         if let Some(volume) = update_other {
             self.volume_set_source(id, other_mix, volume).await?;
         }
+
+        Ok(())
+    }
+
+    async fn set_source_volume_linked(&mut self, id: Ulid, linked: bool) -> Result<()> {
+        // Now, pull out the correct part of the profile...
+        let volumes = self.get_volumes(id)?;
+
+        if linked == volumes.volumes_linked.is_some() {
+            bail!("Requested State matches current state");
+        }
+
+        if !linked {
+            // Unlink the volumes
+            volumes.volumes_linked = None;
+            return Ok(());
+        }
+
+        // Pull out the A and B volumes, if either is 0, force to 1 to prevent divide by zero
+        let volume_a = if volumes.volume[Mix::A] == 0 { 1 } else { volumes.volume[Mix::A] };
+        let volume_b = if volumes.volume[Mix::B] == 0 { 1 } else { volumes.volume[Mix::B] };
+
+        let ratio = volume_b as f32 / volume_a as f32;
+        debug!("Setting Ratio to {}", ratio);
+        volumes.volumes_linked = Some(ratio);
 
         Ok(())
     }
@@ -121,6 +142,7 @@ impl VolumeManager for PipewireManager {
 
 trait VolumeManagerLocal {
     async fn volume_set_source(&mut self, id: Ulid, mix: Mix, volume: u8) -> Result<()>;
+    fn get_volumes(&mut self, id: Ulid) -> Result<&mut Volumes>;
 
     async fn volume_source_load_with_mute(&self, id: Ulid) -> Result<()>;
     async fn volume_target_load_with_mute(&self, id: Ulid, volume: u8) -> Result<()>;
@@ -144,6 +166,20 @@ impl VolumeManagerLocal for PipewireManager {
             }
         }
         Ok(())
+    }
+
+    fn get_volumes(&mut self, id: Ulid) -> Result<&mut Volumes> {
+        let node_type = self.get_node_type(id).ok_or(anyhow!("Node Not Found"))?;
+        if !matches!(node_type, NodeType::PhysicalSource | NodeType::VirtualSource) {
+            bail!("Provided Source is a Target Node");
+        }
+
+        // Now, pull out the correct part of the profile..
+        if node_type == NodeType::PhysicalSource {
+            Ok(&mut self.get_physical_source_mut(id).ok_or(anyhow!("Node not Found"))?.volumes)
+        } else {
+            Ok(&mut self.get_virtual_source_mut(id).ok_or(anyhow!("Node not Found"))?.volumes)
+        }
     }
 
 
