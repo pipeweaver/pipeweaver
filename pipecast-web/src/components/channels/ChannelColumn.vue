@@ -137,7 +137,10 @@ export default {
       return is_source(this.type)
     },
     isLinked: function () {
-      return false;
+      if (!this.hasMix()) {
+        return false;
+      }
+      return this.getDevice().volumes.volumes_linked !== null;
     },
     hasBasicMute: function () {
       return true;
