@@ -296,7 +296,7 @@ impl MuteManagerLocal for PipewireManager {
 
     async fn mute_restore_routes(&mut self, source: Ulid, targets: &HashSet<Ulid>) -> Result<()> {
         for target in targets {
-            debug!("Action: Remove Route to {}", target);
+            debug!("Action: Restore Route to {}", target);
             if let Err(e) = self.mute_restore_route(source, *target).await {
                 warn!("Cannot Restore Route: {}", e);
             }
