@@ -37,21 +37,9 @@ impl VolumeManager for PipewireManager {
         if !(0..=100).contains(&volume) {
             bail!("Volume Must be between 0 and 100");
         }
-
         let node_type = self.get_node_type(id).ok_or(anyhow!("Node Not Found"))?;
         if !matches!(node_type, NodeType::PhysicalSource | NodeType::VirtualSource) {
             bail!("Provided Source is a Target Node");
-        }
-
-        // First, check whether we need to apply this change to the filter
-        if !self.is_source_muted_to_all(id).await? {
-            // Locate the filter that matches this id + mix
-            if let Some(map) = self.source_map.get(&id) {
-                let filter_id = map[mix];
-                self.filter_volume_set(filter_id, volume).await?;
-            } else {
-                bail!("Source not found in the Source Map");
-            }
         }
 
         // Now, pull out the correct part of the profile..
@@ -63,6 +51,24 @@ impl VolumeManager for PipewireManager {
 
         // Set the New volume for this mix
         volumes.volume[mix] = volume;
+        let other_mix = if mix == Mix::A { Mix::B } else { Mix::A };
+
+        let update_other = if let Some(ratio) = volumes.volumes_linked {
+            let new_volume = if mix == Mix::A {
+                (volume as f32 * ratio) as u8
+            } else {
+                (volume as f32 / ratio) as u8
+            };
+            volumes.volume[other_mix] = new_volume;
+            Some(new_volume)
+        } else {
+            None
+        };
+
+        self.volume_set_source(id, mix, volume).await?;
+        if let Some(volume) = update_other {
+            self.volume_set_source(id, other_mix, volume).await?;
+        }
 
         Ok(())
     }
@@ -111,11 +117,33 @@ impl VolumeManager for PipewireManager {
 }
 
 trait VolumeManagerLocal {
+    async fn volume_set_source(&mut self, id: Ulid, mix: Mix, volume: u8) -> Result<()>;
+
     async fn volume_source_load_with_mute(&self, id: Ulid) -> Result<()>;
     async fn volume_target_load_with_mute(&self, id: Ulid, volume: u8) -> Result<()>;
 }
 
 impl VolumeManagerLocal for PipewireManager {
+    async fn volume_set_source(&mut self, id: Ulid, mix: Mix, volume: u8) -> Result<()> {
+        let node_type = self.get_node_type(id).ok_or(anyhow!("Node Not Found"))?;
+        if !matches!(node_type, NodeType::PhysicalSource | NodeType::VirtualSource) {
+            bail!("Provided Source is a Target Node");
+        }
+
+        // First, check whether we need to apply this change to the filter
+        if !self.is_source_muted_to_all(id).await? {
+            // Locate the filter that matches this id + mix
+            if let Some(map) = self.source_map.get(&id) {
+                let filter_id = map[mix];
+                self.filter_volume_set(filter_id, volume).await?;
+            } else {
+                bail!("Source not found in the Source Map");
+            }
+        }
+        Ok(())
+    }
+
+
     async fn volume_source_load_with_mute(&self, id: Ulid) -> Result<()> {
         let err = anyhow!("Unable to Locate Node");
         let node_type = self.get_node_type(id).ok_or(err)?;
