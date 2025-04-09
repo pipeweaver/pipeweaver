@@ -51,8 +51,9 @@ impl VolumeManager for PipewireManager {
 
         // Set the New volume for this mix
         volumes.volume[mix] = volume;
-        let other_mix = if mix == Mix::A { Mix::B } else { Mix::A };
 
+        // Do a check to see if we're linked, and if so, prep to also update that value
+        let other_mix = if mix == Mix::A { Mix::B } else { Mix::A };
         let update_other = if let Some(ratio) = volumes.volumes_linked {
             let new_volume = if mix == Mix::A {
                 (volume as f32 * ratio) as u8
@@ -66,6 +67,8 @@ impl VolumeManager for PipewireManager {
         };
 
         self.volume_set_source(id, mix, volume).await?;
+
+        // If we're linked, update the other Mix as well
         if let Some(volume) = update_other {
             self.volume_set_source(id, other_mix, volume).await?;
         }
