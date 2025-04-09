@@ -37,6 +37,7 @@ export default {
 
     // Colours for the thumb and 'active' section, and the unselected colour
     selectedColour: {type: String, required: false, default: '#82CFD0'},
+    meterColour: {type: String, required: false, default: '#9cfdff'},
     deselectedColour: {type: String, required: false, default: '#000000'},
 
     // The value to report to Screen Readers
@@ -135,7 +136,7 @@ export default {
       :max="maxValue"
       :min="minValue"
       :step="step"
-      
+
       type="range"
     />
   </div>
@@ -148,6 +149,7 @@ export default {
 }
 
 input[type='range'] {
+
   background: linear-gradient(
     to right,
     v-bind(selectedColour) 0%,
@@ -155,6 +157,22 @@ input[type='range'] {
     v-bind(deselectedColour) v-bind(currentWidth),
     v-bind(deselectedColour) 100%
   );
+
+
+  /*
+    If we ever were to do metering in the UI, we could use something like this to attach it
+    directly to the range bar:
+
+    background: linear-gradient(
+      to right,
+      v-bind(meterColour) 0%,
+      v-bind(meterColour) 20%,
+      v-bind(selectedColour) 20%,
+      v-bind(selectedColour) v-bind(currentWidth),
+      v-bind(deselectedColour) v-bind(currentWidth),
+      v-bind(deselectedColour) 100%
+    );
+  */
 
   display: block;
   transform-origin: top right;
