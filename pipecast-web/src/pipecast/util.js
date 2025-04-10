@@ -30,3 +30,25 @@ export function get_devices(type) {
 export function is_source(type) {
   return (type === DeviceType.PhysicalSource || type === DeviceType.VirtualSource)
 }
+
+// Some functions useful for getting basic node data
+export function getFullSourceList() {
+  let list = getNamesForDevices(get_devices(DeviceType.PhysicalSource));
+  return list.concat(getNamesForDevices(get_devices(DeviceType.VirtualSource)));
+}
+
+export function getFullTargetList() {
+  let list = getNamesForDevices(get_devices(DeviceType.PhysicalTarget));
+  return list.concat(getNamesForDevices(get_devices(DeviceType.VirtualTarget)));
+}
+
+export function getNamesForDevices(devices) {
+  let list = [];
+  for (let device of devices) {
+    list.push({
+      id: device.description.id,
+      name: device.description.name,
+    });
+  }
+  return list;
+}

@@ -1,6 +1,6 @@
 <script>
 
-import {DeviceType, get_devices} from "@/pipecast/util.js";
+import {DeviceType, get_devices, getFullSourceList, getFullTargetList} from "@/pipecast/util.js";
 import RoutingCell from "@/components/routing/RoutingCell.vue";
 import {store} from "@/pipecast/store.js";
 import {websocket} from "@/pipecast/sockets.js";
@@ -10,33 +10,14 @@ export default {
   components: {RoutingCell},
 
   methods: {
+    getFullSourceList,
+    getFullTargetList,
     getSourceCount: function () {
       return get_devices(DeviceType.PhysicalSource).length + get_devices(DeviceType.VirtualSource).length;
     },
 
     getTargetCount: function () {
       return get_devices(DeviceType.PhysicalTarget).length + get_devices(DeviceType.VirtualTarget).length;
-    },
-
-    getFullSourceList: function () {
-      let list = this.getNamesForDevices(get_devices(DeviceType.PhysicalSource));
-      return list.concat(this.getNamesForDevices(get_devices(DeviceType.VirtualSource)));
-    },
-
-    getFullTargetList: function () {
-      let list = this.getNamesForDevices(get_devices(DeviceType.PhysicalTarget));
-      return list.concat(this.getNamesForDevices(get_devices(DeviceType.VirtualTarget)));
-    },
-
-    getNamesForDevices: function (devices) {
-      let list = [];
-      for (let device of devices) {
-        list.push({
-          id: device.description.id,
-          name: device.description.name,
-        });
-      }
-      return list;
     },
 
     isEnabled: function (source, target) {
