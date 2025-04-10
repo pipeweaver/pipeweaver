@@ -55,6 +55,10 @@ pub enum PipeCastCommand {
     AddSourceMuteTarget(Ulid, MuteTarget),
     DelSourceMuteTarget(Ulid, MuteTarget),
 
+    AddMuteTargetNode(Ulid, MuteTarget, Ulid),
+    DelMuteTargetNode(Ulid, MuteTarget, Ulid),
+    ClearMuteTargetNodes(Ulid, MuteTarget),
+
     SetTargetMuteState(Ulid, MuteState),
 }
 

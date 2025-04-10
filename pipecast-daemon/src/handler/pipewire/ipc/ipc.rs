@@ -43,6 +43,15 @@ impl IPCHandler for PipewireManager {
             Cmd::DelSourceMuteTarget(id, target) => {
                 self.set_source_mute_state(id, target, Unmuted).await.map(|_| Resp::Ok)
             }
+            Cmd::AddMuteTargetNode(id, target, target_id) => {
+                self.add_target_mute_node(id, target, target_id).await.map(|_| Resp::Ok)
+            }
+            Cmd::DelMuteTargetNode(id, target, target_id) => {
+                self.del_target_mute_node(id, target, target_id).await.map(|_| Resp::Ok)
+            }
+            Cmd::ClearMuteTargetNodes(id, target) => {
+                self.clear_target_mute_nodes(id, target).await.map(|_| Resp::Ok)
+            }
             Cmd::SetTargetMuteState(id, state) => {
                 self.set_target_mute_state(id, state).await.map(|r| Resp::Ok)
             }

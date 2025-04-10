@@ -21,6 +21,8 @@ pub(crate) trait NodeManagement {
     async fn node_create(&mut self, node_type: NodeType, description: &DeviceDescription) -> Result<()>;
     async fn node_remove(&mut self, id: Ulid) -> Result<()>;
 
+    fn get_target_node_count(&self) -> usize;
+
     /// Handle attaching a physical device to what should be a Physical Node
     async fn attach_physical_device(&mut self, id: u32) -> Result<()>;
     async fn detach_physical_device(&mut self, id: u32) -> Result<()>;
@@ -132,6 +134,11 @@ impl NodeManagement for PipewireManager {
             }
         }
         Ok(())
+    }
+
+    fn get_target_node_count(&self) -> usize {
+        let devices = &self.profile.devices.targets;
+        devices.physical_devices.len() + devices.virtual_devices.len()
     }
 
     async fn attach_physical_device(&mut self, id: u32) -> Result<()> {

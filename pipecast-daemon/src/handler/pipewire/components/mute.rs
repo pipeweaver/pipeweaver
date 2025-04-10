@@ -14,6 +14,10 @@ use strum::IntoEnumIterator;
 use ulid::Ulid;
 
 pub(crate) trait MuteManager {
+    async fn add_target_mute_node(&mut self, id: Ulid, state: MuteTarget, target: Ulid) -> Result<()>;
+    async fn del_target_mute_node(&mut self, id: Ulid, state: MuteTarget, target: Ulid) -> Result<()>;
+    async fn clear_target_mute_nodes(&mut self, id: Ulid, state: MuteTarget) -> Result<()>;
+
     async fn set_source_mute_state(&mut self, id: Ulid, target: MuteTarget, state: MuteState) -> Result<()>;
     async fn set_target_mute_state(&mut self, id: Ulid, state: MuteState) -> Result<()>;
 
@@ -23,23 +27,88 @@ pub(crate) trait MuteManager {
 }
 
 impl MuteManager for PipewireManager {
-    async fn set_source_mute_state(&mut self, id: Ulid, target: MuteTarget, state: MuteState) -> Result<()> {
-        let node_type = self.get_node_type(id).ok_or(anyhow!("Unknown Node"))?;
-        if !matches!(node_type, NodeType::PhysicalSource | NodeType::VirtualSource) {
-            bail!("Provided Source is a Target Node");
+    async fn add_target_mute_node(&mut self, id: Ulid, state: MuteTarget, target: Ulid) -> Result<()> {
+        let node_type = self.get_node_type(target).ok_or(anyhow!("Unknown Node"))?;
+        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+            bail!("Provided Target is a Source Node");
         }
 
-        debug!("Setting: {}, {}, {:?}, {:?}", node_type, id, target, state);
+        // First get the total target nodes available in the current configuration
+        let target_node_count = self.get_target_node_count();
 
-        // For testing, we just change the state in the config
-        // The following keeps quite a tight lock on the borrowedness of self, so we need
-        // to work around that the best that we can.
-        let err = "Device Not Found";
-        let mute_state = if node_type == NodeType::PhysicalSource {
-            &mut self.get_physical_source_mut(id).ok_or(anyhow!(err))?.mute_states
+        // Check whether this target is already present in this mute state
+        let mute_state = self.get_source_mute_states_mut(id)?;
+        if mute_state.mute_targets[state].contains(&target) {
+            bail!("Target Already in Mute Target");
+        }
+
+        // If this MuteTarget is already muted, we should 'fix' the change
+        if mute_state.mute_state.contains(&state) {
+            // TODO: We should just 'Update' the current mute state, but for now, unmute it
+            warn!("Un-muting {:?} to ensure consistency", state);
+            self.set_source_mute_state(id, state, MuteState::Unmuted).await?;
+        }
+
+        // Re-fetch the state to avoid borrow issues with calling `set_source_mute_state`
+        let mute_state = self.get_source_mute_states_mut(id)?;
+
+        // If all target nodes are added as mute targets, set it to empty
+        if mute_state.mute_targets[state].len() + 1 >= target_node_count {
+            warn!("All Targets Selected, Reverting back to 'Mute to All'");
+            mute_state.mute_targets[state].clear();
         } else {
-            &mut self.get_virtual_source_mut(id).ok_or(anyhow!(err))?.mute_states
-        };
+            // Add the target to the list
+            mute_state.mute_targets[state].insert(target);
+        }
+        Ok(())
+    }
+
+    async fn del_target_mute_node(&mut self, id: Ulid, state: MuteTarget, target: Ulid) -> Result<()> {
+        let node_type = self.get_node_type(target).ok_or(anyhow!("Unknown Node"))?;
+        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+            bail!("Provided Target is a Source Node");
+        }
+
+        // Check whether this target is already present in this mute state
+        let mute_state = self.get_source_mute_states_mut(id)?;
+        if !mute_state.mute_targets[state].contains(&target) {
+            bail!("Target Not Present in Mute Target");
+        }
+
+        // If this MuteTarget is already muted, we should 'fix' the change
+        if mute_state.mute_state.contains(&state) {
+            // TODO: We should just 'Update' the current mute state, but for now, unmute it
+            warn!("Un-muting {:?} to ensure consistency", state);
+            self.set_source_mute_state(id, state, MuteState::Unmuted).await?;
+        }
+
+        // Re-fetch the state to avoid borrow issues with calling `set_source_mute_state`
+        let mute_state = self.get_source_mute_states_mut(id)?;
+        mute_state.mute_targets[state].remove(&target);
+
+        Ok(())
+    }
+
+    async fn clear_target_mute_nodes(&mut self, id: Ulid, state: MuteTarget) -> Result<()> {
+        let mute_state = self.get_source_mute_states_mut(id)?;
+
+        // If this MuteTarget is already muted, we should 'fix' the change
+        if mute_state.mute_state.contains(&state) {
+            // TODO: We should just 'Update' the current mute state, but for now, unmute it
+            warn!("Un-muting {:?} to ensure consistency", state);
+            self.set_source_mute_state(id, state, MuteState::Unmuted).await?;
+        }
+
+        // Re-fetch the state to avoid borrow issues with calling `set_source_mute_state`
+        let mute_state = self.get_source_mute_states_mut(id)?;
+        mute_state.mute_targets[state].clear();
+
+        Ok(())
+    }
+
+    async fn set_source_mute_state(&mut self, id: Ulid, target: MuteTarget, state: MuteState) -> Result<()> {
+        // Get the Mute States for this Source
+        let mute_state = self.get_source_mute_states_mut(id)?;
 
         // Check whether a change has actually occurred here
         if (state == MuteState::Muted) == mute_state.mute_state.contains(&target) {
@@ -198,6 +267,7 @@ trait MuteManagerLocal {
     fn get_mute_targets(list: &MuteStates) -> HashSet<Ulid>;
 
     fn get_source_mute_states(&self, source: Ulid) -> Result<&MuteStates>;
+    fn get_source_mute_states_mut(&mut self, source: Ulid) -> Result<&mut MuteStates>;
 
     async fn mute_remove_volume(&mut self, source: Ulid) -> Result<()>;
     async fn mute_remove_routes(&mut self, source: Ulid, targets: &HashSet<Ulid>) -> Result<()>;
@@ -230,6 +300,22 @@ impl MuteManagerLocal for PipewireManager {
             &self.get_physical_source(source).ok_or(err)?.mute_states
         } else {
             &self.get_virtual_source(source).ok_or(err)?.mute_states
+        };
+
+        Ok(states)
+    }
+
+    fn get_source_mute_states_mut(&mut self, source: Ulid) -> Result<&mut MuteStates> {
+        let node_type = self.get_node_type(source).ok_or(anyhow!("Unknown Node"))?;
+        if !matches!(node_type, NodeType::PhysicalSource | NodeType::VirtualSource) {
+            bail!("Provided Source is a Target Node");
+        }
+
+        let err = anyhow!("Unable to Find Source");
+        let states = if node_type == NodeType::PhysicalSource {
+            &mut self.get_physical_source_mut(source).ok_or(err)?.mute_states
+        } else {
+            &mut self.get_virtual_source_mut(source).ok_or(err)?.mute_states
         };
 
         Ok(states)
