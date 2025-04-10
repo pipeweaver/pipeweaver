@@ -517,6 +517,7 @@ export default {
 }
 
 .mute .active {
+  transition: all 0.4s ease;
   background-color: rgba(255, 0, 0, 0.6);
 }
 
