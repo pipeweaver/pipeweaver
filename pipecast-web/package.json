@@ -13,6 +13,7 @@
     "@fortawesome/fontawesome-svg-core": "^6.7.2",
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@fortawesome/vue-fontawesome": "^3.0.8",
+    "click-outside-vue3": "^4.0.1",
     "fast-json-patch": "^3.1.1",
     "vue": "^3.5.13"
   },

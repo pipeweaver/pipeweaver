@@ -4,15 +4,19 @@ import ChannelColumnVolume from '@/components/channels/ChannelColumnVolume.vue'
 import {DeviceType, get_devices, is_source} from "@/pipecast/util.js";
 import {websocket} from "@/pipecast/sockets.js";
 import {FontAwesomeIcon} from "@fortawesome/vue-fontawesome";
+import PopupBox from "@/components/inputs/PopupBox.vue";
+import MuteTargetSelector from "@/components/channels/MuteTargetSelector.vue";
+import MixAssignment from "@/components/channels/MixAssignment.vue";
 
 export default {
   name: 'ChannelColumn',
-  components: {FontAwesomeIcon, ChannelColumnVolume, ColourSettings},
+  components: {
+    MixAssignment,
+    MuteTargetSelector, PopupBox, FontAwesomeIcon, ChannelColumnVolume, ColourSettings
+  },
   props: {
     type: DeviceType,
     index: Number,
-    // channel: { type: String, required: false },
-    // title: { type: String, required: true }
   },
 
   data() {
@@ -80,9 +84,9 @@ export default {
       }
 
       // If we're showing two buttons, cut 5 more for the 'gap' between them
-      if (this.hasBasicMute() && this.hasComplexMute()) {
-        size -= 5
-      }
+      // if (this.hasBasicMute() && this.hasComplexMute()) {
+      //   size -= 5
+      // }
 
       // Done :)
       return size
@@ -200,6 +204,11 @@ export default {
       }
     },
 
+    isMutedAll(target) {
+      let device = this.getDevice();
+      return (device.mute_states.mute_targets[target].length === 0);
+    },
+
     mute_click: function (target, e) {
       /*
         AddSourceMuteTarget(Ulid, MuteTarget),
@@ -218,7 +227,6 @@ export default {
         }
         websocket.send_command(command);
       } else {
-        console.log(state);
         let type = (!state.includes(mute_target)) ? "AddSourceMuteTarget" : "DelSourceMuteTarget";
         let command = {
           [type]: [this.getId(), mute_target],
@@ -248,6 +256,38 @@ export default {
 
     colour_clicked: function (e) {
       console.log("Colour Clicked: {}", e);
+    },
+
+    output_clicked: function (target, e) {
+      // Try and locate the button pressed.
+      let found = false;
+      let element = e.target;
+      console.log(element);
+      if (element.nodeName.toLowerCase() === "button") {
+        console.log(element.firstChild);
+        element.firstChild.style.transform = "rotate(-90deg)";
+      } else {
+        while (!found) {
+          if (element.nodeName === "svg" || element.nodeName === "path") {
+            element = element.parentNode;
+            continue;
+          }
+          found = true;
+        }
+        element.style.transform = "rotate(-90deg)";
+      }
+
+      //console.log(e);
+      this.$refs[target].show(e);
+    },
+
+    output_closed: function (e) {
+      let target = e + "_icon";
+      this.$refs[target].style.transform = "";
+    },
+
+    is_source() {
+      return is_source(this.type);
     }
   },
   computed: {
@@ -277,6 +317,13 @@ export default {
 </script>
 
 <template>
+  <MuteTargetSelector v-if="is_source()" id="mute_a" ref="mute_a" :index='index'
+                      :type='type'
+                      target="TargetA" @closed="output_closed"/>
+  <MuteTargetSelector v-if="is_source()" id="mute_b" ref="mute_b" :index='index'
+                      :type='type' target="TargetB"
+                      @closed="output_closed"/>
+
   <div class="mix">
     <div class="title">
       <div class="start"></div>
@@ -312,14 +359,12 @@ export default {
       <img v-if="isLinked()" alt="Linked" src="/images/submix/linked-white.png"/>
       <img v-else alt="Unlinked" src="/images/submix/unlinked-dimmed.png"/>
     </div>
-    <div v-if="!hasMix()" class="assignment">
-      A:<input :checked="isActiveMix('A')" :name="`mix-${getId()}`" type="radio"
-               @change="event => target_change('A', event)">
-      B:<input :checked="isActiveMix('B')" :name="`mix-${getId()}`" type="radio"
-               @change="event => target_change('B', event)">
-    </div>
     <div class="bottom"></div>
-    <div v-if="hasMute()" :class="[!hasComplexMute() ? 'small' : '']" class="mute">
+    <div v-if="hasMute()" class="mute">
+      <div v-if="!hasMix()">
+        <MixAssignment :is-mix-a="isActiveMix('A')" @target-change="target_change"/>
+      </div>
+
       <div v-if="hasBasicMute()" :class="{active: isMuteA()}" class="buttons">
         <button @click="event => mute_click('A', event)">
           <span style="width: 16px">
@@ -327,10 +372,13 @@ export default {
             <font-awesome-icon v-else :icon="['fas', 'volume-high']"/>
           </span>
           <span v-if="isOutput()">Mute Channel</span>
-          <span v-else>Mute to All</span>
+          <span v-else-if="isMutedAll('TargetA')">Mute to All</span>
+          <span v-else>Mute to...</span>
         </button>
-        <button v-if="!isOutput()">
-          <font-awesome-icon :icon="['fas', 'angle-down']"/>
+        <button v-if="!isOutput()" @click="e => output_clicked('mute_a', e)">
+          <span ref="mute_a_icon" class="rotate">
+            <font-awesome-icon :icon="['fas', 'angle-down']"/>
+          </span>
         </button>
       </div>
       <div v-if="hasComplexMute()" :class="{active: isMuteB()}" class="buttons">
@@ -339,10 +387,13 @@ export default {
             <font-awesome-icon v-if="isMuteB()" :icon="['fas', 'volume-xmark']"/>
             <font-awesome-icon v-else :icon="['fas', 'volume-high']"/>
           </span>
-          <span class="label">Mute to Headphones</span>
+          <span v-if="isMutedAll('TargetB')">Mute to All</span>
+          <span v-else>Mute to...</span>
         </button>
-        <button>
-          <font-awesome-icon :icon="['fas', 'angle-down']"/>
+        <button @click="e => output_clicked('mute_b', e)">
+          <span ref="mute_b_icon" class="rotate">
+            <font-awesome-icon :icon="['fas', 'angle-down']"/>
+          </span>
         </button>
       </div>
     </div>
@@ -425,7 +476,6 @@ export default {
 }
 
 .mute {
-  height: 65px;
   background: v-bind(muteBackground);
 
   display: flex;
@@ -489,15 +539,20 @@ export default {
   text-align: left;
 }
 
+.mute .buttons button span.rotate {
+  padding: 0;
+  margin: 0;
+  transition: transform 0.2s ease;
+}
+
 .mute .buttons div:first-child,
-.mute .buttons button:first-child {
+.mute .buttons button:first-child:not(:last-child) {
   border-right: 1px solid #666;
 }
 
 .mute .buttons div:last-child,
 .mute .buttons button:last-child {
   padding: 4px;
-  border-left: 1px solid #555;
 }
 
 .mute :first-child > div,
