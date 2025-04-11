@@ -473,16 +473,19 @@ impl PipewireManager {
 
                 let ports = &node.ports[direction];
 
+                // Check whether this is a mono device
+                if ports.iter().count() == 1 {
+                    if let Some(index) = ports.keys().next() {
+                        return (id, *index);
+                    }
+                }
+
                 // Iterate over the ports, try and find the location
                 for (index, port) in ports.iter() {
                     if let Ok(port_location) = PortLocation::from_str(&port.channel) {
                         if port_location == location {
                             return (id, *index);
                         }
-                    }
-                    // Check if this is a mono device and return this ID for all port request
-                    if &port.channel == "MONO" {
-                        return (id, *index);
                     }
                 }
 

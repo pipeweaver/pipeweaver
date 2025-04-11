@@ -63,9 +63,9 @@ impl PipewireRegistry {
                                 let name = props.get(*NODE_NAME);
 
                                 // Can we attach this to a Device?
-                                if let Some(device) = device.and_then(|s| s.parse::<u32>().ok()) {
-                                    if let Some(device) = store.unmanaged_device_get(device) {
-                                        let node = RegistryNode::new(nick, desc, name);
+                                if let Some(device_id) = device.and_then(|s| s.parse::<u32>().ok()) {
+                                    if let Some(device) = store.unmanaged_device_get(device_id) {
+                                        let node = RegistryNode::new(device_id, nick, desc, name);
                                         device.add_node(id);
 
                                         // We only send this node through if it has a device
@@ -227,6 +227,8 @@ pub(crate) enum Direction {
 
 #[derive(Debug)]
 pub(crate) struct RegistryNode {
+    pub parent_id: u32,
+
     pub nickname: Option<String>,
     pub description: Option<String>,
     pub name: Option<String>,
@@ -241,12 +243,13 @@ impl RegistryNode {
 }
 
 impl RegistryNode {
-    pub fn new(nickname: Option<&str>, description: Option<&str>, name: Option<&str>) -> Self {
+    pub fn new(parent_id: u32, nickname: Option<&str>, description: Option<&str>, name: Option<&str>) -> Self {
         let nickname = nickname.map(|nickname| nickname.to_string());
         let description = description.map(|description| description.to_string());
         let name = name.map(|name| name.to_string());
 
         Self {
+            parent_id,
             nickname,
             description,
             name,
