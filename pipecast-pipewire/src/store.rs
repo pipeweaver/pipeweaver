@@ -1,6 +1,6 @@
 use crate::manager::FilterData;
 use crate::registry::{Direction, RegistryDevice, RegistryLink, RegistryNode};
-use crate::{FilterValue, LinkType, PipecastNode, PipewireReceiver};
+use crate::{FilterValue, LinkType, MediaClass, PipewireNode, PipewireReceiver};
 use anyhow::bail;
 use enum_map::{Enum, EnumMap};
 use log::{debug, error};
@@ -59,14 +59,8 @@ impl Store {
     }
 
     pub fn is_managed_node(&self, id: u32) -> bool {
-        for node in self.managed_nodes.values() {
-            if let Some(managed_id) = node.pw_id {
-                if managed_id == id {
-                    return true;
-                }
-            }
-        }
-        false
+        // Before we add this, is this a managed node?
+        self.managed_nodes.values().any(|node| node.pw_id == Some(id))
     }
 
     pub fn unmanaged_device_add(&mut self, id: u32, device: RegistryDevice) {
@@ -94,24 +88,27 @@ impl Store {
     }
 
     pub fn unmanaged_node_check(&mut self, id: u32) {
-        debug!("Checking Node: {}", id);
         if let Some(node) = self.unmanaged_nodes.get(&id) {
-            debug!("Node Found: {:?}", node);
-
             let is_usable = self.is_usable_node(id);
-            debug!("Is Usable: {}", is_usable);
-            if is_usable && !self.usable_nodes.contains(&id) {
-                self.usable_nodes.push(id);
+            if let Some(media_type) = is_usable {
+                if !self.usable_nodes.contains(&id) {
+                    self.usable_nodes.push(id);
+                    let node = PipewireNode {
+                        node_id: id,
+                        node_class: media_type,
+                        name: node.name.clone(),
+                        nickname: node.nickname.clone(),
+                        description: node.description.clone(),
+                    };
 
-                let name = node.description.clone().unwrap_or(String::from("Unnamed"));
-                let _ = self.callback_tx.send(PipewireReceiver::DeviceAdded(name));
-                return;
+                    let _ = self.callback_tx.send(PipewireReceiver::DeviceAdded(node));
+                    return;
+                }
             }
 
-            if !is_usable && self.usable_nodes.contains(&id) {
+            if is_usable.is_none() && self.usable_nodes.contains(&id) {
                 self.usable_nodes.retain(|value| value != &id);
-                let name = node.description.clone().unwrap_or(String::from("Unnamed"));
-                let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(name));
+                let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
                 return;
             }
         }
@@ -126,7 +123,18 @@ impl Store {
     }
 
     pub fn unmanaged_link_add(&mut self, id: u32, link: RegistryLink) {
-        self.unmanaged_links.insert(id, link);
+        // Check our Managed Links to see if this is actually unmanaged
+        if self.is_managed_link(id).is_none() {
+            self.unmanaged_links.insert(id, link);
+        }
+    }
+
+    pub fn is_managed_link(&self, id: u32) -> Option<Ulid> {
+        self.managed_links.iter().find(|(_, node)| {
+            PortLocation::iter().any(|port| {
+                node.links[port].as_ref().map_or(false, |link| link.pw_id == Some(id))
+            })
+        }).map(|(id, _)| id).copied()
     }
 
     pub fn node_add(&mut self, node: NodeStore) {
@@ -236,6 +244,9 @@ impl Store {
                 if let Some(port) = &mut link.links[port] {
                     if port.internal_id == link_id {
                         port.pw_id = Some(pw_id);
+
+                        // This will be unmanaged before the link callback, so take ownership
+                        self.unmanaged_links.remove(&pw_id);
                     }
                 }
             }
@@ -284,7 +295,7 @@ impl Store {
         });
     }
 
-    pub fn is_usable_node(&self, id: u32) -> bool {
+    pub fn is_usable_node(&self, id: u32) -> Option<MediaClass> {
         if let Some(node) = self.unmanaged_nodes.get(&id) {
             let mut in_count = 0;
             let mut out_count = 0;
@@ -298,53 +309,60 @@ impl Store {
                 }
             }
 
-            // We need at LEAST one valid channel, but no more than two in either direction
-            return (1..=2).contains(&in_count) || (1..=2).contains(&out_count);
+            // Return the Specific MediaClass based on Channel Count
+            if (1..=2).contains(&in_count) && (out_count == 0) {
+                return Some(MediaClass::Source);
+            } else if (1..=2).contains(&out_count) && in_count == 0 {
+                return Some(MediaClass::Sink)
+            } else if (1..=2).contains(&in_count) && in_count == out_count {
+                // This is a bit of an assumption really, but we have non-monitor ports on the
+                // tail end, so a reasonable assumption.
+                return Some(MediaClass::Duplex)
+            }
         }
-        false
+        None
     }
 
-    // This function returns a list of nodes which can be linked to and from inside PipeCast
-    // pub fn get_usable_nodes(&self) -> Vec<PipecastNode> {
-    //     // Firstly, iterate over the devices, we need to peek into all of them to check nodes..
-    //     let mut pipecast_nodes: Vec<PipecastNode> = Vec::new();
-    //
-    //     for device in self.unmanaged_devices.values() {
-    //         for (node_id, node) in &device.nodes {
-    //             // We need to count the number of non-monitor ports on the input and output
-    //             let mut in_count = 0;
-    //             let mut out_count = 0;
-    //             for port in node.ports[Direction::In].values() {
-    //                 if !port.is_monitor {
-    //                     in_count += 1;
-    //                 }
-    //             }
-    //             for port in node.ports[Direction::Out].values() {
-    //                 if !port.is_monitor {
-    //                     out_count += 1;
-    //                 }
-    //             }
-    //
-    //             // In this instance, if we have more than 2 ports we can't easily link them
-    //             // together effectively, so we'll ignore this node, we'll also ignore it if there
-    //             // are NO ports at all!
-    //             if in_count > 2 || out_count > 2 || (in_count == 0 && out_count == 0) {
-    //                 continue;
-    //             }
-    //
-    //             // We get here, this node should be usable
-    //             pipecast_nodes.push(PipecastNode {
-    //                 node_id: *node_id,
-    //                 name: node.name.clone(),
-    //                 nickname: node.nickname.clone(),
-    //                 description: node.description.clone(),
-    //                 inputs: in_count,
-    //                 outputs: out_count,
-    //             });
-    //         }
-    //     }
-    //     pipecast_nodes
-    // }
+    pub fn remove_by_id(&mut self, id: u32) {
+        // Pipewire doesn't tell us what type an ID is, so we need to go through our stored data
+        // and remove stuff appropriately.
+
+        // In addition, when a device is removed, pipewire will report everything being removed
+        // in reverse order, so Links first, then Nodes, then Parents.
+
+        // So, first, Check if this is a link
+        if let Some(link) = self.unmanaged_links.remove(&id) {
+            debug!("Removing {}:{} to {}:{}", link.output_node, link.output_port, link.input_node, link.input_port);
+            return;
+        }
+
+        // Then if it's a node
+        if self.unmanaged_nodes.remove(&id).is_some() {
+            debug!("Removing Node: {}", id);
+            if self.usable_nodes.contains(&id) {
+                // If this is something we know about, note it's gone
+                let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
+                self.usable_nodes.retain(|v| v != &id);
+            }
+            return;
+        }
+
+        if self.unmanaged_devices.remove(&id).is_some() {
+            debug!("Removing Device: {}", &id);
+            return;
+        }
+
+        // Something may be trying to mess with a managed link, if so, completely drop our links
+        // and report back to whatever is calling us that it's happened, so they can action it
+        if let Some(id) = self.is_managed_link(id) {
+            if let Some(link) = self.managed_links.remove(&id) {
+                let _ = self.callback_tx.send(PipewireReceiver::ManagedLinkDropped(link.source, link.destination));
+            }
+        }
+
+
+        // debug!("Pipewire ID not Found: {}", id);
+    }
 }
 
 pub(crate) struct NodeStore {

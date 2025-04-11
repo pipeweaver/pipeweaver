@@ -56,7 +56,6 @@ impl PipewireRegistry {
                         }
                         ObjectType::Node => {
                             if let Some(props) = global.props {
-                                let factory_id = props.get(*FACTORY_ID);
                                 let device = props.get(*DEVICE_ID);
                                 let nick = props.get(*NODE_NICK);
                                 let desc = props.get(*NODE_DESCRIPTION);
@@ -131,17 +130,16 @@ impl PipewireRegistry {
                         ObjectType::Link => {
                             // We need to track links, to allow callbacks when links are created.
                             if let Some(props) = global.props {
-                                let link_id = props.get(*LINK_ID).and_then(|s| s.parse::<u32>().ok());
                                 let input_node = props.get(*LINK_INPUT_NODE).and_then(|s| s.parse::<u32>().ok());
                                 let input_port = props.get(*LINK_INPUT_PORT).and_then(|s| s.parse::<u32>().ok());
                                 let output_node = props.get(*LINK_OUTPUT_NODE).and_then(|s| s.parse::<u32>().ok());
                                 let output_port = props.get(*LINK_OUTPUT_PORT).and_then(|s| s.parse::<u32>().ok());
 
                                 // All these variables need to be set..
-                                if link_id.is_none() || input_node.is_none() || input_port.is_none() || output_node.is_none() || output_port.is_none() {
+                                if input_node.is_none() || input_port.is_none() || output_node.is_none() || output_port.is_none() {
                                     return;
                                 }
-                                store.unmanaged_link_add(link_id.unwrap(),
+                                store.unmanaged_link_add(id,
                                                          RegistryLink {
                                                              input_node: input_node.unwrap(),
                                                              input_port: input_port.unwrap(),
@@ -181,10 +179,11 @@ impl PipewireRegistry {
     }
 
     pub fn registry_removal_listener(&self) -> Listener {
+        let store = self.store.clone();
         self.registry
             .add_listener_local()
-            .global_remove(|id| {
-                //debug!("Object Removed: {}", id);
+            .global_remove(move |id| {
+                store.borrow_mut().remove_by_id(id);
             })
             .register()
     }

@@ -1,6 +1,6 @@
 use crate::registry::PipewireRegistry;
 use crate::store::{FilterStore, LinkGroupStore, LinkStoreMap, NodeStore, PortLocation, Store};
-use crate::{registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties, PipecastNode, PipewireReceiver};
+use crate::{registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties, PipewireNode, PipewireReceiver};
 use crate::{MediaClass, PWReceiver, PipewireMessage};
 use anyhow::anyhow;
 use log::{debug, error};

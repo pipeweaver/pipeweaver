@@ -38,8 +38,10 @@ pub enum PipewireMessage {
 pub enum PipewireReceiver {
     Quit,
 
-    DeviceAdded(String),
-    DeviceRemoved(String),
+    DeviceAdded(PipewireNode),
+    DeviceRemoved(u32),
+
+    ManagedLinkDropped(LinkType, LinkType),
 }
 
 pub struct NamingScheme {
@@ -213,14 +215,12 @@ pub struct FilterProperty {
     pub value: FilterValue,
 }
 
-#[derive(Debug)]
-pub struct PipecastNode {
+#[derive(Debug, Clone, PartialEq)]
+pub struct PipewireNode {
     pub node_id: u32,
+    pub node_class: MediaClass,
 
     pub name: Option<String>,
     pub nickname: Option<String>,
     pub description: Option<String>,
-
-    pub inputs: u8,
-    pub outputs: u8,
 }

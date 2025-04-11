@@ -3,10 +3,10 @@ use crate::handler::pipewire::ipc::ipc::IPCHandler;
 use crate::handler::primary_worker::ManagerMessage;
 use enum_map::EnumMap;
 use futures::stream::{FuturesUnordered, StreamExt};
-use log::{debug, error};
+use log::{debug, error, warn};
 use pipecast_ipc::commands::{AudioConfiguration, PipewireCommandResponse};
 use pipecast_pipewire::tokio::sync::oneshot::Receiver;
-use pipecast_pipewire::{MediaClass, PipecastNode, PipewireReceiver, PipewireRunner};
+use pipecast_pipewire::{MediaClass, PipewireNode, PipewireReceiver, PipewireRunner};
 use pipecast_profile::{PhysicalDeviceDescriptor, Profile};
 use pipecast_shared::Mix;
 use std::collections::HashMap;
@@ -46,7 +46,8 @@ pub(crate) struct PipewireManager {
     // 'waking up' from being propagated through the entire node tree.
     pub(crate) wake_filters: HashMap<Ulid, Waker>,
 
-    node_list: Vec<String>,
+    // A list of physical nodes 
+    pub(crate) physical_nodes: Vec<PipewireNode>,
 }
 
 impl PipewireManager {
@@ -65,7 +66,7 @@ impl PipewireManager {
 
             wake_filters: HashMap::default(),
 
-            node_list: Default::default(),
+            physical_nodes: Default::default(),
         }
     }
 
@@ -115,7 +116,10 @@ impl PipewireManager {
         // immediately processing we wait a second to make sure the device doesn't immediately
         // disappear again as it's layout is being calculated, if this timer completes we should
         // be happy to assume the device configuration has stabilised.
-        let mut device_timers: HashMap<String, JoinHandle<()>> = HashMap::new();
+        let mut device_timers: HashMap<u32, JoinHandle<()>> = HashMap::new();
+        let mut discovered_devices: HashMap<u32, PipewireNode> = HashMap::new();
+
+
         let (device_ready_tx, mut device_ready_rx) = mpsc::channel(1024);
 
 
@@ -139,37 +143,50 @@ impl PipewireManager {
                 }
                 Some(msg) = recv_async.recv() => {
                     match msg {
-                        PipewireReceiver::DeviceAdded(name) => {
+                        PipewireReceiver::DeviceAdded(node) => {
                             // Only do this if we don't already have a timer
-                            if device_timers.contains_key(&name) {
+                            if device_timers.contains_key(&node.node_id) {
                                 continue;
                             }
 
                             // We need the name, and a message callback for when we're done
-                            let name_clone = name.clone();
                             let done = device_ready_tx.clone();
 
                             // Spawn up a simple task that simply waits a second
                             let handle = tokio::spawn(async move {
                                 sleep(Duration::from_secs(1)).await;
-                                let _ = done.send(name_clone).await;
+                                let _ = done.send(node.node_id).await;
                             });
-                            device_timers.insert(name, handle);
+                            device_timers.insert(node.node_id, handle);
+                            discovered_devices.insert(node.node_id, node);
                         }
-                        PipewireReceiver::DeviceRemoved(name) => {
-                            if let Some(handle) = device_timers.remove(&name) {
-                                debug!("Device Disappeared During Grace Period: {}", name);
+                        PipewireReceiver::DeviceRemoved(id) => {
+                            if let Some(handle) = device_timers.remove(&id) {
+                                debug!("Device Disappeared During Grace Period: {}", id);
+                                discovered_devices.remove(&id);
                                 handle.abort();
                             } else {
-                                debug!("Natural Device Removal");
+                                debug!("Natural Device Removal: {}", id);
+                                self.physical_nodes.retain(|node| node.node_id != id);
                             }
+                        }
+                        PipewireReceiver::ManagedLinkDropped(source, target) => {
+                            debug!("Managed Link Removed: {:?} {:?}", source, target);
                         }
                         _ => {}
                     }
                 }
-                Some(device) = device_ready_rx.recv() => {
+                Some(node_id) = device_ready_rx.recv() => {
                     // A device has been sat here for a second without being removed
-                    debug!("Device Found: {}", device);
+                    
+                    if let Some(device) = discovered_devices.remove(&node_id) {
+                        debug!("Device Found: {:?}, Type: {:?}", device.description, device.node_class);
+                        device_timers.remove(&node_id);
+                        
+                        self.physical_nodes.push(device);
+                    } else {
+                        panic!("Got a Timer Ready for non-existent Node");
+                    }
                 }
                 Some(_) = wakers.next() => {
 
