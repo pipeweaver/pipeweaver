@@ -370,21 +370,6 @@ pub struct LinkStoreMap {
     pub(crate) destination_port_id: u32,
 }
 
-pub struct LinkStore {
-    pub(crate) pw_id: Option<u32>,
-
-    pub(crate) link: Link,
-    pub(crate) _listener: LinkListener,
-
-    pub(crate) source: LinkType,
-    pub(crate) src_port_id: usize,
-
-    pub(crate) destination: LinkType,
-    pub(crate) dest_port_id: usize,
-
-    pub(crate) ready_sender: Option<Sender<()>>,
-}
-
 #[derive(Debug, Enum, EnumIter, Copy, Clone, PartialEq)]
 pub(crate) enum PortLocation {
     LEFT,
