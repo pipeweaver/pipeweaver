@@ -127,7 +127,7 @@ impl PipewireManager {
                             };
 
                             // Attach the Original Node to Tree...
-                            let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(source, destination));
+                            //let _ = self.pipewire.send_message(PipewireMessage::CreateDeviceLink(source, destination));
 
                             // 1 the links for the wake node...
                             let (source, destination) = match waker.class {

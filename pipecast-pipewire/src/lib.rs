@@ -23,7 +23,7 @@ type Receiver = mpsc::Receiver<PipewireMessage>;
 pub enum PipewireMessage {
     CreateDeviceNode(NodeProperties),
     CreateFilterNode(FilterProperties),
-    CreateDeviceLink(LinkType, LinkType),
+    CreateDeviceLink(LinkType, LinkType, Option<oneshot::Sender<()>>),
 
     RemoveDeviceNode(Ulid),
     RemoveFilterNode(Ulid),

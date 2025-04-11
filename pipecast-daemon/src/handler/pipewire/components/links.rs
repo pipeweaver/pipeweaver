@@ -1,6 +1,7 @@
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::Result;
 use pipecast_pipewire::{LinkType, PipewireMessage};
+use tokio::sync::oneshot;
 use ulid::Ulid;
 
 /// So this trait is INCREDIBLY verbose, I could simply just use LinkType and have a single function
@@ -113,8 +114,12 @@ trait LinkManagementLocal {
 
 impl LinkManagementLocal for PipewireManager {
     async fn create_link(&self, source: LinkType, target: LinkType) -> Result<()> {
-        let message = PipewireMessage::CreateDeviceLink(source, target);
-        self.pipewire.send_message(message)
+        let (send, recv) = oneshot::channel();
+        let message = PipewireMessage::CreateDeviceLink(source, target, Some(send));
+        self.pipewire.send_message(message)?;
+        recv.await?;
+
+        Ok(())
     }
 
     async fn remove_link(&self, source: LinkType, target: LinkType) -> Result<()> {

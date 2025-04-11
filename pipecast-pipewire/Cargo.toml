@@ -13,5 +13,7 @@ pipewire = { git = "https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.gi
 tokio = "1.43.0"
 
 enum-map = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 
 parking_lot = "0.12.3"

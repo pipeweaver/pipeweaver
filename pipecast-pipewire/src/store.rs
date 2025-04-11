@@ -1,7 +1,9 @@
 use crate::manager::FilterData;
 use crate::registry::{Direction, RegistryDevice, RegistryLink, RegistryNode};
 use crate::{FilterValue, LinkType, PipecastNode};
-use log::debug;
+use anyhow::bail;
+use enum_map::{Enum, EnumMap};
+use log::{debug, error};
 use parking_lot::RwLock;
 use pipewire::filter::{Filter, FilterListener, FilterPort};
 use pipewire::link::{Link, LinkListener};
@@ -11,14 +13,18 @@ use pipewire::proxy::ProxyListener;
 use pipewire::spa::param::ParamType;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use std::rc::Rc;
+use std::str::FromStr;
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 use tokio::sync::oneshot::Sender;
 use ulid::Ulid;
 
 pub struct Store {
     managed_nodes: HashMap<Ulid, NodeStore>,
     managed_filters: HashMap<Ulid, FilterStore>,
-    managed_links: HashMap<Ulid, LinkStore>,
+    managed_links: HashMap<Ulid, LinkGroupStore>,
 
     unmanaged_devices: HashMap<u32, RegistryDevice>,
     unmanaged_links: HashMap<u32, RegistryLink>,
@@ -69,10 +75,22 @@ impl Store {
         self.unmanaged_devices.get_mut(&id)
     }
 
-    pub fn unamanged_node_get(&mut self, id: u32) -> Option<&mut RegistryNode> {
+    pub fn unamanged_node_get_mut(&mut self, id: u32) -> Option<&mut RegistryNode> {
         // We need to find this node inside the unmanaged devices..
         for device in self.unmanaged_devices.values_mut() {
             for (node_id, node) in &mut device.nodes {
+                if *node_id == id {
+                    return Some(node);
+                }
+            }
+        }
+        None
+    }
+
+    pub fn unamanged_node_get(&self, id: u32) -> Option<&RegistryNode> {
+        // We need to find this node inside the unmanaged devices..
+        for device in self.unmanaged_devices.values() {
+            for (node_id, node) in &device.nodes {
                 if *node_id == id {
                     return Some(node);
                 }
@@ -116,13 +134,18 @@ impl Store {
             .enum_params(0, Some(ParamType::PortConfig), 0, u32::MAX);
     }
 
-    pub fn node_set_ports(&mut self, id: Ulid, is_input: bool, ports: Vec<u32>) {
+    pub fn node_add_port(&mut self, id: Ulid, location: PortLocation, port_id: u32) {
         let node = self.managed_nodes.get_mut(&id).expect("Broke");
-        if is_input {
-            node.input_ports = ports;
-        } else {
-            node.output_ports = ports;
+        node.port_map[location] = Some(port_id);
+
+        for location in PortLocation::iter() {
+            if node.port_map[location].is_none() {
+                return;
+            }
         }
+
+        // If we get here, all our ports have been set, trigger the ready event
+        self.node_ports_ready(id);
     }
 
     pub fn node_ports_ready(&mut self, id: Ulid) {
@@ -177,16 +200,47 @@ impl Store {
         filter.data.write().callback.set_property(key, value);
     }
 
-    pub fn link_add(&mut self, id: Ulid, link: LinkStore) {
-        self.managed_links.insert(id, link);
+    pub fn link_add_group(&mut self, id: Ulid, group: LinkGroupStore) {
+        self.managed_links.insert(id, group);
     }
 
-    pub fn link_ready(&mut self, id: Ulid) {
+    pub fn link_ready(&mut self, id: Ulid, link_id: Ulid, pw_id: u32) {
         if let Some(link) = self.managed_links.get_mut(&id) {
-            let sender = link.ready_sender.take();
-            if let Some(sender) = sender {
-                let _ = sender.send(());
+            for port in PortLocation::iter() {
+                if let Some(port) = &mut link.links[port] {
+                    if port.internal_id == link_id {
+                        port.pw_id = Some(pw_id);
+                    }
+                }
             }
+        }
+
+        // Regardless of what's happened here, perform a ready check on the parent
+        self.link_ready_check(id);
+    }
+
+    pub fn link_ready_check(&mut self, id: Ulid) {
+        if let Some(link) = self.managed_links.get_mut(&id) {
+            if link.ready_sender.is_none() {
+                return;
+            }
+
+            // Iterate over all the links, check if they all have a pw_id assigned
+            for port in PortLocation::iter() {
+                if let Some(port) = &link.links[port] {
+                    if port.pw_id.is_none() {
+                        return;
+                    }
+                } else {
+                    // This port isn't even configured (eh?)
+                    error!("Link Missing Port Configuration: {}", id);
+                    return;
+                }
+            }
+
+            // Ok, we get here, we're ready
+            let sender = link.ready_sender.take();
+            let _ = sender.unwrap().send(());
         }
     }
 
@@ -247,8 +301,6 @@ impl Store {
     }
 }
 
-// This works, but is horrifically messy..
-// TODO: CLEAN THIS UP.
 pub(crate) struct NodeStore {
     pub(crate) pw_id: Option<u32>,
 
@@ -259,10 +311,10 @@ pub(crate) struct NodeStore {
     pub(crate) proxy_listener: ProxyListener,
     pub(crate) listener: NodeListener,
 
-    // TODO: These should be a map of Position -> Id
+    // Nodes will always have inputs and outputs which directly link together, so we
+    // don't need to track each side, we just need the ID and Location
+    pub(crate) port_map: EnumMap<PortLocation, Option<u32>>,
     pub(crate) ports_ready: bool,
-    pub(crate) input_ports: Vec<u32>,
-    pub(crate) output_ports: Vec<u32>,
 
     pub(crate) ready_sender: Option<Option<Sender<()>>>,
 }
@@ -275,6 +327,9 @@ pub struct FilterStore {
 
     /// The PipeCast Ulid Identifier
     pub(crate) id: Ulid,
+
+    // This maintains a general port map of location -> index
+    pub(crate) port_map: EnumMap<Direction, EnumMap<PortLocation, u32>>,
 
     /// Details of the ports assigned to this filter
     pub(crate) input_ports: Rc<RefCell<Vec<FilterPort>>>,
@@ -291,7 +346,33 @@ pub struct FilterStore {
     pub data: Rc<RwLock<FilterData>>,
 }
 
+pub struct LinkGroupStore {
+    pub(crate) source: LinkType,
+    pub(crate) destination: LinkType,
+
+    pub(crate) links: EnumMap<PortLocation, Option<LinkStoreMap>>,
+
+    pub(crate) ready_sender: Option<Sender<()>>,
+}
+
+pub struct LinkStoreMap {
+    pub(crate) pw_id: Option<u32>,
+
+    /// An internal ID so we can find this link
+    pub(crate) internal_id: Ulid,
+
+    /// Variables needed to keep this link alive
+    pub(crate) link: Link,
+    pub(crate) _listener: LinkListener,
+
+    /// Internal Port Index Mapping
+    pub(crate) source_port_id: u32,
+    pub(crate) destination_port_id: u32,
+}
+
 pub struct LinkStore {
+    pub(crate) pw_id: Option<u32>,
+
     pub(crate) link: Link,
     pub(crate) _listener: LinkListener,
 
@@ -302,6 +383,33 @@ pub struct LinkStore {
     pub(crate) dest_port_id: usize,
 
     pub(crate) ready_sender: Option<Sender<()>>,
+}
+
+#[derive(Debug, Enum, EnumIter, Copy, Clone, PartialEq)]
+pub(crate) enum PortLocation {
+    LEFT,
+    RIGHT,
+}
+
+impl Display for PortLocation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PortLocation::LEFT => write!(f, "FL"),
+            PortLocation::RIGHT => write!(f, "FR")
+        }
+    }
+}
+
+impl FromStr for PortLocation {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "FL" => Ok(Self::LEFT),
+            "FR" => Ok(Self::RIGHT),
+            _ => bail!("Unknown Channel")
+        }
+    }
 }
 
 // #[derive(Debug)]

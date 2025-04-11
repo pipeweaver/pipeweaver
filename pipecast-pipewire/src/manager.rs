@@ -1,5 +1,5 @@
 use crate::registry::{PipewireRegistry, RegistryLink};
-use crate::store::{FilterStore, LinkStore, NodeStore, Store};
+use crate::store::{FilterStore, LinkGroupStore, LinkStore, LinkStoreMap, NodeStore, PortLocation, Store};
 use crate::{registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties, PipecastNode};
 use crate::{MediaClass, PWReceiver, PipewireMessage};
 use anyhow::anyhow;
@@ -21,8 +21,11 @@ use pipewire::spa::utils::Direction;
 use pipewire::{context, main_loop};
 use std::cell::RefCell;
 
+use enum_map::{enum_map, EnumMap};
 use parking_lot::RwLock;
 use std::rc::Rc;
+use std::str::FromStr;
+use strum::IntoEnumIterator;
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::Sender;
 use ulid::Ulid;
@@ -164,80 +167,53 @@ impl PipewireManager {
                 if let Some(pod) = _param {
                     let pod = PodDeserializer::deserialize_any_from(pod.as_bytes()).map(|(_, v)| v);
 
-                    if let Ok(value) = pod {
-                        if let Value::Object(object) = value {
-                            if object.id == SPA_PARAM_PortConfig {
-                                debug!("[{}] Port configuration Received", listener_id);
-                                let prop = object
-                                    .properties
-                                    .iter()
-                                    .find(|p| p.key == SPA_PARAM_PORT_CONFIG_format);
+                    if let Ok(Value::Object(object)) = pod {
+                        if object.id == SPA_PARAM_PortConfig {
+                            debug!("[{}] Port configuration Received", listener_id);
+                            let prop = object
+                                .properties
+                                .iter()
+                                .find(|p| p.key == SPA_PARAM_PORT_CONFIG_format);
 
-                                // Format is optional
-                                if let Some(prop) = prop {
-                                    if let Value::Object(object) = &prop.value {
-                                        // Value is of type SPA_TYPE_OBJECT_Format
-                                        let prop = object
-                                            .properties
-                                            .iter()
-                                            .find(|p| p.key == SPA_FORMAT_AUDIO_position);
 
-                                        if let Some(prop) = prop {
-                                            // Fucking hell, Now we need to grab the ValueArray
-                                            if let Value::ValueArray(ValueArray::Id(array)) =
-                                                &prop.value
-                                            {
-                                                let mut ports = vec![];
+                            // Format is optional
+                            if let Some(prop) = prop {
+                                if let Value::Object(object) = &prop.value {
+                                    // Value is of type SPA_TYPE_OBJECT_Format
+                                    let prop = object
+                                        .properties
+                                        .iter()
+                                        .find(|p| p.key == SPA_FORMAT_AUDIO_position);
 
-                                                for (index, value) in array.iter().enumerate() {
-                                                    if value.0 == SPA_AUDIO_CHANNEL_FL {
-                                                        debug!(
-                                                            "[{}][{}] Front Left",
-                                                            listener_id, index
-                                                        );
-                                                    }
-                                                    if value.0 == SPA_AUDIO_CHANNEL_FR {
-                                                        debug!(
-                                                            "[{}][{}] Front Right",
-                                                            listener_id, index
-                                                        );
-                                                    }
-
-                                                    ports.push(value.0);
+                                    if let Some(prop) = prop {
+                                        // Fucking hell, I hate how deep this is getting
+                                        if let Value::ValueArray(ValueArray::Id(array)) =
+                                            &prop.value
+                                        {
+                                            let mut store = listener_param_store.borrow_mut();
+                                            for (index, value) in array.iter().enumerate() {
+                                                let index = index as u32;
+                                                if value.0 == SPA_AUDIO_CHANNEL_FL {
+                                                    store.node_add_port(listener_id, PortLocation::LEFT, index);
                                                 }
-
-                                                // In our case, we need to set both the inputs and outputs to match.
-                                                listener_param_store.borrow_mut().node_set_ports(
-                                                    listener_id,
-                                                    true,
-                                                    ports.clone(),
-                                                );
-                                                listener_param_store.borrow_mut().node_set_ports(
-                                                    listener_id,
-                                                    false,
-                                                    ports,
-                                                );
-
-                                                // Now we can flag ourselves as ready
-                                                listener_param_store
-                                                    .borrow_mut()
-                                                    .node_ports_ready(listener_id);
-
-                                                return;
+                                                if value.0 == SPA_AUDIO_CHANNEL_FR {
+                                                    store.node_add_port(listener_id, PortLocation::RIGHT, index);
+                                                }
                                             }
+                                            return;
                                         }
                                     }
                                 }
                             }
-
-                            error!("Parameter Parse Error, Message was not of expected type");
-                            debug!("Object Id: {}", object.id);
-                            for property in object.properties {
-                                debug!("Key: {}, Value: {:?}", property.key, property.value);
-                            }
-                        } else {
-                            error!("Unexpected Value Type");
                         }
+
+                        error!("Parameter Parse Error, Message was not of expected type");
+                        debug!("Object Id: {}", object.id);
+                        for property in object.properties {
+                            debug!("Key: {}, Value: {:?}", property.key, property.value);
+                        }
+                    } else {
+                        error!("Unexpected Value Type");
                     }
                 }
             })
@@ -251,9 +227,8 @@ impl PipewireManager {
             listener,
             proxy_listener,
 
+            port_map: Default::default(),
             ports_ready: false,
-            input_ports: vec![],
-            output_ports: vec![],
 
             ready_sender: Some(properties.ready_sender),
         };
@@ -292,27 +267,41 @@ impl PipewireManager {
         let input_ports = Rc::new(RefCell::new(vec![]));
         let output_ports = Rc::new(RefCell::new(vec![]));
 
+        let mut input_port_map = EnumMap::default();
+        let mut output_port_map = EnumMap::default();
+
         if props.class == MediaClass::Source || props.class == MediaClass::Duplex {
             debug!("[{}] Registering Input Ports", props.filter_id);
-            for i in ["FL", "FR"] {
+            for (index, port) in PortLocation::iter().enumerate() {
                 input_ports.borrow_mut().push(filter.add_port(
                     Direction::Input,
                     PortFlags::MAP_BUFFERS,
-                    properties! {*FORMAT_DSP => "32 bit float mono audio", *PORT_NAME => format!("input_{}", i), *AUDIO_CHANNEL => i},
+                    properties! {
+                        *FORMAT_DSP => "32 bit float mono audio",
+                        *PORT_NAME => format!("input_{}", port),
+                        *AUDIO_CHANNEL => format!("{}", port)
+                    },
                     &mut params,
                 ).expect("Filter Input Creation Failed"));
+                input_port_map[port] = index as u32;
             }
         }
 
         if props.class == MediaClass::Sink || props.class == MediaClass::Duplex {
             debug!("[{}] Registering Output Ports", props.filter_id);
-            for i in ["FL", "FR"] {
+
+            for (index, port) in PortLocation::iter().enumerate() {
                 output_ports.borrow_mut().push(filter.add_port(
                     Direction::Output,
                     PortFlags::MAP_BUFFERS,
-                    properties! {*FORMAT_DSP => "32 bit float mono audio", *PORT_NAME => format!("output_{}", i), *AUDIO_CHANNEL => i},
+                    properties! {
+                        *FORMAT_DSP => "32 bit float mono audio",
+                        *PORT_NAME => format!("output_{}", port),
+                        *AUDIO_CHANNEL => format!("{}", port)
+                    },
                     &mut params,
-                ).expect("Filter Output Creation Failed"));
+                ).expect("Filter Input Creation Failed"));
+                output_port_map[port] = index as u32;
             }
         }
 
@@ -389,6 +378,11 @@ impl PipewireManager {
             _listener: listener,
             _filter: filter,
 
+            port_map: enum_map! {
+                registry::Direction::In => input_port_map,
+                registry::Direction::Out=> output_port_map,
+            },
+
             input_ports,
             output_ports,
 
@@ -407,99 +401,90 @@ impl PipewireManager {
         self.store.borrow_mut().filter_set_parameter(id, key, value);
     }
 
-    pub fn create_link(&mut self, source: LinkType, destination: LinkType) {
-        // Locate the Source Node..
-        let src = self.get_ports(source);
-        let dest = self.get_ports(destination);
+    pub fn create_link(&mut self, source: LinkType, dest: LinkType, sender: Option<Sender<()>>) {
+        let mut parent_id = Ulid::new();
+        let mut port_map: EnumMap<PortLocation, Option<LinkStoreMap>> = Default::default();
 
-        // TODO: Fix this too
-        // Still making assumptions about the Ports and their mapping, we should check for the
-        // canonical setup.
-        for i in 0..2 {
-            let id = Ulid::new();
+        // Rewrite, lets go!
+        for port in PortLocation::iter() {
+            // Firstly, create an id for this list
+            let link_id = Ulid::new();
 
-            // Check whether we have a mono source, if so we need to map it to stereo
-            let src_port = if i == 1 && src.2 == 1 {
-                0
-            } else {
-                i
-            };
+            // Next, obtain the source and destination port indexes
+            let (src_id, src_index) = self.get_port(source, registry::Direction::Out, port);
+            let (tgt_id, tgt_index) = self.get_port(dest, registry::Direction::In, port);
 
-            // Do the same for the Destination
-            let dest_port = if i == 1 && dest.1 == 1 {
-                0
-            } else {
-                i
-            };
+            // Now we simply create the link
+            let (link, lis) = self.create_port_link(link_id, parent_id, src_id, src_index, tgt_id, tgt_index);
 
-            let (link, listener) = self.create_port_link(id, src.0, src_port as u32, dest.0, dest_port as u32);
-            let (tx, mut rx) = oneshot::channel();
-
-            let store = LinkStore {
+            // Create the LinkStore Mapping for this link
+            let store = LinkStoreMap {
+                pw_id: None,
+                internal_id: link_id,
                 link,
-                _listener: listener,
-
-                source,
-                src_port_id: i,
-
-                destination,
-                dest_port_id: i,
-
-                ready_sender: Some(tx),
+                _listener: lis,
+                source_port_id: src_index,
+                destination_port_id: tgt_index,
             };
-            self.store.borrow_mut().link_add(id, store);
 
-            let mut i = 0;
-            // while rx.try_recv().is_err() {
-            //     i += 1;
-            //     if i == 10 {
-            //         break;
-            //     }
-            //     sleep(Duration::from_millis(5));
-            // }
-            // if i == 10 {
-            //     debug!("Timeout Creating Listener..");
-            // }
+            port_map[port] = Some(store);
         }
+
+        // Ok, we're done here, create the main store object
+        let group = LinkGroupStore {
+            source,
+            destination: dest,
+            links: port_map,
+            ready_sender: sender,
+        };
+
+        self.store.borrow_mut().link_add_group(parent_id, group);
     }
 
     pub fn remove_link(&mut self, source: LinkType, destination: LinkType) {
         self.store.borrow_mut().link_remove(source, destination);
     }
 
-    fn get_ports(&self, link: LinkType) -> (u32, usize, usize) {
-        // TODO: Fix this
-        // We should instead be correctly mapping the FL, FR and MONO ports here, rather than
-        // just hoping they line up
+    fn get_port(&self, link: LinkType, direction: registry::Direction, location: PortLocation) -> (u32, u32) {
+        // Ok, simple enough, pull out the relevant type, and get the port at location
+        let store = self.store.borrow();
         match link {
             LinkType::Node(id) => {
-                let store = self.store.borrow();
                 let node = store.node_get(id).unwrap();
 
                 let id = node.pw_id.unwrap();
-                let input_port_count = node.input_ports.len();
-                let output_port_count = node.output_ports.len();
+                let port = node.port_map[location].unwrap();
 
-                (id, input_port_count, output_port_count)
+                (id, port)
             }
             LinkType::Filter(id) => {
-                let store = self.store.borrow();
                 let filter = store.filter_get(id).unwrap();
 
                 let id = filter.pw_id.unwrap();
-                let input_port_count = filter.input_ports.borrow().len();
-                let output_port_count = filter.output_ports.borrow().len();
+                let port = filter.port_map[direction][location];
 
-                (id, input_port_count, output_port_count)
+                (id, port)
             }
             LinkType::UnmanagedNode(id) => {
-                let mut store = self.store.borrow_mut();
                 let node = store.unamanged_node_get(id).expect("Invalid NodeID");
 
-                let input_port_count = node.ports[registry::Direction::In].len();
-                let output_port_count = node.ports[registry::Direction::Out].len();
+                let ports = &node.ports[direction];
 
-                (id, input_port_count, output_port_count)
+                // Iterate over the ports, try and find the location
+                for (index, port) in ports.iter() {
+                    if let Ok(port_location) = PortLocation::from_str(&port.channel) {
+                        if port_location == location {
+                            return (id, *index);
+                        }
+                    }
+                    // Check if this is a mono device and return this ID for all port request
+                    if &port.channel == "MONO" {
+                        return (id, *index);
+                    }
+                }
+
+                // If we get here, we didn't find anything, this shouldn't happen!
+                panic!("Requested Unmanaged Node is Neither Stereo or Mono");
             }
         }
     }
@@ -507,6 +492,7 @@ impl PipewireManager {
     fn create_port_link(
         &self,
         id: Ulid,
+        parent_id: Ulid,
         src_node: u32,
         src_port: u32,
         dest_node: u32,
@@ -537,7 +523,7 @@ impl PipewireManager {
         let link_listener = link.add_listener_local().info(move |link| {
             if let LinkState::Active = link.state() {
                 // We're alive, let the store know
-                listener_info_store.borrow_mut().link_ready(id);
+                listener_info_store.borrow_mut().link_ready(parent_id, id, link.id());
             }
         }).register();
 
@@ -601,8 +587,8 @@ pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Res
             PipewireMessage::CreateFilterNode(props) => {
                 manager.borrow_mut().create_filter(props);
             }
-            PipewireMessage::CreateDeviceLink(source, destination) => {
-                manager.borrow_mut().create_link(source, destination);
+            PipewireMessage::CreateDeviceLink(source, destination, sender) => {
+                manager.borrow_mut().create_link(source, destination, sender);
             }
 
             PipewireMessage::RemoveDeviceNode(id) => {
