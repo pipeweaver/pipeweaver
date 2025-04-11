@@ -244,7 +244,7 @@ impl NodeManagementLocal for PipewireManager {
         props.ready_sender = Some(send);
 
         let message = PipewireMessage::CreateDeviceNode(props);
-        self.pipewire.send_message(message)?;
+        self.pipewire().send_message(message)?;
         recv.await?;
 
         Ok(())
@@ -411,7 +411,7 @@ impl NodeManagementLocal for PipewireManager {
 
     async fn node_pw_remove(&mut self, id: Ulid) -> Result<()> {
         let message = PipewireMessage::RemoveDeviceNode(id);
-        self.pipewire.send_message(message)?;
+        self.pipewire().send_message(message)?;
         Ok(())
     }
 

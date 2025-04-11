@@ -1,12 +1,12 @@
-use crate::registry::{PipewireRegistry, RegistryLink};
+use crate::registry::PipewireRegistry;
 use crate::store::{FilterStore, LinkGroupStore, LinkStoreMap, NodeStore, PortLocation, Store};
-use crate::{registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties, PipecastNode};
+use crate::{registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties, PipecastNode, PipewireReceiver};
 use crate::{MediaClass, PWReceiver, PipewireMessage};
 use anyhow::anyhow;
 use log::{debug, error};
 use pipewire::core::Core;
-use pipewire::filter::{Filter, FilterFlags, FilterPort, FilterState, PortFlags};
-use pipewire::keys::{APP_ICON_NAME, APP_ID, APP_NAME, AUDIO_CHANNEL, AUDIO_CHANNELS, CLIENT_ID, CLIENT_NAME, DEVICE_DESCRIPTION, DEVICE_ICON_NAME, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_ALWAYS_PROCESS, NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_ID, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_DIRECTION, PORT_MONITOR, PORT_NAME};
+use pipewire::filter::{Filter, FilterFlags, FilterState, PortFlags};
+use pipewire::keys::{APP_ICON_NAME, APP_ID, APP_NAME, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_ALWAYS_PROCESS, NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_ID, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_DIRECTION, PORT_MONITOR, PORT_NAME};
 use pipewire::link::{Link, LinkListener, LinkState};
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
@@ -25,6 +25,7 @@ use enum_map::{enum_map, EnumMap};
 use parking_lot::RwLock;
 use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::mpsc;
 use strum::IntoEnumIterator;
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::Sender;
@@ -41,17 +42,19 @@ struct PipewireManager {
     registry: PipewireRegistry,
 
     store: Rc<RefCell<Store>>,
+    callback_tx: mpsc::Sender<PipewireReceiver>,
 }
 
 impl PipewireManager {
-    pub fn new(core: Core, registry: Registry) -> Self {
-        let store = Rc::new(RefCell::new(Store::new()));
+    pub fn new(core: Core, registry: Registry, callback_tx: mpsc::Sender<PipewireReceiver>) -> Self {
+        let store = Rc::new(RefCell::new(Store::new(callback_tx.clone())));
         let registry = PipewireRegistry::new(registry, store.clone());
 
         Self {
             core,
             registry,
             store,
+            callback_tx,
         }
     }
 
@@ -466,7 +469,7 @@ impl PipewireManager {
                 (id, port)
             }
             LinkType::UnmanagedNode(id) => {
-                let node = store.unamanged_node_get(id).expect("Invalid NodeID");
+                let node = store.unmanaged_node_get(id).expect("Invalid NodeID");
 
                 let ports = &node.ports[direction];
 
@@ -529,13 +532,9 @@ impl PipewireManager {
 
         (link, link_listener)
     }
-
-    fn get_usable_nodes(&self) -> Vec<PipecastNode> {
-        self.store.borrow().get_usable_nodes()
-    }
 }
 
-pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Result<()>>) {
+pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Result<()>>, callback_tx: mpsc::Sender<PipewireReceiver>) {
     debug!("Initialising Pipewire..");
 
     let Ok(mainloop) = main_loop::MainLoop::new(None) else {
@@ -573,7 +572,7 @@ pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Res
     };
 
 
-    let manager = Rc::new(RefCell::new(PipewireManager::new(core, registry)));
+    let manager = Rc::new(RefCell::new(PipewireManager::new(core, registry, callback_tx)));
 
     let receiver_clone = mainloop.clone();
     let _receiver = pw_rx.attach(mainloop.loop_(), {
@@ -601,11 +600,6 @@ pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Res
             PipewireMessage::RemoveFilterNode(ulid) => {
                 manager.borrow_mut().remove_filter(ulid);
             }
-
-            PipewireMessage::GetUsableNodes(sender) => {
-                sender.send(manager.borrow().get_usable_nodes()).expect("Broken Response Sender!");
-            }
-
             PipewireMessage::SetFilterValue(id, key, value) => {
                 manager.borrow_mut().set_filter_value(id, key, value)
             }

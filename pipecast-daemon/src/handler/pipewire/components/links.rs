@@ -116,7 +116,7 @@ impl LinkManagementLocal for PipewireManager {
     async fn create_link(&self, source: LinkType, target: LinkType) -> Result<()> {
         let (send, recv) = oneshot::channel();
         let message = PipewireMessage::CreateDeviceLink(source, target, Some(send));
-        self.pipewire.send_message(message)?;
+        self.pipewire().send_message(message)?;
         recv.await?;
 
         Ok(())
@@ -124,6 +124,6 @@ impl LinkManagementLocal for PipewireManager {
 
     async fn remove_link(&self, source: LinkType, target: LinkType) -> Result<()> {
         let message = PipewireMessage::RemoveDeviceLink(source, target);
-        self.pipewire.send_message(message)
+        self.pipewire().send_message(message)
     }
 }

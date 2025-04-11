@@ -1,6 +1,6 @@
 use crate::manager::FilterData;
 use crate::registry::{Direction, RegistryDevice, RegistryLink, RegistryNode};
-use crate::{FilterValue, LinkType, PipecastNode};
+use crate::{FilterValue, LinkType, PipecastNode, PipewireReceiver};
 use anyhow::bail;
 use enum_map::{Enum, EnumMap};
 use log::{debug, error};
@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::mpsc;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use tokio::sync::oneshot::Sender;
@@ -27,14 +28,19 @@ pub struct Store {
     managed_links: HashMap<Ulid, LinkGroupStore>,
 
     unmanaged_devices: HashMap<u32, RegistryDevice>,
+    unmanaged_nodes: HashMap<u32, RegistryNode>,
     unmanaged_links: HashMap<u32, RegistryLink>,
 
+    usable_nodes: Vec<u32>,
+
     link_listeners: Vec<LinkListener>,
+
+    callback_tx: mpsc::Sender<PipewireReceiver>,
 
 }
 
 impl Store {
-    pub fn new() -> Self {
+    pub fn new(callback_tx: mpsc::Sender<PipewireReceiver>) -> Self {
         Self {
             // core,
             managed_nodes: HashMap::new(),
@@ -43,8 +49,12 @@ impl Store {
 
             unmanaged_devices: HashMap::new(),
             unmanaged_links: HashMap::new(),
+            unmanaged_nodes: HashMap::new(),
 
+            usable_nodes: vec![],
             link_listeners: vec![],
+
+            callback_tx,
         }
     }
 
@@ -75,28 +85,44 @@ impl Store {
         self.unmanaged_devices.get_mut(&id)
     }
 
-    pub fn unamanged_node_get_mut(&mut self, id: u32) -> Option<&mut RegistryNode> {
-        // We need to find this node inside the unmanaged devices..
-        for device in self.unmanaged_devices.values_mut() {
-            for (node_id, node) in &mut device.nodes {
-                if *node_id == id {
-                    return Some(node);
-                }
-            }
+    pub fn unmanaged_node_add(&mut self, id: u32, node: RegistryNode) {
+        if self.is_managed_node(id) {
+            return;
         }
-        None
+        self.unmanaged_nodes.insert(id, node);
+        self.unmanaged_node_check(id);
     }
 
-    pub fn unamanged_node_get(&self, id: u32) -> Option<&RegistryNode> {
-        // We need to find this node inside the unmanaged devices..
-        for device in self.unmanaged_devices.values() {
-            for (node_id, node) in &device.nodes {
-                if *node_id == id {
-                    return Some(node);
-                }
+    pub fn unmanaged_node_check(&mut self, id: u32) {
+        debug!("Checking Node: {}", id);
+        if let Some(node) = self.unmanaged_nodes.get(&id) {
+            debug!("Node Found: {:?}", node);
+
+            let is_usable = self.is_usable_node(id);
+            debug!("Is Usable: {}", is_usable);
+            if is_usable && !self.usable_nodes.contains(&id) {
+                self.usable_nodes.push(id);
+
+                let name = node.description.clone().unwrap_or(String::from("Unnamed"));
+                let _ = self.callback_tx.send(PipewireReceiver::DeviceAdded(name));
+                return;
+            }
+
+            if !is_usable && self.usable_nodes.contains(&id) {
+                self.usable_nodes.retain(|value| value != &id);
+                let name = node.description.clone().unwrap_or(String::from("Unnamed"));
+                let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(name));
+                return;
             }
         }
-        None
+    }
+
+    pub fn unmanaged_node_get_mut(&mut self, id: u32) -> Option<&mut RegistryNode> {
+        self.unmanaged_nodes.get_mut(&id)
+    }
+
+    pub fn unmanaged_node_get(&self, id: u32) -> Option<&RegistryNode> {
+        self.unmanaged_nodes.get(&id)
     }
 
     pub fn unmanaged_link_add(&mut self, id: u32, link: RegistryLink) {
@@ -258,47 +284,69 @@ impl Store {
         });
     }
 
-    /// This function returns a list of nodes which can be linked to and from inside PipeCast
-    pub fn get_usable_nodes(&self) -> Vec<PipecastNode> {
-        // Firstly, iterate over the devices, we need to peek into all of them to check nodes..
-        let mut pipecast_nodes: Vec<PipecastNode> = Vec::new();
+    pub fn is_usable_node(&self, id: u32) -> bool {
+        if let Some(node) = self.unmanaged_nodes.get(&id) {
+            debug!("{:?}", node);
 
-        for device in self.unmanaged_devices.values() {
-            for (node_id, node) in &device.nodes {
-                // We need to count the number of non-monitor ports on the input and output
-                let mut in_count = 0;
-                let mut out_count = 0;
-                for port in node.ports[Direction::In].values() {
-                    if !port.is_monitor {
-                        in_count += 1;
-                    }
-                }
-                for port in node.ports[Direction::Out].values() {
-                    if !port.is_monitor {
-                        out_count += 1;
-                    }
-                }
+            let mut in_count = 0;
+            let mut out_count = 0;
 
-                // In this instance, if we have more than 2 ports we can't easily link them
-                // together effectively, so we'll ignore this node, we'll also ignore it if there
-                // are NO ports at all!
-                if in_count > 2 || out_count > 2 || (in_count == 0 && out_count == 0) {
-                    continue;
-                }
+            for (direction, ports) in &node.ports {
+                let count = ports.values().filter(|port| !port.is_monitor).count();
 
-                // We get here, this node should be usable
-                pipecast_nodes.push(PipecastNode {
-                    node_id: *node_id,
-                    name: node.name.clone(),
-                    nickname: node.nickname.clone(),
-                    description: node.description.clone(),
-                    inputs: in_count,
-                    outputs: out_count,
-                });
+                match direction {
+                    Direction::In => in_count += count,
+                    Direction::Out => out_count += count,
+                }
             }
+
+            // We need at LEAST one valid channel, but no more than two in either direction
+            return (1..=2).contains(&in_count) || (1..=2).contains(&out_count);
         }
-        pipecast_nodes
+        false
     }
+
+    // This function returns a list of nodes which can be linked to and from inside PipeCast
+    // pub fn get_usable_nodes(&self) -> Vec<PipecastNode> {
+    //     // Firstly, iterate over the devices, we need to peek into all of them to check nodes..
+    //     let mut pipecast_nodes: Vec<PipecastNode> = Vec::new();
+    //
+    //     for device in self.unmanaged_devices.values() {
+    //         for (node_id, node) in &device.nodes {
+    //             // We need to count the number of non-monitor ports on the input and output
+    //             let mut in_count = 0;
+    //             let mut out_count = 0;
+    //             for port in node.ports[Direction::In].values() {
+    //                 if !port.is_monitor {
+    //                     in_count += 1;
+    //                 }
+    //             }
+    //             for port in node.ports[Direction::Out].values() {
+    //                 if !port.is_monitor {
+    //                     out_count += 1;
+    //                 }
+    //             }
+    //
+    //             // In this instance, if we have more than 2 ports we can't easily link them
+    //             // together effectively, so we'll ignore this node, we'll also ignore it if there
+    //             // are NO ports at all!
+    //             if in_count > 2 || out_count > 2 || (in_count == 0 && out_count == 0) {
+    //                 continue;
+    //             }
+    //
+    //             // We get here, this node should be usable
+    //             pipecast_nodes.push(PipecastNode {
+    //                 node_id: *node_id,
+    //                 name: node.name.clone(),
+    //                 nickname: node.nickname.clone(),
+    //                 description: node.description.clone(),
+    //                 inputs: in_count,
+    //                 outputs: out_count,
+    //             });
+    //         }
+    //     }
+    //     pipecast_nodes
+    // }
 }
 
 pub(crate) struct NodeStore {

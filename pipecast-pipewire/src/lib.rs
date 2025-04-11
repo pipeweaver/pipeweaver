@@ -29,10 +29,17 @@ pub enum PipewireMessage {
     RemoveFilterNode(Ulid),
     RemoveDeviceLink(LinkType, LinkType),
 
-    GetUsableNodes(oneshot::Sender<Vec<PipecastNode>>),
     SetFilterValue(Ulid, u32, FilterValue),
 
     Quit,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum PipewireReceiver {
+    Quit,
+
+    DeviceAdded(String),
+    DeviceRemoved(String),
 }
 
 pub struct NamingScheme {
@@ -49,7 +56,7 @@ pub struct PipewireRunner {
 }
 
 impl PipewireRunner {
-    pub fn new() -> Result<Self> {
+    pub fn new(callback_tx: mpsc::Sender<PipewireReceiver>) -> Result<Self> {
         // First, we need our pipewire messaging queue, so establish that here
         let (pw_tx, pw_rx) = pipewire::channel::channel();
         let (tx, rx) = mpsc::channel();
@@ -58,7 +65,7 @@ impl PipewireRunner {
         let (start_tx, mut start_rx) = oneshot::channel();
 
         // Next, spawn up the pipewire mainloop in a separate thread
-        let pipewire_handle = thread::spawn(|| run_pw_main_loop(pw_rx, start_tx));
+        let pipewire_handle = thread::spawn(|| run_pw_main_loop(pw_rx, start_tx, callback_tx));
 
         // Await a response from that thread to indicate we're ready to handle messages
         loop {

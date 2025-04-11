@@ -1,7 +1,7 @@
 use crate::store::Store;
 use enum_map::{Enum, EnumMap};
 use log::debug;
-use pipewire::keys::{APP_ID, APP_NAME, APP_PROCESS_ID, AUDIO_CHANNEL, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, LINK_ID, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, PORT_DIRECTION, PORT_ID, PORT_MONITOR, PORT_NAME};
+use pipewire::keys::{APP_ID, APP_NAME, APP_PROCESS_ID, AUDIO_CHANNEL, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_ID, LINK_ID, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, PORT_DIRECTION, PORT_ID, PORT_MONITOR, PORT_NAME};
 use pipewire::registry::Listener;
 use pipewire::registry::Registry;
 use pipewire::types::ObjectType;
@@ -56,6 +56,7 @@ impl PipewireRegistry {
                         }
                         ObjectType::Node => {
                             if let Some(props) = global.props {
+                                let factory_id = props.get(*FACTORY_ID);
                                 let device = props.get(*DEVICE_ID);
                                 let nick = props.get(*NODE_NICK);
                                 let desc = props.get(*NODE_DESCRIPTION);
@@ -65,7 +66,10 @@ impl PipewireRegistry {
                                 if let Some(device) = device.and_then(|s| s.parse::<u32>().ok()) {
                                     if let Some(device) = store.unmanaged_device_get(device) {
                                         let node = RegistryNode::new(nick, desc, name);
-                                        device.add_node(id, node);
+                                        device.add_node(id);
+
+                                        // We only send this node through if it has a device
+                                        store.unmanaged_node_add(id, node);
                                     }
                                 }
                             }
@@ -107,15 +111,20 @@ impl PipewireRegistry {
                                     false
                                 };
 
+                                //debug!("{:#?}", props);
+
                                 // We need to extract the NodeID and PortID from the data..
                                 if let Some(node_id) = node_id.and_then(|s| s.parse::<u32>().ok()) {
                                     if let Some(port_id) = pid.and_then(|s| s.parse::<u32>().ok()) {
-                                        if let Some(node) = store.unamanged_node_get_mut(node_id) {
+                                        if let Some(node) = store.unmanaged_node_get_mut(node_id) {
+                                            debug!("Adding Port {} to node {}, Id: {}", channel, node_id, id);
                                             node.add_port(
                                                 port_id,
                                                 direction,
                                                 RegistryPort::new(id, name, channel, is_monitor),
-                                            )
+                                            );
+
+                                            store.unmanaged_node_check(node_id);
                                         }
                                     }
                                 }
@@ -190,7 +199,7 @@ pub(crate) struct RegistryDevice {
     description: Option<String>,
     name: Option<String>,
 
-    pub(crate) nodes: HashMap<u32, RegistryNode>,
+    pub(crate) nodes: Vec<u32>,
 }
 
 impl RegistryDevice {
@@ -204,12 +213,12 @@ impl RegistryDevice {
             description,
             name,
 
-            nodes: HashMap::new(),
+            nodes: vec![],
         }
     }
 
-    pub fn add_node(&mut self, id: u32, node: RegistryNode) {
-        self.nodes.insert(id, node);
+    pub fn add_node(&mut self, id: u32) {
+        self.nodes.push(id);
     }
 }
 

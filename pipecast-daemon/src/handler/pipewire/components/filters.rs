@@ -47,7 +47,7 @@ impl FilterManagement for PipewireManager {
 
         let value = FilterValue::UInt8(volume);
         let message = PipewireMessage::SetFilterValue(id, 0, value);
-        let _ = self.pipewire.send_message(message);
+        let _ = self.pipewire().send_message(message);
 
         Ok(())
     }
@@ -70,7 +70,7 @@ impl FilterManagementLocal for PipewireManager {
         let (send, recv) = oneshot::channel();
 
         props.ready_sender = Some(send);
-        self.pipewire.send_message(PipewireMessage::CreateFilterNode(props))?;
+        self.pipewire().send_message(PipewireMessage::CreateFilterNode(props))?;
         recv.await?;
 
         Ok(())
@@ -78,7 +78,7 @@ impl FilterManagementLocal for PipewireManager {
 
     async fn filter_pw_remove(&self, id: Ulid) -> Result<()> {
         let message = PipewireMessage::RemoveFilterNode(id);
-        self.pipewire.send_message(message)
+        self.pipewire().send_message(message)
     }
 
     fn filter_volume_get_props(&self, name: String, id: Ulid) -> FilterProperties {
