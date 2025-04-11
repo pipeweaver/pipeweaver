@@ -2,6 +2,10 @@ use pipecast_pipewire::{FilterHandler, FilterProperty, FilterValue};
 
 const POWER_FACTOR: f32 = 3.8;
 
+// This buffer exists to optimise the 0% behaviour, .copy_from_slice is much faster than .fill
+const ZERO_BUFFER_SIZE: usize = 1024;
+static ZERO_BUFFER: [f32; ZERO_BUFFER_SIZE] = [0.0; ZERO_BUFFER_SIZE];
+
 pub struct VolumeFilter {
     volume: u8,
     volume_inner: f32,
@@ -23,6 +27,14 @@ impl VolumeFilter {
         Self {
             volume,
             volume_inner,
+        }
+    }
+
+    fn zero_output(output: &mut [f32]) {
+        if output.len() <= ZERO_BUFFER.len() {
+            output.copy_from_slice(&ZERO_BUFFER[..output.len()]);
+        } else {
+            output.fill(0.0);
         }
     }
 }
@@ -75,20 +87,27 @@ impl FilterHandler for VolumeFilter {
     }
 
     fn process_samples(&mut self, inputs: Vec<&mut [f32]>, mut outputs: Vec<&mut [f32]>) {
-        for (i, input) in inputs.iter().enumerate() {
-            if input.is_empty() || outputs[i].is_empty() {
-                continue;
+        match self.volume_inner {
+            1.0 => {
+                for (input, output) in inputs.iter().zip(outputs.iter_mut()) {
+                    if !input.is_empty() && !output.is_empty() {
+                        output.copy_from_slice(input);
+                    }
+                }
             }
-
-            // If we're at max volume, just pass through to the output
-            if self.volume_inner == 1. {
-                outputs[i].copy_from_slice(input);
-                continue;
+            0.0 => {
+                for output in outputs.iter_mut() {
+                    VolumeFilter::zero_output(output);
+                }
             }
-
-            // Otherwise, multiply the samples by the volume
-            for (index, sample) in input.iter().enumerate() {
-                outputs[i][index] = sample * self.volume_inner;
+            volume => {
+                for (input, output) in inputs.iter().zip(outputs.iter_mut()) {
+                    if !input.is_empty() && !output.is_empty() {
+                        for (out, &i) in output.iter_mut().zip(input.iter()) {
+                            *out = i * volume;
+                        }
+                    }
+                }
             }
         }
     }
