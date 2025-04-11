@@ -90,9 +90,7 @@ impl FilterHandler for VolumeFilter {
         match self.volume_inner {
             1.0 => {
                 for (input, output) in inputs.iter().zip(outputs.iter_mut()) {
-                    if !input.is_empty() && !output.is_empty() {
-                        output.copy_from_slice(input);
-                    }
+                    output.copy_from_slice(input);
                 }
             }
             0.0 => {
@@ -102,10 +100,8 @@ impl FilterHandler for VolumeFilter {
             }
             volume => {
                 for (input, output) in inputs.iter().zip(outputs.iter_mut()) {
-                    if !input.is_empty() && !output.is_empty() {
-                        for (out, &i) in output.iter_mut().zip(input.iter()) {
-                            *out = i * volume;
-                        }
+                    for (out, &i) in output.iter_mut().zip(input.iter()) {
+                        *out = i * volume;
                     }
                 }
             }
