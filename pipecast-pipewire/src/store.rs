@@ -286,8 +286,6 @@ impl Store {
 
     pub fn is_usable_node(&self, id: u32) -> bool {
         if let Some(node) = self.unmanaged_nodes.get(&id) {
-            debug!("{:?}", node);
-
             let mut in_count = 0;
             let mut out_count = 0;
 
