@@ -1,12 +1,13 @@
 use crate::handler::pipewire::components::filters::FilterManagement;
 use crate::handler::pipewire::components::links::LinkManagement;
+use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME};
 use anyhow::{anyhow, bail, Result};
 use enum_map::enum_map;
 use pipecast_pipewire::{MediaClass, NodeProperties, PipewireMessage};
 use pipecast_profile::{DeviceDescription, PhysicalSourceDevice, PhysicalTargetDevice, VirtualSourceDevice, VirtualTargetDevice};
-use pipecast_shared::{Mix, NodeType};
+use pipecast_shared::{Colour, Mix, NodeType};
 use strum::IntoEnumIterator;
 use tokio::sync::oneshot;
 use ulid::Ulid;
@@ -21,6 +22,7 @@ pub(crate) trait NodeManagement {
     async fn node_create(&mut self, node_type: NodeType, description: &DeviceDescription) -> Result<()>;
     async fn node_remove(&mut self, id: Ulid) -> Result<()>;
 
+    async fn node_set_colour(&mut self, id: Ulid, colour: Colour) -> Result<()>;
     fn get_target_node_count(&self) -> usize;
 
     /// Handle attaching a physical device to what should be a Physical Node
@@ -109,7 +111,6 @@ impl NodeManagement for PipewireManager {
         Ok(id)
     }
 
-
     async fn node_create(&mut self, node_type: NodeType, desc: &DeviceDescription) -> Result<()> {
         // Create the Node or Filter depending on the device
         match node_type {
@@ -122,6 +123,7 @@ impl NodeManagement for PipewireManager {
         Ok(())
     }
 
+
     async fn node_remove(&mut self, id: Ulid) -> Result<()> {
         // This is complicated, it depends purely on the node type and what we're trying to do here.
 
@@ -131,6 +133,19 @@ impl NodeManagement for PipewireManager {
                 NodeType::VirtualSource => self.node_remove_virtual_source(id).await?,
                 NodeType::PhysicalTarget => self.node_remove_physical_target(id).await?,
                 NodeType::VirtualTarget => self.node_remove_virtual_target(id).await?,
+            }
+        }
+        Ok(())
+    }
+
+    async fn node_set_colour(&mut self, id: Ulid, colour: Colour) -> Result<()> {
+        if let Some(node_type) = self.get_node_type(id) {
+            let err = anyhow!("Cannot Find Node");
+            match node_type {
+                NodeType::PhysicalSource => self.get_physical_source_mut(id).ok_or(err)?.description.colour = colour,
+                NodeType::PhysicalTarget => self.get_physical_target_mut(id).ok_or(err)?.description.colour = colour,
+                NodeType::VirtualSource => self.get_virtual_source_mut(id).ok_or(err)?.description.colour = colour,
+                NodeType::VirtualTarget => self.get_virtual_target_mut(id).ok_or(err)?.description.colour = colour,
             }
         }
         Ok(())

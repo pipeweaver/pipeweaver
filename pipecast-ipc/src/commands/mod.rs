@@ -1,6 +1,6 @@
 use json_patch::Patch;
 use pipecast_profile::Profile;
-use pipecast_shared::{Mix, MuteState, MuteTarget, NodeType};
+use pipecast_shared::{Colour, Mix, MuteState, MuteTarget, NodeType};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
@@ -43,6 +43,7 @@ pub enum DaemonCommand {}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PipeCastCommand {
     CreateNode(NodeType, String),
+    SetNodeColour(Ulid, Colour),
     RemoveNode(Ulid),
 
     SetSourceVolume(Ulid, Mix, u8),
