@@ -297,6 +297,11 @@ impl Store {
 
     pub fn is_usable_node(&self, id: u32) -> Option<MediaClass> {
         if let Some(node) = self.unmanaged_nodes.get(&id) {
+            // If we don't have a name or description, we can't use this node
+            if node.name.is_none() && node.description.is_none() {
+                return None;
+            }
+
             let mut in_count = 0;
             let mut out_count = 0;
 
@@ -311,9 +316,9 @@ impl Store {
 
             // Return the Specific MediaClass based on Channel Count
             if (1..=2).contains(&in_count) && (out_count == 0) {
-                return Some(MediaClass::Source);
+                return Some(MediaClass::Sink);
             } else if (1..=2).contains(&out_count) && in_count == 0 {
-                return Some(MediaClass::Sink)
+                return Some(MediaClass::Source)
             } else if (1..=2).contains(&in_count) && in_count == out_count {
                 // This is a bit of an assumption really, but we have non-monitor ports on the
                 // tail end, so a reasonable assumption.
