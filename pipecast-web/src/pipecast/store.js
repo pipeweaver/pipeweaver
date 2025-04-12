@@ -13,6 +13,10 @@ export const store = reactive({
     audio: {
       profile: {},
     },
+    devices: {
+      Source: [],
+      Target: [],
+    }
   },
   a11y: {
     notifications: {
@@ -63,6 +67,14 @@ export const store = reactive({
 
   getProfile() {
     return this.status.audio.profile
+  },
+
+  getDevices() {
+    return this.status.devices;
+  },
+
+  getStatus() {
+    return this.status;
   },
 
   replaceData(json) {

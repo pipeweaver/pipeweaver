@@ -45,6 +45,9 @@ pub(crate) struct PipewireManager {
     // A 'Waker' is a simple Pipewire Filter that sits and waits for samples to be sent
     // prior to triggering a callback. This prevents any temporary latency caused by a device
     // 'waking up' from being propagated through the entire node tree.
+    //
+    // Note, these aren't implemented currently, as of Pipewire 1.4.0 they don't seem to be
+    // needed anymore (and weren't 100% effective anyway)
     pub(crate) wake_filters: HashMap<Ulid, Waker>,
 
     // A list of physical nodes

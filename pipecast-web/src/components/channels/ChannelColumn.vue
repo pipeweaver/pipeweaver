@@ -1,16 +1,18 @@
 <script>
 import ColourSettings from '@/components/channels/ColourSettings.vue'
 import ChannelColumnVolume from '@/components/channels/ChannelColumnVolume.vue'
-import {DeviceType, get_devices, is_source} from "@/pipecast/util.js";
+import {DeviceType, get_devices, is_physical, is_source} from "@/pipecast/util.js";
 import {websocket} from "@/pipecast/sockets.js";
 import {FontAwesomeIcon} from "@fortawesome/vue-fontawesome";
 import PopupBox from "@/components/inputs/PopupBox.vue";
 import MuteTargetSelector from "@/components/channels/MuteTargetSelector.vue";
 import MixAssignment from "@/components/channels/MixAssignment.vue";
+import PhysicalDeviceSelector from "@/components/channels/PhysicalDeviceSelector.vue";
 
 export default {
   name: 'ChannelColumn',
   components: {
+    PhysicalDeviceSelector,
     MixAssignment,
     MuteTargetSelector, PopupBox, FontAwesomeIcon, ChannelColumnVolume, ColourSettings
   },
@@ -68,11 +70,6 @@ export default {
       // Remove 30px for either the Link item on Inputs, or the Mix Option on Outputs
       size -= 30
 
-      // // If sub-mixes are available, cut 30px for the link icon
-      // if (this.hasMix()) {
-      //   size -= 30
-      // }
-
       // Cut 30 for the first button (if applicable)
       if (this.hasBasicMute()) {
         size -= 30
@@ -82,11 +79,6 @@ export default {
       if (this.hasComplexMute()) {
         size -= 30
       }
-
-      // If we're showing two buttons, cut 5 more for the 'gap' between them
-      // if (this.hasBasicMute() && this.hasComplexMute()) {
-      //   size -= 5
-      // }
 
       // Done :)
       return size
@@ -286,6 +278,14 @@ export default {
       this.$refs[target].style.transform = "";
     },
 
+    menu_click: function (e) {
+      this.$refs.dev_selector.show(e);
+    },
+
+    is_physical() {
+      return is_physical(this.type);
+    },
+
     is_source() {
       return is_source(this.type);
     }
@@ -324,13 +324,19 @@ export default {
                       :type='type' target="TargetB"
                       @closed="output_closed"/>
 
+  <PhysicalDeviceSelector v-if="is_physical()" id="select_device" ref="dev_selector" :index='index'
+                          :type='type'/>
+
   <div class="mix">
     <div class="title">
       <div class="start"></div>
       <div class="name">{{ getChannelName() }}</div>
       <div class="end">
-        <button @click="remove_click">
+        <button v-if="!is_physical()" @click="remove_click">
           <font-awesome-icon :icon="['fas', 'xmark']"/>
+        </button>
+        <button v-else @click="menu_click">
+          <font-awesome-icon :icon="['fas', 'bars']"/>
         </button>
       </div>
     </div>

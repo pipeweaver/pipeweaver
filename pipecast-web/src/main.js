@@ -10,6 +10,7 @@ import {FontAwesomeIcon} from '@fortawesome/vue-fontawesome'
 
 import {
   faAngleDown,
+  faBars,
   faCheck,
   faCircleCheck,
   faVolumeHigh,
@@ -17,7 +18,7 @@ import {
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 
-library.add(faVolumeHigh, faVolumeXmark, faAngleDown, faCircleCheck, faXmark, faCheck);
+library.add(faVolumeHigh, faVolumeXmark, faAngleDown, faCircleCheck, faXmark, faCheck, faBars);
 
 const app = createApp(App);
 app.component('font-awesome-icon', FontAwesomeIcon);

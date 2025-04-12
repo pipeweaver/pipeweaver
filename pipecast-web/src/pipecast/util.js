@@ -31,6 +31,10 @@ export function is_source(type) {
   return (type === DeviceType.PhysicalSource || type === DeviceType.VirtualSource)
 }
 
+export function is_physical(type) {
+  return (type === DeviceType.PhysicalTarget || type === DeviceType.PhysicalSource);
+}
+
 // Some functions useful for getting basic node data
 export function getFullSourceList() {
   let list = getNamesForDevices(get_devices(DeviceType.PhysicalSource));
@@ -51,4 +55,12 @@ export function getNamesForDevices(devices) {
     });
   }
   return list;
+}
+
+export function getSourcePhysicalDevices() {
+  return store.getAudio().devices.Source;
+}
+
+export function getTargetPhysicalDevices() {
+  return store.getAudio().devices.Target;
 }
