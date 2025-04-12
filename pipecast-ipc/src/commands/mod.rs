@@ -1,6 +1,7 @@
+use enum_map::EnumMap;
 use json_patch::Patch;
 use pipecast_profile::Profile;
-use pipecast_shared::{Colour, Mix, MuteState, MuteTarget, NodeType};
+use pipecast_shared::{Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
@@ -79,6 +80,7 @@ pub struct DaemonStatus {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AudioConfiguration {
     pub profile: Profile,
+    pub devices: EnumMap<DeviceType, Vec<PhysicalDevice>>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -92,4 +94,11 @@ pub struct HttpSettings {
     pub bind_address: String,
     pub cors_enabled: bool,
     pub port: u16,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct PhysicalDevice {
+    pub id: u32,
+    pub name: Option<String>,
+    pub description: Option<String>,
 }

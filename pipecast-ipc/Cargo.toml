@@ -15,6 +15,8 @@ json-patch = { workspace = true }
 interprocess = { workspace = true }
 ulid = { workspace = true }
 
+enum-map = { workspace = true }
+
 async-trait = "0.1.86"
 futures = "0.3.31"
 tokio-util = { version = "0.7.13", features = ["codec", "compat"] }
