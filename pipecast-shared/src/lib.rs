@@ -17,6 +17,13 @@ pub enum Mix {
     B,
 }
 
+#[derive(Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq)]
+pub enum DeviceType {
+    #[default]
+    Source,
+    Target,
+}
+
 #[derive(Default, Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Enum, EnumIter)]
 pub enum MuteState {
     #[default]
