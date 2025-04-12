@@ -84,13 +84,13 @@ impl PipewireManager {
             },
 
             *AUDIO_CHANNELS => "2",
-            *NODE_LATENCY => "1024/48000",
-            *NODE_MAX_LATENCY => "1024/48000",
+            *NODE_LATENCY => "128/48000",
+            *NODE_MAX_LATENCY => "128/48000",
 
 
             // Force the QUANTUM and the RATE to ensure that we're not internally adjusted when
             // latency occurs following a link
-            *NODE_FORCE_QUANTUM => "1024",
+            *NODE_FORCE_QUANTUM => "128",
             *NODE_FORCE_RATE => "48000",
 
             // We don't want to set a driver here. If creating a large number of nodes each of them
