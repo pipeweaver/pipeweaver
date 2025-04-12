@@ -66,7 +66,6 @@ pub struct MuteStates {
 pub struct PhysicalDeviceDescriptor {
     pub name: Option<String>,
     pub description: Option<String>,
-    pub nickname: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

@@ -47,12 +47,10 @@ impl Profile {
                                 PhysicalDeviceDescriptor {
                                     name: None,
                                     description: Some(String::from("BEACN Mic Microphone")),
-                                    nickname: None,
                                 },
                                 PhysicalDeviceDescriptor {
                                     name: None,
                                     description: Some(String::from("Elgato XLR Dock Mono")),
-                                    nickname: None,
                                 }
                             ],
                         },
@@ -81,7 +79,6 @@ impl Profile {
                                 PhysicalDeviceDescriptor {
                                     name: Some(String::from("alsa_input.pci-0000_31_00.4.analog-stereo")),
                                     description: None,
-                                    nickname: None,
                                 },
                             ],
                         }
@@ -226,17 +223,14 @@ impl Profile {
                                 PhysicalDeviceDescriptor {
                                     name: None,
                                     description: Some(String::from("BEACN Mic Headphones")),
-                                    nickname: None,
                                 },
                                 PhysicalDeviceDescriptor {
                                     name: None,
                                     description: Some(String::from("GoXLR System")),
-                                    nickname: None,
                                 },
                                 PhysicalDeviceDescriptor {
                                     name: None,
                                     description: Some(String::from("Elgato XLR Dock Analog Stereo")),
-                                    nickname: None,
                                 }
                             ],
                         },

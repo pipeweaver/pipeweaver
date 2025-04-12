@@ -7,3 +7,4 @@ pub(crate) mod node;
 pub(crate) mod profile;
 pub(crate) mod routing;
 pub(crate) mod volume;
+pub(crate) mod physical;

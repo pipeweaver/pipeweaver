@@ -1,14 +1,15 @@
 use crate::handler::pipewire::components::load_profile::LoadProfile;
+use crate::handler::pipewire::components::physical::PhysicalDevices;
 use crate::handler::pipewire::ipc::ipc::IPCHandler;
 use crate::handler::primary_worker::ManagerMessage;
 use enum_map::EnumMap;
 use futures::stream::{FuturesUnordered, StreamExt};
 use log::{debug, error, warn};
-use pipecast_ipc::commands::{AudioConfiguration, PipewireCommandResponse};
+use pipecast_ipc::commands::{AudioConfiguration, PhysicalDevice, PipewireCommandResponse};
 use pipecast_pipewire::tokio::sync::oneshot::Receiver;
 use pipecast_pipewire::{MediaClass, PipewireNode, PipewireReceiver, PipewireRunner};
-use pipecast_profile::{PhysicalDeviceDescriptor, Profile};
-use pipecast_shared::Mix;
+use pipecast_profile::{DeviceDescription, PhysicalDeviceDescriptor, Profile};
+use pipecast_shared::{DeviceType, Mix};
 use std::collections::HashMap;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -46,7 +47,8 @@ pub(crate) struct PipewireManager {
     // 'waking up' from being propagated through the entire node tree.
     pub(crate) wake_filters: HashMap<Ulid, Waker>,
 
-    // A list of physical nodes 
+    // A list of physical nodes
+    pub(crate) node_list: EnumMap<DeviceType, Vec<PhysicalDevice>>,
     pub(crate) physical_nodes: Vec<PipewireNode>,
 }
 
@@ -66,6 +68,7 @@ impl PipewireManager {
 
             wake_filters: HashMap::default(),
 
+            node_list: Default::default(),
             physical_nodes: Default::default(),
         }
     }
@@ -80,6 +83,7 @@ impl PipewireManager {
     async fn get_config(&self) -> AudioConfiguration {
         AudioConfiguration {
             profile: self.profile.clone(),
+            devices: self.node_list.clone(),
         }
     }
 
@@ -167,7 +171,23 @@ impl PipewireManager {
                                 handle.abort();
                             } else {
                                 debug!("Natural Device Removal: {}", id);
-                                self.physical_nodes.retain(|node| node.node_id != id);
+                                let node = self.physical_nodes.iter().find(|node| node.node_id == id);
+                                if let Some(node) = node {
+                                    // We also need to remove this from the IPC list
+                                    match node.node_class {
+                                        MediaClass::Source => {
+                                            let _ = self.source_device_removed(id).await;
+                                        }
+                                        MediaClass::Sink => {
+                                            let _ = self.target_device_removed(id).await;
+                                        }
+                                        MediaClass::Duplex => {
+                                            let _ = self.source_device_removed(id).await;
+                                            let _ = self.target_device_removed(id).await;
+                                        }
+                                    }
+                                    self.physical_nodes.retain(|node| node.node_id != id);
+                                }
                             }
                         }
                         PipewireReceiver::ManagedLinkDropped(source, target) => {
@@ -180,9 +200,30 @@ impl PipewireManager {
                     // A device has been sat here for a second without being removed
                     
                     if let Some(device) = discovered_devices.remove(&node_id) {
+
                         debug!("Device Found: {:?}, Type: {:?}", device.description, device.node_class);
                         device_timers.remove(&node_id);
-                        
+
+                        // Create the 'Status' object
+                        let node = PhysicalDevice {
+                            id: device.node_id,
+                            name: device.name.clone(),
+                            description: device.description.clone()
+                        };
+                        match device.node_class {
+                            MediaClass::Source => {
+                                let _ = self.source_device_added(node).await;
+                            }
+                            MediaClass::Sink => {
+                                let _ = self.target_device_added(node).await;
+                            }
+                            MediaClass::Duplex => {
+                                let _ = self.source_device_added(node.clone()).await;
+                                let _ = self.target_device_added(node).await;
+                            }
+                        }
+
+                        // Add node to our definitive list
                         self.physical_nodes.push(device);
                     } else {
                         panic!("Got a Timer Ready for non-existent Node");
