@@ -11,6 +11,7 @@ use ulid::Ulid;
 
 pub(crate) trait VolumeManager {
     async fn volumes_load(&self) -> Result<()>;
+    async fn load_initial_volume(&self, id: Ulid) -> Result<()>;
 
     async fn set_source_node_volume(&mut self, id: Ulid, mix: Mix, volume: u8) -> Result<()>;
     async fn set_source_volume_linked(&mut self, id: Ulid, linked: bool) -> Result<()>;
@@ -23,19 +24,41 @@ impl VolumeManager for PipewireManager {
     async fn volumes_load(&self) -> Result<()> {
         // Need to go through the various node types, and call a volume set
         for device in &self.profile.devices.sources.physical_devices {
-            self.volume_source_load_with_mute(device.description.id).await?;
+            self.load_initial_volume(device.description.id).await?;
         }
         for device in &self.profile.devices.sources.virtual_devices {
-            self.volume_source_load_with_mute(device.description.id).await?;
+            self.load_initial_volume(device.description.id).await?;
         }
         for device in &self.profile.devices.targets.virtual_devices {
-            self.volume_target_load_with_mute(device.description.id, device.volume).await?;
+            self.load_initial_volume(device.description.id).await?;
         }
         for device in &self.profile.devices.targets.physical_devices {
-            self.volume_target_load_with_mute(device.description.id, device.volume).await?;
+            self.load_initial_volume(device.description.id).await?;
         }
         Ok(())
     }
+
+    async fn load_initial_volume(&self, id: Ulid) -> Result<()> {
+        let error = anyhow!("Unable to Locate Node");
+        let node_type = self.get_node_type(id).ok_or(error)?;
+
+        let error = anyhow!("Unable to Locate Target Node");
+        match node_type {
+            NodeType::PhysicalSource | NodeType::VirtualSource => {
+                self.volume_source_load_with_mute(id).await?
+            }
+            NodeType::PhysicalTarget => {
+                let device = self.get_physical_target(id).ok_or(error)?;
+                self.volume_target_load_with_mute(id, device.volume).await?
+            }
+            NodeType::VirtualTarget => {
+                let device = self.get_virtual_target(id).ok_or(error)?;
+                self.volume_target_load_with_mute(id, device.volume).await?
+            }
+        }
+        Ok(())
+    }
+
 
     async fn set_source_node_volume(&mut self, id: Ulid, mix: Mix, volume: u8) -> Result<()> {
         if !(0..=100).contains(&volume) {

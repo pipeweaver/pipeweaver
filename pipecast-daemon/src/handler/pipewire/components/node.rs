@@ -1,6 +1,7 @@
 use crate::handler::pipewire::components::filters::FilterManagement;
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::profile::ProfileManagement;
+use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME};
 use anyhow::{anyhow, bail, Result};
@@ -71,38 +72,41 @@ impl NodeManagement for PipewireManager {
             colour: self.get_colour(name),
         };
 
-        // Create the Nodes and Filters associated with this
-        self.node_create(node_type, &description).await?;
-
         // Store this in the profile, and setup default blank routing table
         match node_type {
             NodeType::PhysicalSource => {
                 self.profile.devices.sources.physical_devices.push(PhysicalSourceDevice {
-                    description,
+                    description: description.clone(),
                     ..Default::default()
                 });
                 self.profile.routes.insert(id, Default::default());
             }
             NodeType::VirtualSource => {
                 self.profile.devices.sources.virtual_devices.push(VirtualSourceDevice {
-                    description,
+                    description: description.clone(),
                     ..Default::default()
                 });
                 self.profile.routes.insert(id, Default::default());
             }
             NodeType::PhysicalTarget => {
                 self.profile.devices.targets.physical_devices.push(PhysicalTargetDevice {
-                    description,
+                    description: description.clone(),
                     ..Default::default()
                 });
             }
             NodeType::VirtualTarget => {
                 self.profile.devices.targets.virtual_devices.push(VirtualTargetDevice {
-                    description,
+                    description: description.clone(),
                     ..Default::default()
                 });
             }
         }
+
+        // Create the Nodes and Filters associated with this
+        self.node_create(node_type, &description).await?;
+
+        // Load the initial volumes onto the node
+        self.load_initial_volume(id).await?;
 
         Ok(id)
     }
