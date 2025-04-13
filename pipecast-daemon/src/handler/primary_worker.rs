@@ -46,9 +46,10 @@ impl PrimaryWorker {
 
         // Used to pass messages into the Pipewire Manager
         let (pipewire_sender, pipewire_receiver) = mpsc::channel(32);
+        let (worker_sender, mut worker_receiver) = mpsc::channel(32);
 
         debug!("[PrimaryWorker] Spawning Pipewire Task..");
-        task::spawn(run_pipewire_manager(pipewire_receiver));
+        task::spawn(run_pipewire_manager(pipewire_receiver, worker_sender));
 
         // Until we're doing this properly...
         sleep(Duration::from_secs(3)).await;
@@ -61,6 +62,15 @@ impl PrimaryWorker {
                         self.update_status(&pipewire_sender).await;
                     }
                 }
+
+                Some(message) = worker_receiver.recv() => {
+                    match message {
+                        WorkerMessage::RefreshState => {
+                            self.update_status(&pipewire_sender).await;
+                        }                        
+                    }
+                }
+
                 _ = self.shutdown.recv() => {
                     debug!("Shutdown Received!");
                     break;
@@ -136,6 +146,10 @@ impl PrimaryWorker {
 pub enum ManagerMessage {
     Execute(PipeCastCommand, oneshot::Sender<PipewireCommandResponse>),
     GetConfig(oneshot::Sender<AudioConfiguration>),
+}
+
+pub enum WorkerMessage {
+    RefreshState,
 }
 
 pub async fn start_primary_worker(

@@ -1,7 +1,7 @@
 use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
 use crate::handler::pipewire::ipc::ipc::IPCHandler;
-use crate::handler::primary_worker::ManagerMessage;
+use crate::handler::primary_worker::{ManagerMessage, WorkerMessage};
 use enum_map::EnumMap;
 use futures::stream::{FuturesUnordered, StreamExt};
 use log::{debug, error, warn};
@@ -23,6 +23,7 @@ type StdRecv = std::sync::mpsc::Receiver<PipewireReceiver>;
 
 pub(crate) struct PipewireManager {
     command_receiver: mpsc::Receiver<ManagerMessage>,
+    worker_sender: mpsc::Sender<WorkerMessage>,
 
     pub(crate) pipewire: Option<PipewireRunner>,
 
@@ -40,9 +41,11 @@ pub(crate) struct PipewireManager {
 }
 
 impl PipewireManager {
-    pub fn new(command_receiver: mpsc::Receiver<ManagerMessage>) -> Self {
+    pub fn new(command_receiver: mpsc::Receiver<ManagerMessage>, worker_sender: mpsc::Sender<WorkerMessage>) -> Self {
         Self {
             command_receiver,
+            worker_sender,
+
             pipewire: None,
 
             profile: Profile::base_settings(),
@@ -173,6 +176,7 @@ impl PipewireManager {
                                         }
                                     }
                                     self.physical_nodes.retain(|node| node.node_id != id);
+                                    let _ = self.worker_sender.send(WorkerMessage::RefreshState).await;
                                 }
                             }
                         }
@@ -211,6 +215,7 @@ impl PipewireManager {
 
                         // Add node to our definitive list
                         self.physical_nodes.push(device);
+                        let _ = self.worker_sender.send(WorkerMessage::RefreshState).await;
                     } else {
                         panic!("Got a Timer Ready for non-existent Node");
                     }
@@ -231,7 +236,7 @@ pub fn run_receiver_wrapper(recv: StdRecv, resend: mpsc::Sender<PipewireReceiver
     }
 }
 
-pub async fn run_pipewire_manager(command_receiver: mpsc::Receiver<ManagerMessage>) {
-    let mut manager = PipewireManager::new(command_receiver);
+pub async fn run_pipewire_manager(command_receiver: mpsc::Receiver<ManagerMessage>, worker_sender: mpsc::Sender<WorkerMessage>) {
+    let mut manager = PipewireManager::new(command_receiver, worker_sender);
     manager.run().await;
 }
