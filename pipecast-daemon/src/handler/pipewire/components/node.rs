@@ -67,8 +67,8 @@ impl NodeManagement for PipewireManager {
         let id = Ulid::new();
         let description = DeviceDescription {
             id,
-            name,
-            colour: Default::default(),
+            name: name.clone(),
+            colour: self.get_colour(name),
         };
 
         // Create the Nodes and Filters associated with this
@@ -174,6 +174,8 @@ trait NodeManagementLocal {
 
     /// Used to set up the parameters needed for a Pipewire Node
     fn create_node_props(&self, class: MediaClass, desc: &DeviceDescription) -> NodeProperties;
+
+    fn get_colour(&self, name: String) -> Colour;
 }
 
 impl NodeManagementLocal for PipewireManager {
@@ -443,6 +445,25 @@ impl NodeManagementLocal for PipewireManager {
             linger: false,
             class,
             ready_sender: None,
+        }
+    }
+
+    fn get_colour(&self, name: String) -> Colour {
+        // This is probably unhelpful in most use cases, but here are some default
+        // colours for what people would have as potential default devices.
+        match name.as_str() {
+            "Microphone" => Colour { red: 47, green: 24, blue: 71 },
+            "PC Line In" => Colour { red: 98, green: 17, blue: 99 },
+            "System" => Colour { red: 153, green: 98, blue: 30 },
+            "Browser" => Colour { red: 211, green: 139, blue: 93 },
+            "Game" => Colour { red: 243, green: 255, blue: 182 },
+            "Music" => Colour { red: 115, green: 158, blue: 130 },
+            "Chat" => Colour { red: 44, green: 85, blue: 48 },
+            "Headphones" => Colour { red: 0, green: 255, blue: 255 },
+            "Stream Mix" => Colour { red: 19, green: 64, blue: 116 },
+            "VOD" => Colour { red: 19, green: 49, blue: 92 },
+            "Chat Mic" => Colour { red: 11, green: 37, blue: 69 },
+            _ => Colour { red: 0, green: 255, blue: 255 }
         }
     }
 }
