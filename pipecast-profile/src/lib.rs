@@ -1,6 +1,6 @@
 mod default;
 
-use enum_map::EnumMap;
+use enum_map::{enum_map, EnumMap};
 use pipecast_shared::{Colour, Mix, MuteState, MuteTarget};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -77,7 +77,7 @@ pub struct PhysicalSourceDevice {
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VirtualTargetDevice {
     pub description: DeviceDescription,
 
@@ -86,7 +86,7 @@ pub struct VirtualTargetDevice {
     pub mix: Mix,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PhysicalTargetDevice {
     pub description: DeviceDescription,
 
@@ -97,9 +97,47 @@ pub struct PhysicalTargetDevice {
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+impl Default for PhysicalTargetDevice {
+    fn default() -> Self {
+        Self {
+            description: Default::default(),
+            volume: 100,
+
+            mute_state: Default::default(),
+            mix: Default::default(),
+
+            attached_devices: Default::default(),
+        }
+    }
+}
+
+impl Default for VirtualTargetDevice {
+    fn default() -> Self {
+        Self {
+            description: Default::default(),
+            volume: 100,
+
+            mute_state: Default::default(),
+            mix: Default::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Volumes {
     pub volume: EnumMap<Mix, u8>,
     pub volumes_linked: Option<f32>,
+}
+
+impl Default for Volumes {
+    fn default() -> Self {
+        Volumes {
+            volume: enum_map! {
+                Mix::A => 100,
+                Mix::B => 100,
+            },
+            volumes_linked: Some(1.),
+        }
+    }
 }
 
