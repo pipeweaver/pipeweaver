@@ -5,6 +5,7 @@ use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{anyhow, bail, Result};
 use log::debug;
 use pipecast_ipc::commands::PhysicalDevice;
+use pipecast_pipewire::PipewireNode;
 use pipecast_profile::{PhysicalDeviceDescriptor, PhysicalSourceDevice};
 use pipecast_shared::{DeviceType, NodeType};
 use ulid::Ulid;
@@ -172,8 +173,11 @@ impl PhysicalDevices for PipewireManager {
                     description: node.description.clone(),
                 };
 
-                device.attached_devices.push(new_node);
-                // TODO: Connect this node
+                device.attached_devices.push(new_node.clone());
+                let pw_node = self.locate_node(new_node);
+                if let Some(node) = pw_node {
+                    self.link_create_unmanaged_to_filter(node.node_id, id).await?;
+                }
             }
             NodeType::PhysicalTarget => {
                 let device = self.get_physical_target_mut(id).ok_or(error)?;
@@ -183,8 +187,11 @@ impl PhysicalDevices for PipewireManager {
                     description: node.description.clone(),
                 };
 
-                device.attached_devices.push(new_node);
-                // TODO: Connect this node
+                device.attached_devices.push(new_node.clone());
+                let pw_node = self.locate_node(new_node);
+                if let Some(node) = pw_node {
+                    self.link_create_filter_to_unmanaged(id, node.node_id).await?;
+                }
             }
             _ => bail!("Node is not a Physical Node"),
         }
@@ -199,19 +206,45 @@ impl PhysicalDevices for PipewireManager {
         match node_type {
             NodeType::PhysicalSource => {
                 let device = self.get_physical_source_mut(id).ok_or(error)?;
-                device.attached_devices.remove(vec_index);
+                let descriptor = device.attached_devices.remove(vec_index);
 
-                // TODO: Detach this Node
+                // Attempt to locate this node in our list
+                let pw_node = self.locate_node(descriptor);
+                if let Some(node) = pw_node {
+                    self.link_remove_unmanaged_to_filter(node.node_id, id).await?;
+                }
             }
             NodeType::PhysicalTarget => {
                 let device = self.get_physical_target_mut(id).ok_or(error)?;
-                device.attached_devices.remove(vec_index);
+                let descriptor = device.attached_devices.remove(vec_index);
 
-                // TODO: Detach this Node
+                // Attempt to locate this node in our list
+                let pw_node = self.locate_node(descriptor);
+                if let Some(node) = pw_node {
+                    self.link_remove_filter_to_unmanaged(id, node.node_id).await?;
+                }
             }
             _ => bail!("Node is not a Physical Node")
         }
 
         Ok(())
+    }
+}
+
+trait PhysicalDevicesLocal {
+    fn locate_node(&self, descriptor: PhysicalDeviceDescriptor) -> Option<&PipewireNode>;
+}
+
+impl PhysicalDevicesLocal for PipewireManager {
+    fn locate_node(&self, descriptor: PhysicalDeviceDescriptor) -> Option<&PipewireNode> {
+        if let Some(ref name) = descriptor.name {
+            return self.physical_nodes.iter().find(|node| node.name.as_ref() == Some(name));
+        }
+
+        if let Some(ref desc) = descriptor.description {
+            return self.physical_nodes.iter().find(|node| node.description.as_ref() == Some(desc));
+        }
+
+        None
     }
 }

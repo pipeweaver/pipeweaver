@@ -45,8 +45,8 @@ impl PipewireManager {
             command_receiver,
             pipewire: None,
 
-            //profile: Profile::base_settings(),
-            profile: Default::default(),
+            profile: Profile::base_settings(),
+            //profile: Default::default(),
 
             source_map: HashMap::default(),
             target_map: HashMap::default(),
