@@ -12,7 +12,7 @@ use pipecast_profile::{DeviceDescription, PhysicalDeviceDescriptor, Profile};
 use pipecast_shared::{DeviceType, Mix};
 use std::collections::HashMap;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::select;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -20,14 +20,6 @@ use tokio::time::sleep;
 use ulid::Ulid;
 
 type StdRecv = std::sync::mpsc::Receiver<PipewireReceiver>;
-
-#[derive(Copy, Clone)]
-pub(crate) struct Waker {
-    pub(crate) id: Ulid,
-    node_id: u32,
-    class: MediaClass,
-    created: Instant,
-}
 
 pub(crate) struct PipewireManager {
     command_receiver: mpsc::Receiver<ManagerMessage>,
@@ -42,14 +34,6 @@ pub(crate) struct PipewireManager {
     pub(crate) physical_source: HashMap<Ulid, Vec<u32>>,
     pub(crate) physical_target: HashMap<Ulid, Vec<u32>>,
 
-    // A 'Waker' is a simple Pipewire Filter that sits and waits for samples to be sent
-    // prior to triggering a callback. This prevents any temporary latency caused by a device
-    // 'waking up' from being propagated through the entire node tree.
-    //
-    // Note, these aren't implemented currently, as of Pipewire 1.4.0 they don't seem to be
-    // needed anymore (and weren't 100% effective anyway)
-    pub(crate) wake_filters: HashMap<Ulid, Waker>,
-
     // A list of physical nodes
     pub(crate) node_list: EnumMap<DeviceType, Vec<PhysicalDevice>>,
     pub(crate) physical_nodes: Vec<PipewireNode>,
@@ -61,15 +45,14 @@ impl PipewireManager {
             command_receiver,
             pipewire: None,
 
-            profile: Profile::base_settings(),
+            //profile: Profile::base_settings(),
+            profile: Default::default(),
 
             source_map: HashMap::default(),
             target_map: HashMap::default(),
 
             physical_source: HashMap::default(),
             physical_target: HashMap::default(),
-
-            wake_filters: HashMap::default(),
 
             node_list: Default::default(),
             physical_nodes: Default::default(),
@@ -232,77 +215,9 @@ impl PipewireManager {
                         panic!("Got a Timer Ready for non-existent Node");
                     }
                 }
-                Some(_) = wakers.next() => {
-
-                }
             );
         }
     }
-
-    //
-    // // Keeping this for now :D
-    // fn locate_physical_node_id(
-    //     &self,
-    //     device: &PhysicalDeviceDescriptor,
-    //     input: bool,
-    // ) -> Option<u32> {
-    //     debug!("Looking for Physical Device: {:?}", device);
-    //
-    //     // This might look a little cumbersome, especially with the need to iterate three
-    //     // times, HOWEVER, we have to check this in terms of accuracy. The name is the
-    //     // specific location of a device on the USB / PCI-E / etc bus, which if we hit is
-    //     // a guaranteed 100% 'this is our device' match.
-    //     for node in &self.node_list {
-    //         if device.name == node.name
-    //             && ((input && node.inputs != 0) || (!input && node.outputs != 0))
-    //         {
-    //             debug!(
-    //                 "Found Name Match {:?}, NodeId: {}",
-    //                 device.name, node.node_id
-    //             );
-    //             return Some(node.node_id);
-    //         }
-    //     }
-    //
-    //     // The description is *GENERALLY* unique, and represents how the device is displayed
-    //     // in things like pavucontrol, Gnome's and KDE's audio settings, etc., but uniqueness
-    //     // is less guaranteed here. This is often useful in situations where (for example)
-    //     // the device is plugged into a different USB port, so it's name has changed
-    //     if device.description.is_some() {
-    //         for node in &self.node_list {
-    //             if device.description == node.description
-    //                 && ((input && node.inputs != 0) || (!input && node.outputs != 0))
-    //             {
-    //                 debug!(
-    //                     "Found Description Match {:?}, NodeId: {}",
-    //                     device.description, node.node_id
-    //                 );
-    //                 return Some(node.node_id);
-    //             }
-    //         }
-    //     }
-    //
-    //     // Finally, we'll check by nickname. In my experience this is very NOT unique, for
-    //     // example, all my GoXLR nodes have their nickname as 'GoXLR', I'm at least slightly
-    //     // skeptical whether I should even track this due to the potential for false
-    //     // positives, but it's here for now.
-    //     if device.nickname.is_some() {
-    //         for node in &self.node_list {
-    //             if device.nickname == node.nickname
-    //                 && ((input && node.inputs != 0) || (!input && node.outputs != 0))
-    //             {
-    //                 debug!(
-    //                     "Found Nickname Match {:?}, NodeId: {}",
-    //                     device.nickname, node.node_id
-    //                 );
-    //                 return Some(node.node_id);
-    //             }
-    //         }
-    //     }
-    //     debug!("Device Not Found: {:?}", device);
-    //
-    //     None
-    // }
 }
 
 // Kinda ugly, but we're going to wrap around a blocking receiver, and bounce messages to an async
