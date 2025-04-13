@@ -1,5 +1,6 @@
 use crate::handler::pipewire::components::mute::MuteManager;
 use crate::handler::pipewire::components::node::NodeManagement;
+use crate::handler::pipewire::components::physical::PhysicalDevices;
 use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
@@ -57,6 +58,13 @@ impl IPCHandler for PipewireManager {
             }
             Cmd::SetTargetMuteState(id, state) => {
                 self.set_target_mute_state(id, state).await.map(|r| Resp::Ok)
+            }
+
+            Cmd::AttachPhysicalNode(id, node_id) => {
+                self.add_device_to_node(id, node_id).await.map(|r| Resp::Ok)
+            }
+            Cmd::RemovePhysicalNode(id, index) => {
+                self.remove_device_from_node(id, index).await.map(|r| Resp::Ok)
             }
         }
     }

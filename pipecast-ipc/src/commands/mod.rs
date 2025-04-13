@@ -62,6 +62,10 @@ pub enum PipeCastCommand {
     ClearMuteTargetNodes(Ulid, MuteTarget),
 
     SetTargetMuteState(Ulid, MuteState),
+
+    // Attach or Detach physical nodes
+    AttachPhysicalNode(Ulid, u32),
+    RemovePhysicalNode(Ulid, usize),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

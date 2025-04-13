@@ -9,6 +9,7 @@ import {
   getTargetPhysicalDevices,
   is_source
 } from "@/pipecast/util.js";
+import {websocket} from "@/pipecast/sockets.js";
 
 export default {
   name: "PhysicalDeviceSelector",
@@ -124,13 +125,24 @@ export default {
     },
 
     onClick: function (device) {
+      // AttachPhysicalNode(Ulid, u32),
+      // RemovePhysicalNode(Ulid, usize),
+
       // Ok, work out what we need to do here
       if (this.isConfigDevice(device)) {
         console.log("TODO: Remove Index: " + device.config_id + " from " + this.getId());
+        let command = {
+          "RemovePhysicalNode": [this.getId(), device.config_id]
+        }
+        websocket.send_command(command);
         return;
       }
 
       console.log("TODO: Attached Node " + device.node_id + " to " + this.getId());
+      let command = {
+        "AttachPhysicalNode": [this.getId(), device.node_id]
+      }
+      websocket.send_command(command);
     },
 
     onClosed(e) {
