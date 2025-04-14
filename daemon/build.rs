@@ -31,7 +31,7 @@ fn main() {
         .expect("Unable to Run npm, cannot build");
 
     // Delete anything that exists already, and move the content in
-    let content = Path::new("./content");
+    let content = Path::new("./web-content");
     if content.exists() {
         fs::remove_dir_all(content).expect("Error Deleting Directory!");
     }
