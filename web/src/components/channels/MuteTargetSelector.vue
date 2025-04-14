@@ -1,7 +1,7 @@
 <script>
 import PopupBox from "@/components/inputs/PopupBox.vue";
-import {get_devices, getFullTargetList} from "@/pipecast/util.js";
-import {websocket} from "@/pipecast/sockets.js";
+import {get_devices, getFullTargetList} from "@/app/util.js";
+import {websocket} from "@/app/sockets.js";
 
 export default {
   name: "MuteTargetSelector",

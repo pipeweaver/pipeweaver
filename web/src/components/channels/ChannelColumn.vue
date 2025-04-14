@@ -1,8 +1,8 @@
 <script>
 import ColourSettings from '@/components/channels/ColourSettings.vue'
 import ChannelColumnVolume from '@/components/channels/ChannelColumnVolume.vue'
-import {DeviceType, get_devices, is_physical, is_source} from "@/pipecast/util.js";
-import {websocket} from "@/pipecast/sockets.js";
+import {DeviceType, get_devices, is_physical, is_source} from "@/app/util.js";
+import {websocket} from "@/app/sockets.js";
 import {FontAwesomeIcon} from "@fortawesome/vue-fontawesome";
 import PopupBox from "@/components/inputs/PopupBox.vue";
 import MuteTargetSelector from "@/components/channels/MuteTargetSelector.vue";

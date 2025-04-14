@@ -1,4 +1,4 @@
-import {store} from "@/pipecast/store.js";
+import {store} from "@/app/store.js";
 
 export const DeviceType = Object.freeze({
   PhysicalSource: 'PhysicalSource',

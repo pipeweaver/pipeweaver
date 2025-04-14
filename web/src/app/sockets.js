@@ -30,7 +30,7 @@
  *
  * The websocket class will abstract away the need to build a complete message.
  */
-import {store} from '@/pipecast/store.js'
+import {store} from '@/app/store.js'
 
 // TODO: Error checking and handling!
 export class Websocket {

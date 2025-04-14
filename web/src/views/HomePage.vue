@@ -1,9 +1,9 @@
 <script setup>
 
-import {DeviceType, get_devices} from "@/pipecast/util.js";
+import {DeviceType, get_devices} from "@/app/util.js";
 import ChannelColumn from "@/components/channels/ChannelColumn.vue";
 import Router from "@/components/routing/Router.vue";
-import {websocket} from "@/pipecast/sockets.js";
+import {websocket} from "@/app/sockets.js";
 
 function addDevice(type, e) {
   let name = prompt("Device Name:");

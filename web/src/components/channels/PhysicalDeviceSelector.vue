@@ -8,8 +8,8 @@ import {
   getSourcePhysicalDevices,
   getTargetPhysicalDevices,
   is_source
-} from "@/pipecast/util.js";
-import {websocket} from "@/pipecast/sockets.js";
+} from "@/app/util.js";
+import {websocket} from "@/app/sockets.js";
 
 export default {
   name: "PhysicalDeviceSelector",

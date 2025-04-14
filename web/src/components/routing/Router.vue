@@ -1,9 +1,9 @@
 <script>
 
-import {DeviceType, get_devices, getFullSourceList, getFullTargetList} from "@/pipecast/util.js";
+import {DeviceType, get_devices, getFullSourceList, getFullTargetList} from "@/app/util.js";
 import RoutingCell from "@/components/routing/RoutingCell.vue";
-import {store} from "@/pipecast/store.js";
-import {websocket} from "@/pipecast/sockets.js";
+import {store} from "@/app/store.js";
+import {websocket} from "@/app/sockets.js";
 
 export default {
   name: 'Router',
