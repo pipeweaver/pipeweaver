@@ -2,12 +2,12 @@
 resolver = "2"
 
 members = [
-    "pipecast-client",
-    "pipecast-daemon",
-    "pipecast-ipc",
-    "pipecast-pipewire",
-    "pipecast-profile",
-    "pipecast-shared",
+    "client",
+    "daemon",
+    "ipc",
+    "pipewire",
+    "profile",
+    "shared",
 ]
 
 [workspace.dependencies]

@@ -1,0 +1,46 @@
+[package]
+name = "daemon"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+### Inherited Dependencies ###
+anyhow = { workspace = true }
+interprocess = { workspace = true }
+ulid = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+json-patch = { workspace = true }
+
+### Internal Dependencies ###
+ipc = { path = "../ipc" }
+profile = { path = "../profile" }
+pipewire = { path = "../pipewire" }
+shared = { path = "../shared" }
+
+### Used for managing device wakers
+futures = "0.3.31"
+
+### Enum Handling
+enum-map = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+
+### Project Paths
+directories = "6.0.0"
+
+### Log Writing ###
+simplelog = "0.12.2"
+
+### Async Runtime ###
+tokio = { version = "1.41.1", features = ["rt-multi-thread", "sync", "macros"] }
+
+### HTTP Server ###
+actix = "0.13.5"
+actix-web = { version = "4.9.0", default-features = false, features = ["macros", "compress-brotli", "compress-gzip"] }
+actix-web-actors = "4.3.0"
+actix-cors = "0.7.0"
+mime_guess = "2.0.5"
+include_dir = "0.7.4"
+

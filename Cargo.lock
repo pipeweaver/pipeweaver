@@ -494,6 +494,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "client"
+version = "0.1.0"
+
+[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -558,6 +562,36 @@ checksum = "1bfb12502f3fc46cca1bb51ac28df9d618d813cdc3d2f25b9fe775a34af26bb3"
 dependencies = [
  "generic-array",
  "typenum",
+]
+
+[[package]]
+name = "daemon"
+version = "0.1.0"
+dependencies = [
+ "actix",
+ "actix-cors",
+ "actix-web",
+ "actix-web-actors",
+ "anyhow",
+ "directories",
+ "enum-map",
+ "futures",
+ "include_dir",
+ "interprocess",
+ "ipc",
+ "json-patch",
+ "log",
+ "mime_guess",
+ "pipewire 0.1.0",
+ "profile",
+ "serde",
+ "serde_json",
+ "shared",
+ "simplelog",
+ "strum",
+ "strum_macros",
+ "tokio",
+ "ulid",
 ]
 
 [[package]]
@@ -1160,6 +1194,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ipc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "enum-map",
+ "futures",
+ "interprocess",
+ "json-patch",
+ "profile",
+ "reqwest",
+ "serde",
+ "shared",
+ "tokio-serde",
+ "tokio-util",
+ "ulid",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1495,95 +1548,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
-name = "pipecast-client"
-version = "0.1.0"
-
-[[package]]
-name = "pipecast-daemon"
-version = "0.1.0"
-dependencies = [
- "actix",
- "actix-cors",
- "actix-web",
- "actix-web-actors",
- "anyhow",
- "directories",
- "enum-map",
- "futures",
- "include_dir",
- "interprocess",
- "json-patch",
- "log",
- "mime_guess",
- "pipecast-ipc",
- "pipecast-pipewire",
- "pipecast-profile",
- "pipecast-shared",
- "serde",
- "serde_json",
- "simplelog",
- "strum",
- "strum_macros",
- "tokio",
- "ulid",
-]
-
-[[package]]
-name = "pipecast-ipc"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "enum-map",
- "futures",
- "interprocess",
- "json-patch",
- "pipecast-profile",
- "pipecast-shared",
- "reqwest",
- "serde",
- "tokio-serde",
- "tokio-util",
- "ulid",
-]
-
-[[package]]
-name = "pipecast-pipewire"
+name = "pipewire"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "enum-map",
  "log",
  "parking_lot",
- "pipewire",
+ "pipewire 0.8.0",
  "strum",
  "strum_macros",
  "tokio",
- "ulid",
-]
-
-[[package]]
-name = "pipecast-profile"
-version = "0.1.0"
-dependencies = [
- "enum-map",
- "pipecast-shared",
- "serde",
- "serde_json",
- "strum",
- "strum_macros",
- "ulid",
-]
-
-[[package]]
-name = "pipecast-shared"
-version = "0.1.0"
-dependencies = [
- "enum-map",
- "serde",
- "serde_json",
- "strum",
- "strum_macros",
  "ulid",
 ]
 
@@ -1641,6 +1616,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37d3544b3f2748c54e147655edb5025752e2303145b5aefb3c3ea2c78b973bb0"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "profile"
+version = "0.1.0"
+dependencies = [
+ "enum-map",
+ "serde",
+ "serde_json",
+ "shared",
+ "strum",
+ "strum_macros",
+ "ulid",
 ]
 
 [[package]]
@@ -1917,6 +1905,18 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "digest",
+]
+
+[[package]]
+name = "shared"
+version = "0.1.0"
+dependencies = [
+ "enum-map",
+ "serde",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "ulid",
 ]
 
 [[package]]
