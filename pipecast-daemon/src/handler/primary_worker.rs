@@ -1,6 +1,6 @@
 use crate::handler::messaging::DaemonMessage;
 use crate::handler::pipewire::manager::run_pipewire_manager;
-use crate::handler::primary_worker::ManagerMessage::{Execute, GetConfig};
+use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfiguration};
 use crate::servers::http_server::PatchEvent;
 use crate::stop::Stop;
 use json_patch::diff;
@@ -8,6 +8,7 @@ use log::{debug, error, info, warn};
 use pipecast_ipc::commands::{
     AudioConfiguration, DaemonResponse, DaemonStatus, PipeCastCommand, PipewireCommandResponse,
 };
+use pipecast_profile::Profile;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::{mpsc, oneshot};
@@ -67,7 +68,7 @@ impl PrimaryWorker {
                     match message {
                         WorkerMessage::RefreshState => {
                             self.update_status(&pipewire_sender).await;
-                        }                        
+                        }
                     }
                 }
 
@@ -117,7 +118,7 @@ impl PrimaryWorker {
 
         let (cmd_tx, cmd_rx) = oneshot::channel();
 
-        if pw_tx.send(GetConfig(cmd_tx)).await.is_err() {
+        if pw_tx.send(GetAudioConfiguration(cmd_tx)).await.is_err() {
             warn!("Unable to Send GetConfig Request");
             return;
         }
@@ -145,7 +146,7 @@ impl PrimaryWorker {
 #[derive(Debug)]
 pub enum ManagerMessage {
     Execute(PipeCastCommand, oneshot::Sender<PipewireCommandResponse>),
-    GetConfig(oneshot::Sender<AudioConfiguration>),
+    GetAudioConfiguration(oneshot::Sender<AudioConfiguration>),
 }
 
 pub enum WorkerMessage {

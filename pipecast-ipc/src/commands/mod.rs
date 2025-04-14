@@ -100,9 +100,12 @@ pub struct HttpSettings {
     pub port: u16,
 }
 
+/// The API generally doesn't need to care about all the general minutia of how a Pipewire
+/// node actually looks, so instead we just have a very simple Device object that provides
+/// an ID to be passed back to the daemon in IPC calls, and the nodes name.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PhysicalDevice {
-    pub id: u32,
+    pub node_id: u32,
     pub name: Option<String>,
     pub description: Option<String>,
 }

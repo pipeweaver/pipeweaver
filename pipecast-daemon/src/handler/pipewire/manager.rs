@@ -3,12 +3,12 @@ use crate::handler::pipewire::components::physical::PhysicalDevices;
 use crate::handler::pipewire::ipc::ipc::IPCHandler;
 use crate::handler::primary_worker::{ManagerMessage, WorkerMessage};
 use enum_map::EnumMap;
-use futures::stream::{FuturesUnordered, StreamExt};
-use log::{debug, error, warn};
+use futures::stream::FuturesUnordered;
+use log::{debug, error};
 use pipecast_ipc::commands::{AudioConfiguration, PhysicalDevice, PipewireCommandResponse};
 use pipecast_pipewire::tokio::sync::oneshot::Receiver;
 use pipecast_pipewire::{MediaClass, PipewireNode, PipewireReceiver, PipewireRunner};
-use pipecast_profile::{DeviceDescription, PhysicalDeviceDescriptor, Profile};
+use pipecast_profile::Profile;
 use pipecast_shared::{DeviceType, Mix};
 use std::collections::HashMap;
 use std::thread;
@@ -37,7 +37,7 @@ pub(crate) struct PipewireManager {
 
     // A list of physical nodes
     pub(crate) node_list: EnumMap<DeviceType, Vec<PhysicalDevice>>,
-    pub(crate) physical_nodes: Vec<PipewireNode>,
+    pub(crate) physical_nodes: HashMap<u32, PipewireNode>,
 }
 
 impl PipewireManager {
@@ -48,8 +48,8 @@ impl PipewireManager {
 
             pipewire: None,
 
-            profile: Profile::base_settings(),
-            //profile: Default::default(),
+            //profile: Profile::base_settings(),
+            profile: Default::default(),
 
             source_map: HashMap::default(),
             target_map: HashMap::default(),
@@ -69,7 +69,7 @@ impl PipewireManager {
         panic!("Attempted to Get Pipewire before starting");
     }
 
-    async fn get_config(&self) -> AudioConfiguration {
+    async fn get_audio_config(&self) -> AudioConfiguration {
         AudioConfiguration {
             profile: self.profile.clone(),
             devices: self.node_list.clone(),
@@ -79,7 +79,12 @@ impl PipewireManager {
     pub async fn run(&mut self) {
         debug!("[Pipewire Runner] Starting Event Loop");
         let (send, recv) = std::sync::mpsc::channel();
-        let (send_async, mut recv_async) = mpsc::channel(1024);
+
+        // We need a largish buffer here because it's impossible to know how many devices pipewire
+        // is going to throw at us at any given time, and they're all processed sequentially. 
+        // They'll also be sent while we're blocked loading the profile, so this needs to be
+        // large enough to accommodate them until the profile has finished loading.
+        let (send_async, mut recv_async) = mpsc::channel(256);
 
         // Spawn up the Sync -> Async task loop
         thread::spawn(|| run_receiver_wrapper(recv, send_async));
@@ -87,33 +92,21 @@ impl PipewireManager {
         // Run up the Pipewire Handler
         self.pipewire = Some(PipewireRunner::new(send.clone()).unwrap());
 
-
-        debug!("[Pipewire Runner] Waiting for Pipewire to Calm..");
-        sleep(Duration::from_secs(1)).await;
-
-        // let (tx, rx) = oneshot::channel();
-        // let _ = self.pipewire().send_message(PipewireMessage::GetUsableNodes(tx));
-        // if let Ok(nodes) = rx.await {
-        //     self.node_list = nodes;
-        // }
-
         debug!("Loading Profile");
         if let Err(e) = self.load_profile().await {
             error!("Error Loading Profile: {}", e);
         }
 
-        // Callback Handlers for the Wakers
-        let mut wakers: FuturesUnordered<Receiver<Ulid>> = FuturesUnordered::new();
 
-        // So these are small timers which are set up when a new device is sent to us, rather than
-        // immediately processing we wait a second to make sure the device doesn't immediately
-        // disappear again as it's layout is being calculated, if this timer completes we should
-        // be happy to assume the device configuration has stabilised.
+        // So these are small timers which are set up when a new device is sent to us. Rather than
+        // immediately processing, we wait half a second to make sure the device doesn't disappear 
+        // again as it's layout is being calculated, if this timer completes we should be safe to
+        // assume the device configuration has stabilised.
         let mut device_timers: HashMap<u32, JoinHandle<()>> = HashMap::new();
+        let (device_ready_tx, mut device_ready_rx) = mpsc::channel(256);
+
+        // A simple list of devices which have been discovered, but not flagged 'Ready'
         let mut discovered_devices: HashMap<u32, PipewireNode> = HashMap::new();
-
-
-        let (device_ready_tx, mut device_ready_rx) = mpsc::channel(1024);
 
 
         loop {
@@ -129,8 +122,8 @@ impl PipewireManager {
                                 Err(e) => PipewireCommandResponse::Err(e.to_string())
                             });
                         }
-                        ManagerMessage::GetConfig(tx) => {
-                            let _ = tx.send(self.get_config().await);
+                        ManagerMessage::GetAudioConfiguration(tx) => {
+                            let _ = tx.send(self.get_audio_config().await);
                         }
                     }
                 }
@@ -147,7 +140,7 @@ impl PipewireManager {
 
                             // Spawn up a simple task that simply waits a second
                             let handle = tokio::spawn(async move {
-                                sleep(Duration::from_secs(1)).await;
+                                sleep(Duration::from_millis(500)).await;
                                 let _ = done.send(node.node_id).await;
                             });
                             device_timers.insert(node.node_id, handle);
@@ -160,9 +153,7 @@ impl PipewireManager {
                                 handle.abort();
                             } else {
                                 debug!("Natural Device Removal: {}", id);
-                                let node = self.physical_nodes.iter().find(|node| node.node_id == id);
-                                if let Some(node) = node {
-                                    // We also need to remove this from the IPC list
+                                if let Some(node) = self.physical_nodes.remove(&id) {
                                     match node.node_class {
                                         MediaClass::Source => {
                                             let _ = self.source_device_removed(id).await;
@@ -175,7 +166,6 @@ impl PipewireManager {
                                             let _ = self.target_device_removed(id).await;
                                         }
                                     }
-                                    self.physical_nodes.retain(|node| node.node_id != id);
                                     let _ = self.worker_sender.send(WorkerMessage::RefreshState).await;
                                 }
                             }
@@ -187,8 +177,7 @@ impl PipewireManager {
                     }
                 }
                 Some(node_id) = device_ready_rx.recv() => {
-                    // A device has been sat here for a second without being removed
-                    
+                    // A device has been sat here for 500ms without being removed
                     if let Some(device) = discovered_devices.remove(&node_id) {
 
                         debug!("Device Found: {:?}, Type: {:?}", device.description, device.node_class);
@@ -196,7 +185,7 @@ impl PipewireManager {
 
                         // Create the 'Status' object
                         let node = PhysicalDevice {
-                            id: device.node_id,
+                            node_id: device.node_id,
                             name: device.name.clone(),
                             description: device.description.clone()
                         };
@@ -214,7 +203,7 @@ impl PipewireManager {
                         }
 
                         // Add node to our definitive list
-                        self.physical_nodes.push(device);
+                        self.physical_nodes.insert(device.node_id, device);
                         let _ = self.worker_sender.send(WorkerMessage::RefreshState).await;
                     } else {
                         panic!("Got a Timer Ready for non-existent Node");
