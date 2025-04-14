@@ -3,8 +3,6 @@ mod servers;
 mod handler;
 mod platform;
 mod settings;
-mod profile;
-
 
 use crate::handler::primary_worker::start_primary_worker;
 use crate::platform::spawn_runtime;
@@ -35,7 +33,7 @@ async fn main() -> Result<()> {
     // We need to ignore a couple of packages log output so create a builder.
     let mut log_config = ConfigBuilder::new();
 
-    // The tracing package, when used, will output to INFO from zbus every second..
+    // The tracing package, when used, will output to INFO from zbus every second
     log_config.add_filter_ignore_str("tracing");
 
     // Actix is a little noisy on startup and shutdown, so quiet it a bit :)
@@ -92,10 +90,12 @@ async fn main() -> Result<()> {
     ));
     let http_server = httpd_rx.await?;
 
+    let config_dir = dirs.config_dir().to_path_buf();
     let task = task::spawn(start_primary_worker(
         manager_recv,
         shutdown.clone(),
         broadcast_tx.clone(),
+        config_dir,
     ));
 
     let runtime = task::spawn(spawn_runtime(shutdown.clone()));

@@ -3,10 +3,8 @@ use crate::handler::pipewire::components::physical::PhysicalDevices;
 use crate::handler::pipewire::ipc::ipc::IPCHandler;
 use crate::handler::primary_worker::{ManagerMessage, WorkerMessage};
 use enum_map::EnumMap;
-use futures::stream::FuturesUnordered;
 use log::{debug, error};
 use pipecast_ipc::commands::{AudioConfiguration, PhysicalDevice, PipewireCommandResponse};
-use pipecast_pipewire::tokio::sync::oneshot::Receiver;
 use pipecast_pipewire::{MediaClass, PipewireNode, PipewireReceiver, PipewireRunner};
 use pipecast_profile::Profile;
 use pipecast_shared::{DeviceType, Mix};
@@ -14,7 +12,8 @@ use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 use tokio::select;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
+
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use ulid::Ulid;
@@ -38,10 +37,12 @@ pub(crate) struct PipewireManager {
     // A list of physical nodes
     pub(crate) node_list: EnumMap<DeviceType, Vec<PhysicalDevice>>,
     pub(crate) physical_nodes: HashMap<u32, PipewireNode>,
+
+    stopped_sender: Option<oneshot::Sender<()>>,
 }
 
 impl PipewireManager {
-    pub fn new(command_receiver: mpsc::Receiver<ManagerMessage>, worker_sender: mpsc::Sender<WorkerMessage>) -> Self {
+    pub fn new(command_receiver: mpsc::Receiver<ManagerMessage>, worker_sender: mpsc::Sender<WorkerMessage>, stopped: oneshot::Sender<()>) -> Self {
         Self {
             command_receiver,
             worker_sender,
@@ -59,6 +60,8 @@ impl PipewireManager {
 
             node_list: Default::default(),
             physical_nodes: Default::default(),
+
+            stopped_sender: Some(stopped),
         }
     }
 
@@ -81,10 +84,11 @@ impl PipewireManager {
         let (send, recv) = std::sync::mpsc::channel();
 
         // We need a largish buffer here because it's impossible to know how many devices pipewire
-        // is going to throw at us at any given time, and they're all processed sequentially. 
+        // is going to throw at us at any given time, and they're all processed sequentially.
         // They'll also be sent while we're blocked loading the profile, so this needs to be
         // large enough to accommodate them until the profile has finished loading.
         let (send_async, mut recv_async) = mpsc::channel(256);
+        let local_async = send_async.clone();
 
         // Spawn up the Sync -> Async task loop
         thread::spawn(|| run_receiver_wrapper(recv, send_async));
@@ -99,7 +103,7 @@ impl PipewireManager {
 
 
         // So these are small timers which are set up when a new device is sent to us. Rather than
-        // immediately processing, we wait half a second to make sure the device doesn't disappear 
+        // immediately processing, we wait half a second to make sure the device doesn't disappear
         // again as it's layout is being calculated, if this timer completes we should be safe to
         // assume the device configuration has stabilised.
         let mut device_timers: HashMap<u32, JoinHandle<()>> = HashMap::new();
@@ -124,6 +128,12 @@ impl PipewireManager {
                         }
                         ManagerMessage::GetAudioConfiguration(tx) => {
                             let _ = tx.send(self.get_audio_config().await);
+                        }
+                        ManagerMessage::Quit => {
+                            // We need to shut everything down
+                            let _ = local_async.send(PipewireReceiver::Quit).await;
+                            sleep(Duration::from_millis(500)).await;
+                            break;
                         }
                     }
                 }
@@ -211,21 +221,26 @@ impl PipewireManager {
                 }
             );
         }
+
+        self.stopped_sender.take().unwrap().send(()).expect("Failed to Send Stop Message");
     }
 }
 
 // Kinda ugly, but we're going to wrap around a blocking receiver, and bounce messages to an async
 pub fn run_receiver_wrapper(recv: StdRecv, resend: mpsc::Sender<PipewireReceiver>) {
+    debug!("Starting Receive Wrapper");
     while let Ok(msg) = recv.recv() {
         if msg == PipewireReceiver::Quit {
+            debug!("Receive Wrapper Received Shutdown");
             // Received Quit message, break out.
             break;
         }
         let _ = resend.blocking_send(msg);
     }
+    debug!("Receive Wrapper Stopped");
 }
 
-pub async fn run_pipewire_manager(command_receiver: mpsc::Receiver<ManagerMessage>, worker_sender: mpsc::Sender<WorkerMessage>) {
-    let mut manager = PipewireManager::new(command_receiver, worker_sender);
+pub async fn run_pipewire_manager(command_receiver: mpsc::Receiver<ManagerMessage>, worker_sender: mpsc::Sender<WorkerMessage>, stopped: oneshot::Sender<()>) {
+    let mut manager = PipewireManager::new(command_receiver, worker_sender, stopped);
     manager.run().await;
 }

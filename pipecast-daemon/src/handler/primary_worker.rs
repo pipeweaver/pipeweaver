@@ -8,7 +8,7 @@ use log::{debug, error, info, warn};
 use pipecast_ipc::commands::{
     AudioConfiguration, DaemonResponse, DaemonStatus, PipeCastCommand, PipewireCommandResponse,
 };
-use pipecast_profile::Profile;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::{mpsc, oneshot};
@@ -34,15 +34,16 @@ impl PrimaryWorker {
         }
     }
 
-    async fn run(&mut self, mut message_receiver: mpsc::Receiver<DaemonMessage>) {
+    async fn run(&mut self, mut message_receiver: mpsc::Receiver<DaemonMessage>, config_path: PathBuf) {
         info!("[PrimaryWorker] Starting Primary Worker..");
 
         // Used to pass messages into the Pipewire Manager
         let (pipewire_sender, pipewire_receiver) = mpsc::channel(32);
         let (worker_sender, mut worker_receiver) = mpsc::channel(32);
+        let (stop_sender, stop_receiver) = tokio::sync::oneshot::channel();
 
         debug!("[PrimaryWorker] Spawning Pipewire Task..");
-        task::spawn(run_pipewire_manager(pipewire_receiver, worker_sender));
+        task::spawn(run_pipewire_manager(pipewire_receiver, worker_sender, stop_sender));
 
         // Until we're doing this properly...
         sleep(Duration::from_secs(3)).await;
@@ -66,6 +67,10 @@ impl PrimaryWorker {
 
                 _ = self.shutdown.recv() => {
                     debug!("Shutdown Received!");
+                    let _ = pipewire_sender.send(ManagerMessage::Quit).await;
+
+                    // Wait for the Stop message
+                    let _ = stop_receiver.await;
                     break;
                 }
             }
@@ -139,6 +144,7 @@ impl PrimaryWorker {
 pub enum ManagerMessage {
     Execute(PipeCastCommand, oneshot::Sender<PipewireCommandResponse>),
     GetAudioConfiguration(oneshot::Sender<AudioConfiguration>),
+    Quit,
 }
 
 pub enum WorkerMessage {
@@ -149,7 +155,8 @@ pub async fn start_primary_worker(
     message_receiver: mpsc::Receiver<DaemonMessage>,
     shutdown: Stop,
     broadcast_tx: Sender<PatchEvent>,
+    config_path: PathBuf,
 ) {
     let mut manager = PrimaryWorker::new(shutdown, broadcast_tx);
-    manager.run(message_receiver).await;
+    manager.run(message_receiver, config_path).await;
 }
