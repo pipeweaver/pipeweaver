@@ -6,7 +6,6 @@ members = [
     "pipecast-daemon",
     "pipecast-ipc",
     "pipecast-pipewire",
-    "pipecast-playground",
     "pipecast-profile",
     "pipecast-shared",
 ]

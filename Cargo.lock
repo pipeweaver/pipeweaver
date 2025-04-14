@@ -1563,17 +1563,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pipecast-playground"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "pipecast-pipewire",
- "simplelog",
- "tokio",
-]
-
-[[package]]
 name = "pipecast-profile"
 version = "0.1.0"
 dependencies = [
