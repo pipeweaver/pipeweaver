@@ -5,11 +5,11 @@ use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::Error;
-use ipc::commands::{PipeCastCommand, PipewireCommandResponse};
+use ipc::commands::{APICommand, APICommandResponse};
 use shared::MuteState::{Muted, Unmuted};
 
-type Cmd = PipeCastCommand;
-type Resp = PipewireCommandResponse;
+type Cmd = APICommand;
+type Resp = APICommandResponse;
 pub(crate) trait IPCHandler {
     async fn handle_command(&mut self, command: Cmd) -> Result<Resp, Error>;
 }

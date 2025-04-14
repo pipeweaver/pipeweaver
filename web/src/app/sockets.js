@@ -1,5 +1,5 @@
 /**
- * A class designed to help manage request and responses to Pipecast via Websockets and HTTP.
+ * A class designed to help manage request and responses to the App via Websockets and HTTP.
  *
  * A lot of commands do not require responses as they're 'fire and forget', the only response that could possibly
  * be returned is an error which means that something has likely gone *SERIOUSLY* wrong, and we should abandon

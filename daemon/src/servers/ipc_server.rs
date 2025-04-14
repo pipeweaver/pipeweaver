@@ -11,8 +11,8 @@ use log::{debug, info, warn};
 use std::fs;
 use std::path::Path;
 
-use crate::Stop;
-static SOCKET_PATH: &str = "/tmp/pipecast.socket";
+use crate::{Stop, APP_NAME};
+static SOCKET_PATH: &str = "/tmp/pipeweaver.socket";
 
 async fn ipc_tidy() -> Result<()> {
     if !Path::new(SOCKET_PATH).exists() {
@@ -52,8 +52,8 @@ async fn ipc_tidy() -> Result<()> {
         return Ok(());
     }
 
-    // If we get here, there's an active PipeCast Daemon running!
-    bail!("The PipeCast Daemon is already running.");
+    // If we get here, there's an active Daemon running!
+    bail!("The {} Daemon is already running.", APP_NAME);
 }
 
 pub async fn bind_socket() -> Result<LocalSocketListener> {

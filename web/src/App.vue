@@ -4,7 +4,7 @@ import LoadingScreen from "@/views/LoadingScreen.vue";
 import {store} from "@/app/store.js";
 import HomePage from "@/views/HomePage.vue";
 
-// Start the Main Pipecast Websocket
+// Start the Main Websocket
 runWebsocket()
 
 </script>

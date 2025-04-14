@@ -108,9 +108,9 @@ impl PipewireManager {
             // https://gitlab.freedesktop.org/pipewire/pipewire/-/wikis/Virtual-Devices
             "audio.position" => "FL,FR",
 
-            // In the case of PipeCast, we're handling the volumes ourselves via audio_filters, so we're
-            // going to simply ignore what pipewire says the volume is and monitor at 100%. This
-            // should prevent weirdness and unexpected results if the volumes are directly adjusted.
+            // In the case of this app, we're handling the volumes ourselves via audio_filters, so
+            // we're going to simply ignore what pipewire says the volume is and monitor at 100%.
+            // This should prevent weirdness if the volumes are directly adjusted.
             "monitor.channel-volumes" => "false",
 
             // Keep the monitor as close to 'real-time' as possible

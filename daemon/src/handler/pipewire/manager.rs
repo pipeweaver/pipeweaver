@@ -3,7 +3,7 @@ use crate::handler::pipewire::components::physical::PhysicalDevices;
 use crate::handler::pipewire::ipc::ipc::IPCHandler;
 use crate::handler::primary_worker::{ManagerMessage, WorkerMessage};
 use enum_map::EnumMap;
-use ipc::commands::{AudioConfiguration, PhysicalDevice, PipewireCommandResponse};
+use ipc::commands::{APICommandResponse, AudioConfiguration, PhysicalDevice};
 use log::{debug, error};
 use pipewire::{MediaClass, PipewireNode, PipewireReceiver, PipewireRunner};
 use profile::Profile;
@@ -123,7 +123,7 @@ impl PipewireManager {
                             // Map the result to a PW Response and send it
                             let _ = tx.send(match result {
                                 Ok(response) => response,
-                                Err(e) => PipewireCommandResponse::Err(e.to_string())
+                                Err(e) => APICommandResponse::Err(e.to_string())
                             });
                         }
                         ManagerMessage::GetAudioConfiguration(tx) => {

@@ -21,13 +21,13 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const HASH: &str = env!("GIT_HASH");
 
 // Definitions used during node / filter declarations
-const APP_ID: &str = "io.github.pipecast";
-const APP_NAME: &str = "PipeCast";
-const APP_PREFIX: &str = "pipecast";
+const APP_ID: &str = "io.github.pipeweaver";
+const APP_NAME: &str = "PipeWeaver";
+const APP_PREFIX: &str = "pipeweaver";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let dirs = ProjectDirs::from("io", "github", "pipecast").ok_or(anyhow!("Unable to locate project directory"))?;
+    let dirs = ProjectDirs::from("io", "github", APP_PREFIX).ok_or(anyhow!("Unable to locate project directory"))?;
 
 
     // We need to ignore a couple of packages log output so create a builder.
@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
         ColorChoice::Auto,
     )]).context("Could not configure the logger")?;
 
-    info!("Starting PipeCast v{} - {}", VERSION, HASH);
+    info!("Starting {} v{} - {}", APP_NAME, VERSION, HASH);
 
     let shutdown = Stop::new();
 

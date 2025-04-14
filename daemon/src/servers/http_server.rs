@@ -22,11 +22,11 @@ use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::oneshot::Sender;
 use tokio::sync::Mutex;
 
+use crate::handler::packet::{handle_packet, Messenger};
+use crate::APP_NAME;
 use ipc::commands::{
     DaemonRequest, DaemonResponse, DaemonStatus, HttpSettings, WebsocketRequest, WebsocketResponse,
 };
-
-use crate::handler::packet::{handle_packet, Messenger};
 
 const WEB_CONTENT: Dir = include_dir!("./daemon/web-content/");
 
@@ -233,7 +233,8 @@ pub async fn spawn_http_server(
 
     let server = server.unwrap().run();
     info!(
-        "Started PipeCast configuration interface at http://{}:{}/",
+        "Started {} configuration interface at http://{}:{}/",
+        APP_NAME,
         settings.bind_address.as_str(),
         settings.port,
     );

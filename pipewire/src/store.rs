@@ -394,7 +394,7 @@ pub struct FilterStore {
 
     pub(crate) _listener: FilterListener<Rc<RwLock<FilterData>>>,
 
-    /// The PipeCast Ulid Identifier
+    /// The Ulid Identifier
     pub(crate) id: Ulid,
 
     // This maintains a general port map of location -> index

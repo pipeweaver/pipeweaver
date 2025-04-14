@@ -4,7 +4,7 @@ use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfigurat
 use crate::servers::http_server::PatchEvent;
 use crate::stop::Stop;
 use ipc::commands::{
-    AudioConfiguration, DaemonResponse, DaemonStatus, PipeCastCommand, PipewireCommandResponse,
+    APICommand, APICommandResponse, AudioConfiguration, DaemonResponse, DaemonStatus,
 };
 use json_patch::diff;
 use log::{debug, error, info, warn};
@@ -93,7 +93,7 @@ impl PrimaryWorker {
             DaemonMessage::RunPipewire(command, response) => {
                 let (tx, rx) = oneshot::channel();
                 if let Err(e) = pw_tx.send(Execute(command, tx)).await {
-                    let _ = response.send(PipewireCommandResponse::Err(e.to_string()));
+                    let _ = response.send(APICommandResponse::Err(e.to_string()));
                     return false;
                 }
                 match rx.await {
@@ -102,7 +102,7 @@ impl PrimaryWorker {
                         update = true;
                     }
                     Err(e) => {
-                        let _ = response.send(PipewireCommandResponse::Err(e.to_string()));
+                        let _ = response.send(APICommandResponse::Err(e.to_string()));
                     }
                 }
             }
@@ -142,7 +142,7 @@ impl PrimaryWorker {
 
 #[derive(Debug)]
 pub enum ManagerMessage {
-    Execute(PipeCastCommand, oneshot::Sender<PipewireCommandResponse>),
+    Execute(APICommand, oneshot::Sender<APICommandResponse>),
     GetAudioConfiguration(oneshot::Sender<AudioConfiguration>),
     Quit,
 }

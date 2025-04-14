@@ -14,7 +14,7 @@ pub enum DaemonRequest {
     GetStatus,
 
     Daemon(DaemonCommand),
-    Pipewire(PipeCastCommand),
+    Pipewire(APICommand),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,7 +29,7 @@ pub enum DaemonResponse {
     Err(String),
     Patch(Patch),
     Status(DaemonStatus),
-    Pipewire(PipewireCommandResponse),
+    Pipewire(APICommandResponse),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +42,7 @@ pub struct WebsocketResponse {
 pub enum DaemonCommand {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum PipeCastCommand {
+pub enum APICommand {
     CreateNode(NodeType, String),
     SetNodeColour(Ulid, Colour),
     RemoveNode(Ulid),
@@ -69,7 +69,7 @@ pub enum PipeCastCommand {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum PipewireCommandResponse {
+pub enum APICommandResponse {
     Ok,
     Id(Ulid),
     Err(String),
