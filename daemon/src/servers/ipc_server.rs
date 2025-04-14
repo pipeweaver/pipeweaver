@@ -12,13 +12,14 @@ use std::fs;
 use std::path::Path;
 
 use crate::{Stop, APP_NAME};
-static SOCKET_PATH: &str = "/tmp/pipeweaver.socket";
 
 async fn ipc_tidy() -> Result<()> {
-    if !Path::new(SOCKET_PATH).exists() {
+    let socket_path = format!("/tmp/{}.socket", APP_NAME);
+
+    if !Path::new(&socket_path).exists() {
         return Ok(());
     }
-    let socket = SOCKET_PATH.to_fs_name::<GenericFilePath>()?;
+    let socket = socket_path.clone().to_fs_name::<GenericFilePath>()?;
     let connection = LocalSocketStream::connect(socket).await;
 
     if connection.is_err() {
@@ -28,7 +29,7 @@ async fn ipc_tidy() -> Result<()> {
             }
             false => {
                 debug!("Connection Failed. Socket File is stale, removing..");
-                fs::remove_file(SOCKET_PATH)?;
+                fs::remove_file(socket_path)?;
             }
         }
         return Ok(());
@@ -46,7 +47,7 @@ async fn ipc_tidy() -> Result<()> {
             }
             false => {
                 debug!("Unable to send messages, removing socket..");
-                fs::remove_file(SOCKET_PATH)?;
+                fs::remove_file(socket_path)?;
             }
         }
         return Ok(());
@@ -57,9 +58,10 @@ async fn ipc_tidy() -> Result<()> {
 }
 
 pub async fn bind_socket() -> Result<LocalSocketListener> {
+    let socket_path = format!("/tmp/{}.socket", APP_NAME);
     ipc_tidy().await?;
 
-    let name = SOCKET_PATH.to_fs_name::<GenericFilePath>()?;
+    let name = socket_path.to_fs_name::<GenericFilePath>()?;
     let opts = ListenerOptions::new().name(name.clone());
     let listener = opts.create_tokio()?;
 
@@ -72,6 +74,7 @@ pub async fn spawn_ipc_server(
     usb_tx: Messenger,
     mut shutdown_signal: Stop,
 ) {
+    let socket_path = format!("/tmp/{}.socket", APP_NAME);
     debug!("Running IPC Server..");
     loop {
         tokio::select! {
@@ -84,7 +87,7 @@ pub async fn spawn_ipc_server(
             }
             () = shutdown_signal.recv() => {
                 if !cfg!(windows) {
-                    let _ = fs::remove_file(SOCKET_PATH);
+                    let _ = fs::remove_file(socket_path);
                 }
                 return;
             }
