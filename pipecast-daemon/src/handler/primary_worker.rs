@@ -21,22 +21,14 @@ pub struct PrimaryWorker {
     last_status: DaemonStatus,
     patch_broadcast: Sender<PatchEvent>,
 
-    /// Used for messages that the DeviceState may need updating
-    update_sender: mpsc::Sender<()>,
-    update_receiver: mpsc::Receiver<()>,
-
     shutdown: Stop,
 }
 
 impl PrimaryWorker {
     fn new(shutdown: Stop, patch_broadcast: Sender<PatchEvent>) -> Self {
-        let (update_sender, update_receiver) = mpsc::channel(1);
         Self {
             last_status: DaemonStatus::default(),
             patch_broadcast,
-
-            update_sender,
-            update_receiver,
 
             shutdown,
         }

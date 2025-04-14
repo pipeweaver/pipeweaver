@@ -5,6 +5,7 @@ mod platform;
 mod settings;
 mod profile;
 
+
 use crate::handler::primary_worker::start_primary_worker;
 use crate::platform::spawn_runtime;
 use crate::servers::http_server::spawn_http_server;
@@ -19,6 +20,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::{join, task};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+const HASH: &str = env!("GIT_HASH");
 
 // Definitions used during node / filter declarations
 const APP_ID: &str = "io.github.pipecast";
@@ -50,7 +52,7 @@ async fn main() -> Result<()> {
         ColorChoice::Auto,
     )]).context("Could not configure the logger")?;
 
-    info!("Starting PipeCast v{}", VERSION);
+    info!("Starting PipeCast v{} - {}", VERSION, HASH);
 
     let shutdown = Stop::new();
 
@@ -70,10 +72,10 @@ async fn main() -> Result<()> {
         shutdown.clone(),
     ));
 
-    // Prepare the HTTP Server..
+    // Prepare the HTTP Server
     let http_settings = HttpSettings {
         enabled: true,
-        bind_address: "localhost".to_string(),
+        bind_address: "0.0.0.0".to_string(),
         cors_enabled: false,
         port: 14565,
     };
@@ -89,10 +91,6 @@ async fn main() -> Result<()> {
         http_settings,
     ));
     let http_server = httpd_rx.await?;
-
-    // We're going to go to sleep, then trigger the shutdown..
-    // sleep(Duration::from_secs(5)).await;
-    // shutdown.trigger();
 
     let task = task::spawn(start_primary_worker(
         manager_recv,

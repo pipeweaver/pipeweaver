@@ -12,6 +12,7 @@ use std::thread;
 use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
 use tokio::sync::oneshot;
+use tokio::sync::oneshot::error::TryRecvError;
 use ulid::Ulid;
 
 type PWSender = pipewire::channel::Sender<PipewireMessage>;
@@ -80,6 +81,9 @@ impl PipewireRunner {
                     bail!(error.to_string());
                 }
                 Err(e) => {
+                    if e == TryRecvError::Closed {
+                        panic!("Channel Closed before Response");
+                    }
                     sleep(Duration::from_millis(5));
                 }
             }

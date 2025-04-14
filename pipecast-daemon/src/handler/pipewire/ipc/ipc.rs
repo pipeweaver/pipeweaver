@@ -57,14 +57,14 @@ impl IPCHandler for PipewireManager {
                 self.clear_target_mute_nodes(id, target).await.map(|_| Resp::Ok)
             }
             Cmd::SetTargetMuteState(id, state) => {
-                self.set_target_mute_state(id, state).await.map(|r| Resp::Ok)
+                self.set_target_mute_state(id, state).await.map(|_| Resp::Ok)
             }
 
             Cmd::AttachPhysicalNode(id, node_id) => {
-                self.add_device_to_node(id, node_id).await.map(|r| Resp::Ok)
+                self.add_device_to_node(id, node_id).await.map(|_| Resp::Ok)
             }
             Cmd::RemovePhysicalNode(id, index) => {
-                self.remove_device_from_node(id, index).await.map(|r| Resp::Ok)
+                self.remove_device_from_node(id, index).await.map(|_| Resp::Ok)
             }
         }
     }

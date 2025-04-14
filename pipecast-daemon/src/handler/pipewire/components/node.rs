@@ -203,7 +203,7 @@ impl NodeManagementLocal for PipewireManager {
 
     async fn node_create_virtual_source(&mut self, desc: &DeviceDescription) -> Result<()> {
         // A 'Virtual' source is a pipewire node that's selectable by the user.
-        let properties = self.create_node_props(MediaClass::Sink, &desc);
+        let properties = self.create_node_props(MediaClass::Sink, desc);
         self.node_pw_create(properties).await?;
 
         let (mix_a, mix_b) = self.node_create_a_b_volumes(desc).await?;
@@ -228,7 +228,7 @@ impl NodeManagementLocal for PipewireManager {
 
     async fn node_create_virtual_target(&mut self, desc: &DeviceDescription) -> Result<()> {
         // Virtual Targets (Such as Stream Mix) have a volume node and a target node
-        let properties = self.create_node_props(MediaClass::Source, &desc);
+        let properties = self.create_node_props(MediaClass::Source, desc);
         self.node_pw_create(properties).await?;
 
         // Link the Volume to the Target Node

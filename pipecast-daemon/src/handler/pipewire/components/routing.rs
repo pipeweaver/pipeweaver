@@ -57,10 +57,10 @@ impl RoutingManagement for PipewireManager {
 
         // This should already be here, but it's not, so create it
         let target_id = self.get_target_filter_node(target)?;
-        if self.profile.routes.get(&source).is_none() {
+        self.profile.routes.entry(source).or_insert_with(|| {
             warn!("[Routing] Table Missing for Source {}, Creating", source);
-            self.profile.routes.insert(source, Default::default());
-        }
+            Default::default()
+        });
 
         // This unwrap is safe, so just grab the Set and check what we're doing
         let route = self.profile.routes.get_mut(&source).unwrap();
@@ -165,7 +165,3 @@ impl RoutingManagement for PipewireManager {
         Ok(())
     }
 }
-
-trait RoutingManagementLocal {}
-
-impl RoutingManagementLocal for PipewireManager {}
