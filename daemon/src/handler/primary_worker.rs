@@ -3,17 +3,23 @@ use crate::handler::pipewire::manager::{run_pipewire_manager, PipewireManagerCon
 use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfiguration};
 use crate::servers::http_server::PatchEvent;
 use crate::stop::Stop;
+use crate::APP_NAME_ID;
+use anyhow::Result;
+use anyhow::Context;
 use json_patch::diff;
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{
     APICommand, APICommandResponse, AudioConfiguration, DaemonResponse, DaemonStatus,
 };
+use pipeweaver_profile::Profile;
+use std::fs;
+use std::fs::{create_dir_all, File};
+use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::{mpsc, oneshot};
-use tokio::time::sleep;
-use tokio::{select, task};
+use tokio::{select, task, time};
 
 type Manage = mpsc::Sender<ManagerMessage>;
 
@@ -34,10 +40,12 @@ impl PrimaryWorker {
         }
     }
 
-    async fn run(&mut self, mut message_receiver: mpsc::Receiver<DaemonMessage>, profile_path: PathBuf) {
+    async fn run(&mut self, mut message_receiver: mpsc::Receiver<DaemonMessage>, config_path: PathBuf) {
         info!("[PrimaryWorker] Starting Primary Worker");
 
         info!("[PrimaryWorker] Loading Profile");
+        let profile_path = config_path.join(format!("{}-profile.json", APP_NAME_ID));
+        let profile = self.load_profile(&profile_path);
 
 
         // Used to pass messages into the Pipewire Manager
@@ -45,12 +53,15 @@ impl PrimaryWorker {
         let (worker_sender, mut worker_receiver) = mpsc::channel(32);
         let (stop_sender, stop_receiver) = oneshot::channel();
         let (ready_sender, ready_receiver) = oneshot::channel();
-
+        let mut profile_tick = time::interval(Duration::from_secs(5));
 
         debug!("[PrimaryWorker] Spawning Pipewire Task..");
         let config = PipewireManagerConfig {
+            profile,
+
             command_receiver,
             worker_sender,
+
             ready_sender: Some(ready_sender),
         };
         task::spawn(run_pipewire_manager(config, stop_sender));
@@ -84,6 +95,13 @@ impl PrimaryWorker {
                     }
                 }
 
+                _ = profile_tick.tick() => {
+                    if profile_changed {
+                        profile_changed = false;
+                        let _ = self.save_profile(&profile_path, &self.last_status.audio.profile);
+                    }
+                },
+
                 _ = self.shutdown.recv() => {
                     info!("[PrimaryWorker] Stopping");
                     info!("[PrimaryWorker] Stopping Pipewire Manager");
@@ -96,6 +114,8 @@ impl PrimaryWorker {
             }
         }
 
+        // Do a final profile save on shutdown
+        let _ = self.save_profile(&profile_path, &self.last_status.audio.profile);
         info!("[PrimaryWorker] Stopped");
     }
 
@@ -157,6 +177,48 @@ impl PrimaryWorker {
         }
 
         self.last_status = status;
+    }
+
+    fn load_profile(&self, path: &PathBuf) -> Profile {
+        info!("[Profile] Loading");
+        match File::open(path) {
+            Ok(reader) => {
+                let settings = serde_json::from_reader(reader);
+                settings.unwrap_or_else(|e| {
+                    warn!("[Profile] Found, but unable to Load ({}), sending default", e);
+                    Default::default()
+                })
+            }
+            Err(_) => {
+                warn!("[Profile] Not Found, sending default");
+                Default::default()
+            }
+        }
+    }
+
+    fn save_profile(&self, path: &PathBuf, profile: &Profile) -> Result<()> {
+        info!("[Profile] Saving");
+
+        if let Some(parent) = path.parent() {
+            if let Err(e) = create_dir_all(parent) {
+                if e.kind() != ErrorKind::AlreadyExists {
+                    return Err(e).context(format!(
+                        "Could not create config directory at {}",
+                        parent.to_string_lossy()
+                    ))?;
+                }
+            }
+        }
+
+        if path.exists() {
+            fs::remove_file(path).context("Unable to remove old Profile")?;
+        }
+
+        let file = File::create(path)?;
+        serde_json::to_writer_pretty(file, profile)?;
+
+        info!("[Profile] Saved");
+        Ok(())
     }
 }
 

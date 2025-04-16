@@ -49,7 +49,7 @@ impl PipewireManager {
 
             pipewire: None,
 
-            profile: Profile::base_settings(),
+            profile: config.profile,
             //profile: Default::default(),
 
             source_map: HashMap::default(),
@@ -174,7 +174,7 @@ impl PipewireManager {
                                             let _ = self.target_device_removed(id).await;
                                         }
                                     }
-                                    let _ = self.worker_sender.send(WorkerMessage::ProfileChanged).await;
+                                    let _ = self.worker_sender.send(WorkerMessage::DevicesChanged).await;
                                 }
                             }
                         }
@@ -197,22 +197,24 @@ impl PipewireManager {
                             name: device.name.clone(),
                             description: device.description.clone()
                         };
+
+                        let sender = self.worker_sender.clone();
                         match device.node_class {
                             MediaClass::Source => {
-                                let _ = self.source_device_added(node).await;
+                                let _ = self.source_device_added(node, sender).await;
                             }
                             MediaClass::Sink => {
-                                let _ = self.target_device_added(node).await;
+                                let _ = self.target_device_added(node, sender).await;
                             }
                             MediaClass::Duplex => {
-                                let _ = self.source_device_added(node.clone()).await;
-                                let _ = self.target_device_added(node).await;
+                                let _ = self.source_device_added(node.clone(), sender.clone()).await;
+                                let _ = self.target_device_added(node, sender).await;
                             }
                         }
 
                         // Add node to our definitive list
                         self.physical_nodes.insert(device.node_id, device);
-                        let _ = self.worker_sender.send(WorkerMessage::ProfileChanged).await;
+                        let _ = self.worker_sender.send(WorkerMessage::DevicesChanged).await;
                     } else {
                         panic!("Got a Timer Ready for non-existent Node");
                     }
@@ -257,6 +259,8 @@ pub async fn run_pipewire_manager(config: PipewireManagerConfig, stopped: onesho
 }
 
 pub(crate) struct PipewireManagerConfig {
+    pub(crate) profile: Profile,
+
     pub(crate) command_receiver: mpsc::Receiver<ManagerMessage>,
     pub(crate) worker_sender: mpsc::Sender<WorkerMessage>,
 

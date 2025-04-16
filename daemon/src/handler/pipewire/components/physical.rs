@@ -2,17 +2,19 @@ use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
+use crate::handler::primary_worker::WorkerMessage;
 use anyhow::{anyhow, bail, Result};
 use log::debug;
 use pipeweaver_ipc::commands::PhysicalDevice;
 use pipeweaver_pipewire::PipewireNode;
 use pipeweaver_profile::{PhysicalDeviceDescriptor, PhysicalSourceDevice};
 use pipeweaver_shared::{DeviceType, NodeType};
+use tokio::sync::mpsc::Sender;
 use ulid::Ulid;
 
 pub(crate) trait PhysicalDevices {
-    async fn source_device_added(&mut self, node: PhysicalDevice) -> Result<()>;
-    async fn target_device_added(&mut self, node: PhysicalDevice) -> Result<()>;
+    async fn source_device_added(&mut self, node: PhysicalDevice, sender: Sender<WorkerMessage>) -> Result<()>;
+    async fn target_device_added(&mut self, node: PhysicalDevice, sender: Sender<WorkerMessage>) -> Result<()>;
 
     async fn source_device_removed(&mut self, node_id: u32) -> Result<()>;
     async fn target_device_removed(&mut self, node_id: u32) -> Result<()>;
@@ -22,7 +24,7 @@ pub(crate) trait PhysicalDevices {
 }
 
 impl PhysicalDevices for PipewireManager {
-    async fn source_device_added(&mut self, node: PhysicalDevice) -> Result<()> {
+    async fn source_device_added(&mut self, node: PhysicalDevice, sender: Sender<WorkerMessage>) -> Result<()> {
         self.node_list[DeviceType::Source].push(node.clone());
 
         // We need to check through our profile to see if we can find this device
@@ -55,6 +57,9 @@ impl PhysicalDevices for PipewireManager {
                             device.attached_devices[name_i] = descriptor;
                             self.profile.devices.sources.physical_devices[dev_i] = device;
 
+                            // Let the Primary Worker know we've changed the config
+                            let _ = sender.send(WorkerMessage::ProfileChanged).await;
+
                             break 'start;
                         }
                     }
@@ -81,6 +86,10 @@ impl PhysicalDevices for PipewireManager {
                             let mut device = device.clone();
                             device.attached_devices[desc_i] = descriptor;
                             self.profile.devices.sources.physical_devices[dev_i] = device;
+                            let _ = sender.send(WorkerMessage::ProfileChanged).await;
+
+                            // Let the Primary Worker know we've changed the config
+                            let _ = sender.send(WorkerMessage::ProfileChanged).await;
 
                             break 'start;
                         }
@@ -92,7 +101,7 @@ impl PhysicalDevices for PipewireManager {
         Ok(())
     }
 
-    async fn target_device_added(&mut self, node: PhysicalDevice) -> Result<()> {
+    async fn target_device_added(&mut self, node: PhysicalDevice, sender: Sender<WorkerMessage>) -> Result<()> {
         self.node_list[DeviceType::Target].push(node.clone());
 
         // Same as source node above, so read the comments there :)
@@ -114,6 +123,10 @@ impl PhysicalDevices for PipewireManager {
                             let mut device = device.clone();
                             device.attached_devices[name_i] = descriptor;
                             self.profile.devices.targets.physical_devices[dev_i] = device;
+
+                            // Let the Primary Worker know we've changed the config
+                            let _ = sender.send(WorkerMessage::ProfileChanged).await;
+
                             break 'start;
                         }
                     }
@@ -135,6 +148,9 @@ impl PhysicalDevices for PipewireManager {
                             let mut device = device.clone();
                             device.attached_devices[desc_i] = descriptor;
                             self.profile.devices.targets.physical_devices[dev_i] = device;
+
+                            // Let the Primary Worker know we've changed the config
+                            let _ = sender.send(WorkerMessage::ProfileChanged).await;
 
                             break 'start;
                         }
