@@ -13,6 +13,8 @@ use tokio::sync::mpsc::Sender;
 use ulid::Ulid;
 
 pub(crate) trait PhysicalDevices {
+    async fn connect_for_node(&mut self, id: Ulid) -> Result<()>;
+
     async fn source_device_added(&mut self, node: PhysicalDevice, sender: Sender<WorkerMessage>) -> Result<()>;
     async fn target_device_added(&mut self, node: PhysicalDevice, sender: Sender<WorkerMessage>) -> Result<()>;
 
@@ -24,6 +26,66 @@ pub(crate) trait PhysicalDevices {
 }
 
 impl PhysicalDevices for PipewireManager {
+    async fn connect_for_node(&mut self, id: Ulid) -> Result<()> {
+        let err = anyhow!("Cannot Locate Node");
+        let node_type = self.get_node_type(id).ok_or(err)?;
+        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::PhysicalSource) {
+            bail!("Provided Target is not a Physical Node");
+        }
+
+        let err = anyhow!("Cannot Find Target Node by ID: {}", id);
+        let devices = match node_type {
+            NodeType::PhysicalSource => {
+                let node = self.profile.devices.sources.physical_devices.iter().find(|node| {
+                    node.description.id == id
+                }).ok_or(err)?;
+                node.attached_devices.clone()
+            }
+            NodeType::PhysicalTarget => {
+                let node = self.profile.devices.targets.physical_devices.iter().find(|node| {
+                    node.description.id == id
+                }).ok_or(err)?;
+                node.attached_devices.clone()
+            }
+            _ => {
+                bail!("Incorrect Node Type");
+            }
+        };
+
+
+        // While during 'device added' we attempt to fix the profile, we're not going to do that
+        // here, as we're iterating over known configuration, so we'll avoid the 'best guess'
+        // description checks, the node Names should be valid.
+        match node_type {
+            NodeType::PhysicalSource => {
+                'start: for device in &self.node_list[DeviceType::Source] {
+                    // Try and match this against our node, check by Name first
+                    for paired in &devices {
+                        // Check by Name First
+                        if paired.name == device.name {
+                            self.link_create_unmanaged_to_filter(device.node_id, id).await?;
+                        }
+                    }
+                }
+            }
+            NodeType::PhysicalTarget => {
+                'start: for device in &self.node_list[DeviceType::Target] {
+                    // Try and match this against our node, check by Name first
+                    for paired in &devices {
+                        // Check by Name First
+                        if paired.name == device.name {
+                            self.link_create_filter_to_unmanaged(id, device.node_id).await?;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+
     async fn source_device_added(&mut self, node: PhysicalDevice, sender: Sender<WorkerMessage>) -> Result<()> {
         self.node_list[DeviceType::Source].push(node.clone());
 

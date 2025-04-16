@@ -146,6 +146,17 @@ export default {
 
     onClosed(e) {
       this.$emit('closed', e);
+    },
+
+    onRenameClick(e) {
+      // TODO: Send this upstream
+      let name = prompt("New Device Name:");
+
+      // CreateNode(NodeType, String),
+      let command = {
+        "RenameNode": [this.getId(), name]
+      }
+      websocket.send_command(command)
     }
   }
 }
@@ -153,7 +164,7 @@ export default {
 
 <template>
   <PopupBox ref="popup" @closed="onClosed">
-    <div class="entry" @click="">
+    <div class="entry" @click="onRenameClick">
       <span class="selected"></span>
       <span>Rename?</span>
     </div>

@@ -4,8 +4,8 @@ use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfigurat
 use crate::servers::http_server::PatchEvent;
 use crate::stop::Stop;
 use crate::APP_NAME_ID;
-use anyhow::Result;
 use anyhow::Context;
+use anyhow::Result;
 use json_patch::diff;
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{
@@ -180,6 +180,8 @@ impl PrimaryWorker {
     }
 
     fn load_profile(&self, path: &PathBuf) -> Profile {
+        return Profile::base_settings();
+
         info!("[Profile] Loading");
         match File::open(path) {
             Ok(reader) => {

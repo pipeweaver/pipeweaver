@@ -45,14 +45,17 @@ impl VolumeManager for PipewireManager {
         let error = anyhow!("Unable to Locate Target Node");
         match node_type {
             NodeType::PhysicalSource | NodeType::VirtualSource => {
+                debug!("Loading Volume for {}", id);
                 self.volume_source_load_with_mute(id).await?
             }
             NodeType::PhysicalTarget => {
                 let device = self.get_physical_target(id).ok_or(error)?;
+                debug!("Setting Initial Volume for {} to {}", id, device.volume);
                 self.volume_target_load_with_mute(id, device.volume).await?
             }
             NodeType::VirtualTarget => {
                 let device = self.get_virtual_target(id).ok_or(error)?;
+                debug!("Setting Initial Volume for {} to {}", id, device.volume);
                 self.volume_target_load_with_mute(id, device.volume).await?
             }
         }
@@ -227,6 +230,8 @@ impl VolumeManagerLocal for PipewireManager {
             };
             (volumes.volume[Mix::A], volumes.volume[Mix::B])
         };
+
+        debug!("Setting Volumes - A: {} B: {}", a, b);
 
         self.filter_volume_set(mixes[Mix::A], a).await?;
         self.filter_volume_set(mixes[Mix::B], b).await?;

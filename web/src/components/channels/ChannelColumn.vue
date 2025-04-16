@@ -228,6 +228,17 @@ export default {
     },
 
     remove_click: function (e) {
+
+      // TODO: Send this upstream
+      let name = prompt("New Device Name:");
+
+      // CreateNode(NodeType, String),
+      let command = {
+        "RenameNode": [this.getId(), name]
+      }
+      websocket.send_command(command)
+      return;
+      //
       let result = confirm("Are you sure you want to remove this channel?");
       if (result) {
         // CreateNode(NodeType, String),

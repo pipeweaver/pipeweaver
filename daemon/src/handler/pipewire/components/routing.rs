@@ -35,11 +35,14 @@ impl RoutingManagement for PipewireManager {
     }
 
     async fn routing_load_source(&mut self, source: &Ulid) -> Result<()> {
+        debug!("Loading Routing for Source: {}", source);
         if let Some(targets) = self.profile.routes.get(source) {
             for target in targets {
                 let target_node = self.get_target_filter_node(*target)?;
+                debug!("Source to Target Filter Node: {} {}", source, target);
                 if !self.is_source_muted_to_some(*source, *target).await? {
                     if let Some(map) = self.source_map.get(source).copied() {
+                        debug!("Creating Link");
                         // Grab the Mix to Route From
                         let mix = self.routing_get_target_mix(target).await?;
                         self.link_create_filter_to_filter(map[mix], target_node).await?;
@@ -51,11 +54,18 @@ impl RoutingManagement for PipewireManager {
     }
 
     async fn routing_load_target(&mut self, target: &Ulid) -> Result<()> {
+        debug!("Loading Routing for Target: {}", target);
+
         // This one's a little different, it's for a newly appearing target that may need routing
         for (source, targets) in &self.profile.routes {
             if targets.contains(target) && !self.is_source_muted_to_some(*source, *target).await? {
+                debug!("Need Route");
                 let target_node = self.get_target_filter_node(*target)?;
+
+                debug!("Routing to {} for {}", target_node, target);
                 if let Some(map) = self.source_map.get(source) {
+                    debug!("Applying Map: {:?}", map);
+
                     let mix = self.routing_get_target_mix(target).await?;
                     self.link_create_filter_to_filter(map[mix], target_node).await?;
                 }

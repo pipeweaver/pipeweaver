@@ -1,5 +1,6 @@
 use crate::handler::pipewire::components::filters::FilterManagement;
 use crate::handler::pipewire::components::links::LinkManagement;
+use crate::handler::pipewire::components::physical::PhysicalDevices;
 use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
@@ -113,6 +114,18 @@ impl NodeManagement for PipewireManager {
         Ok(id)
     }
 
+    async fn node_create(&mut self, node_type: NodeType, desc: &DeviceDescription) -> Result<()> {
+        // Create the Node or Filter depending on the device
+        match node_type {
+            NodeType::PhysicalSource => self.node_create_physical_source(desc).await?,
+            NodeType::VirtualSource => self.node_create_virtual_source(desc).await?,
+            NodeType::PhysicalTarget => self.node_create_physical_target(desc).await?,
+            NodeType::VirtualTarget => self.node_create_virtual_target(desc).await?,
+        }
+
+        Ok(())
+    }
+
     async fn node_rename(&mut self, id: Ulid, name: String) -> Result<()> {
         // If we're renaming a node, we need to teardown the original node, then rebuild it with
         // the new name. I've checked for an easy way to do this directly in PipeWire, but
@@ -144,20 +157,12 @@ impl NodeManagement for PipewireManager {
 
         // Re-load the routes
         match node_type {
-            NodeType::PhysicalSource | NodeType::PhysicalTarget => self.routing_load_source(&id).await?,
-            NodeType::VirtualSource | NodeType::VirtualTarget => self.routing_load_target(&id).await?,
+            NodeType::PhysicalSource | NodeType::VirtualSource => self.routing_load_source(&id).await?,
+            NodeType::PhysicalTarget | NodeType::VirtualTarget => self.routing_load_target(&id).await?,
         }
 
-        Ok(())
-    }
-
-    async fn node_create(&mut self, node_type: NodeType, desc: &DeviceDescription) -> Result<()> {
-        // Create the Node or Filter depending on the device
-        match node_type {
-            NodeType::PhysicalSource => self.node_create_physical_source(desc).await?,
-            NodeType::VirtualSource => self.node_create_virtual_source(desc).await?,
-            NodeType::PhysicalTarget => self.node_create_physical_target(desc).await?,
-            NodeType::VirtualTarget => self.node_create_virtual_target(desc).await?,
+        if node_type == NodeType::PhysicalSource || node_type == NodeType::PhysicalTarget {
+            self.connect_for_node(id).await?;
         }
 
         Ok(())
@@ -404,9 +409,11 @@ impl NodeManagementLocal for PipewireManager {
         }
 
         // We'll re-iterate the routes and make sure our node is removed from the Profile
-        for (_, target) in self.profile.routes.iter_mut() {
-            if target.contains(&id) {
-                target.retain(|target_id| target_id != &id);
+        if profile_remove {
+            for (_, target) in self.profile.routes.iter_mut() {
+                if target.contains(&id) {
+                    target.retain(|target_id| target_id != &id);
+                }
             }
         }
 
