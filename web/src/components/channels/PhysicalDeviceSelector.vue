@@ -38,6 +38,7 @@ export default {
 
     getDevices: function () {
       let devices = (is_source(this.type)) ? getSourcePhysicalDevices() : getTargetPhysicalDevices();
+
       let list = [];
       let mapped_node_ids = [];
 
@@ -58,12 +59,12 @@ export default {
 
         if (device !== undefined) {
           // We have a device, grab the details from there
-          node_id = device.id;
+          node_id = device.node_id;
           name = device.name;
           description = device.description;
 
           // Flag this as already found, so we don't repeat later
-          mapped_node_ids.push(device.id);
+          mapped_node_ids.push(device.node_id);
         } else {
           // No device found, use the Profile config
           name = value.name;
@@ -80,9 +81,9 @@ export default {
 
       // Iterate over the devices, and add them if they're not already present
       for (let device of devices) {
-        if (!mapped_node_ids.includes(device.id)) {
+        if (!mapped_node_ids.includes(device.node_id)) {
           list.push({
-            node_id: device.id,
+            node_id: device.node_id,
             config_id: undefined,
             name: device.name,
             description: device.description,
@@ -130,7 +131,6 @@ export default {
 
       // Ok, work out what we need to do here
       if (this.isConfigDevice(device)) {
-        console.log("TODO: Remove Index: " + device.config_id + " from " + this.getId());
         let command = {
           "RemovePhysicalNode": [this.getId(), device.config_id]
         }
@@ -138,7 +138,6 @@ export default {
         return;
       }
 
-      console.log("TODO: Attached Node " + device.node_id + " to " + this.getId());
       let command = {
         "AttachPhysicalNode": [this.getId(), device.node_id]
       }
