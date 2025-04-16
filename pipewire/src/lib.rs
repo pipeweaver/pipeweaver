@@ -1,5 +1,4 @@
-pub extern crate tokio;
-pub extern crate ulid;
+pub extern crate oneshot;
 mod store;
 mod manager;
 mod registry;
@@ -7,12 +6,11 @@ mod registry;
 use crate::manager::run_pw_main_loop;
 use anyhow::{anyhow, bail, Result};
 use log::{debug, info, warn};
+use oneshot::TryRecvError;
 use std::sync::mpsc;
 use std::thread;
 use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
-use tokio::sync::oneshot;
-use tokio::sync::oneshot::error::TryRecvError;
 use ulid::Ulid;
 
 type PWSender = pipewire::channel::Sender<PipewireMessage>;
@@ -81,7 +79,7 @@ impl PipewireRunner {
                     bail!(error.to_string());
                 }
                 Err(e) => {
-                    if e == TryRecvError::Closed {
+                    if e == TryRecvError::Disconnected {
                         panic!("Channel Closed before Response");
                     }
                     sleep(Duration::from_millis(5));

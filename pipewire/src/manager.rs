@@ -22,13 +22,12 @@ use pipewire::{context, main_loop};
 use std::cell::RefCell;
 
 use enum_map::{enum_map, EnumMap};
+use oneshot::Sender;
 use parking_lot::RwLock;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::mpsc;
 use strum::IntoEnumIterator;
-use tokio::sync::oneshot;
-use tokio::sync::oneshot::Sender;
 use ulid::Ulid;
 
 pub(crate) struct FilterData {

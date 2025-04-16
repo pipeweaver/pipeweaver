@@ -4,6 +4,8 @@ use crate::{FilterValue, LinkType, MediaClass, PipewireNode, PipewireReceiver};
 use anyhow::bail;
 use enum_map::{Enum, EnumMap};
 use log::{debug, error};
+use oneshot;
+use oneshot::Sender;
 use parking_lot::RwLock;
 use pipewire::filter::{Filter, FilterListener, FilterPort};
 use pipewire::link::{Link, LinkListener};
@@ -19,7 +21,6 @@ use std::str::FromStr;
 use std::sync::mpsc;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
-use tokio::sync::oneshot::Sender;
 use ulid::Ulid;
 
 pub struct Store {

@@ -1,7 +1,7 @@
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::Result;
+use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{LinkType, PipewireMessage};
-use tokio::sync::oneshot;
 use ulid::Ulid;
 
 /// So this trait is INCREDIBLY verbose, I could simply just use LinkType and have a single function

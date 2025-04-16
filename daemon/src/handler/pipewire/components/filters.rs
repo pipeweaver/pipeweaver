@@ -3,8 +3,8 @@ use crate::handler::pipewire::components::audio_filters::volume::VolumeFilter;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use anyhow::{bail, Result};
+use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{FilterProperties, FilterValue, MediaClass, PipewireMessage};
-use tokio::sync::oneshot;
 use ulid::Ulid;
 
 pub(crate) trait FilterManagement {

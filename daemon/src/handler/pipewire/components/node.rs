@@ -6,11 +6,11 @@ use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME};
 use anyhow::{anyhow, bail, Result};
 use enum_map::enum_map;
+use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{MediaClass, NodeProperties, PipewireMessage};
 use pipeweaver_profile::{DeviceDescription, PhysicalSourceDevice, PhysicalTargetDevice, VirtualSourceDevice, VirtualTargetDevice};
 use pipeweaver_shared::{Colour, Mix, NodeType};
 use strum::IntoEnumIterator;
-use tokio::sync::oneshot;
 use ulid::Ulid;
 
 /// This crate contains everything needed to create a Pipewire node

@@ -10,7 +10,8 @@ ulid = { workspace = true }
 log = { workspace = true }
 
 pipewire = { git = "https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git", features = ["v0_3_77"] }
-tokio = "1.43.0"
+#tokio = "1.43.0"
+oneshot = "0.1.11"
 
 enum-map = { workspace = true }
 strum = { workspace = true }
