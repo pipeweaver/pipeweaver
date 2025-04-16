@@ -5,7 +5,7 @@ use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{anyhow, bail, Result};
 use log::{debug, warn};
-use shared::{Mix, NodeType};
+use pipeweaver_shared::{Mix, NodeType};
 use ulid::Ulid;
 
 pub(crate) trait RoutingManagement {

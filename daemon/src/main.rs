@@ -11,8 +11,8 @@ use crate::servers::ipc_server::{bind_socket, spawn_ipc_server};
 use crate::stop::Stop;
 use anyhow::{anyhow, bail, Context, Result};
 use directories::ProjectDirs;
-use ipc::commands::HttpSettings;
-use log::{debug, error, info, LevelFilter};
+use log::{error, info, LevelFilter};
+use pipeweaver_ipc::commands::HttpSettings;
 use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::sync::{broadcast, mpsc};
 use tokio::{join, task};
@@ -23,12 +23,11 @@ const HASH: &str = env!("GIT_HASH");
 // Definitions used during node / filter declarations
 const APP_ID: &str = "io.github.pipeweaver";
 const APP_NAME: &str = "PipeWeaver";
-const APP_PREFIX: &str = "pipeweaver";
+const APP_NAME_ID: &str = "pipeweaver";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let dirs = ProjectDirs::from("io", "github", APP_PREFIX).ok_or(anyhow!("Unable to locate project directory"))?;
-
+    let dirs = ProjectDirs::from("io", "github", APP_NAME_ID).ok_or(anyhow!("Unable to locate project directory"))?;
 
     // We need to ignore a couple of packages log output so create a builder.
     let mut log_config = ConfigBuilder::new();
@@ -41,7 +40,6 @@ async fn main() -> Result<()> {
     log_config.add_filter_ignore_str("actix_server::worker");
     log_config.add_filter_ignore_str("actix_server::server");
     log_config.add_filter_ignore_str("actix_server::builder");
-
 
     CombinedLogger::init(vec![TermLogger::new(
         LevelFilter::Debug,
@@ -57,7 +55,7 @@ async fn main() -> Result<()> {
     // Create the Global Manager Channels...
     let (manager_send, manager_recv) = mpsc::channel(32);
 
-    // Prepare the IPC Socket..
+    // Prepare the IPC Socket
     let ipc_socket = bind_socket().await;
     if ipc_socket.is_err() {
         error!("Error Starting Daemon: ");
@@ -100,9 +98,11 @@ async fn main() -> Result<()> {
 
     let runtime = task::spawn(spawn_runtime(shutdown.clone()));
 
-    let _ = join!(task, communications_handle, runtime);
-    http_server.stop(false).await;
+    // Wait for a Shutdown Trigger
+    let _ = shutdown.clone().recv().await;
 
-    debug!("Should be done!");
+    // Join on the Threads until they all end
+    let _ = join!(task, communications_handle, runtime, http_server.stop(false));
+
     Ok(())
 }

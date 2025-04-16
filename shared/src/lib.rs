@@ -1,5 +1,6 @@
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use strum_macros::{Display, EnumIter};
 
 #[derive(Debug, Display, Copy, Clone, PartialEq, Enum, EnumIter, Serialize, Deserialize)]

@@ -3,7 +3,7 @@ use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::Result;
-use shared::NodeType;
+use pipeweaver_shared::NodeType;
 
 pub(crate) trait LoadProfile {
     async fn load_profile(&mut self) -> Result<()>;

@@ -1,6 +1,6 @@
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::Result;
-use pipewire::{LinkType, PipewireMessage};
+use pipeweaver_pipewire::{LinkType, PipewireMessage};
 use tokio::sync::oneshot;
 use ulid::Ulid;
 

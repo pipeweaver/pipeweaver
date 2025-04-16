@@ -1,6 +1,6 @@
 use crate::{DeviceDescription, Devices, Mix, MuteState, MuteStates, PhysicalDeviceDescriptor, PhysicalSourceDevice, PhysicalTargetDevice, Profile, SourceDevices, TargetDevices, VirtualSourceDevice, VirtualTargetDevice, Volumes};
 use enum_map::enum_map;
-use shared::{Colour, MuteTarget};
+use pipeweaver_shared::{Colour, MuteTarget};
 use std::collections::HashSet;
 use ulid::Ulid;
 

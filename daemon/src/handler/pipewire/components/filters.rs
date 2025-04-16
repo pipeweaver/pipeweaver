@@ -1,9 +1,9 @@
 use crate::handler::pipewire::components::audio_filters::pass_through::PassThroughFilter;
 use crate::handler::pipewire::components::audio_filters::volume::VolumeFilter;
 use crate::handler::pipewire::manager::PipewireManager;
-use crate::{APP_ID, APP_NAME, APP_PREFIX};
+use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use anyhow::{bail, Result};
-use pipewire::{FilterProperties, FilterValue, MediaClass, PipewireMessage};
+use pipeweaver_pipewire::{FilterProperties, FilterValue, MediaClass, PipewireMessage};
 use tokio::sync::oneshot;
 use ulid::Ulid;
 
@@ -88,7 +88,7 @@ impl FilterManagementLocal for PipewireManager {
             filter_id: id,
             filter_name: "Volume".into(),
             filter_nick: name.to_string(),
-            filter_description: format!("{}/{}", APP_PREFIX, description),
+            filter_description: format!("{}/{}", APP_NAME_ID, description),
 
             class: MediaClass::Duplex,
             app_id: APP_ID.to_string(),
@@ -106,7 +106,7 @@ impl FilterManagementLocal for PipewireManager {
             filter_id: id,
             filter_name: "Pass-Through".into(),
             filter_nick: name.to_string(),
-            filter_description: format!("{}/{}", APP_PREFIX, description),
+            filter_description: format!("{}/{}", APP_NAME_ID, description),
 
             class: MediaClass::Duplex,
             app_id: APP_ID.to_string(),

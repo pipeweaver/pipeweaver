@@ -1,8 +1,8 @@
 use enum_map::EnumMap;
 use json_patch::Patch;
-use profile::Profile;
+use pipeweaver_profile::Profile;
+use pipeweaver_shared::{Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType};
 use serde::{Deserialize, Serialize};
-use shared::{Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType};
 use ulid::Ulid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

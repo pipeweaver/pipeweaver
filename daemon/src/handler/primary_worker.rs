@@ -3,11 +3,11 @@ use crate::handler::pipewire::manager::run_pipewire_manager;
 use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfiguration};
 use crate::servers::http_server::PatchEvent;
 use crate::stop::Stop;
-use ipc::commands::{
-    APICommand, APICommandResponse, AudioConfiguration, DaemonResponse, DaemonStatus,
-};
 use json_patch::diff;
 use log::{debug, error, info, warn};
+use pipeweaver_ipc::commands::{
+    APICommand, APICommandResponse, AudioConfiguration, DaemonResponse, DaemonStatus,
+};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
@@ -66,7 +66,8 @@ impl PrimaryWorker {
                 }
 
                 _ = self.shutdown.recv() => {
-                    debug!("Shutdown Received!");
+                    info!("[PrimaryWorker] Stopping");
+                    info!("[PrimaryWorker] Stopping Pipewire Manager");
                     let _ = pipewire_sender.send(ManagerMessage::Quit).await;
 
                     // Wait for the Stop message

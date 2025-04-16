@@ -6,7 +6,7 @@ mod registry;
 
 use crate::manager::run_pw_main_loop;
 use anyhow::{anyhow, bail, Result};
-use log::{info, warn};
+use log::{debug, info, warn};
 use std::sync::mpsc;
 use std::thread;
 use std::thread::{sleep, JoinHandle};
@@ -105,6 +105,7 @@ impl PipewireRunner {
 
 impl Drop for PipewireRunner {
     fn drop(&mut self) {
+        info!("[PIPEWIRE] Stopping");
         // Send an exit message
         let _ = self.message_sender.send(PipewireMessage::Quit);
 
@@ -114,13 +115,15 @@ impl Drop for PipewireRunner {
                 warn!("Unable to Join Pipewire Thread: {:?}", e);
             }
         }
+        info!("[PIPEWIRE] Main Thread Stopped");
+
         if let Some(messaging_thread) = self.messaging_thread.take() {
             if let Err(e) = messaging_thread.join() {
-                warn!("UNable to Join Message Thread: {:?}", e);
+                warn!("Unable to Join Message Thread: {:?}", e);
             }
         }
-
-        info!("Pipewire Manager Stopped");
+        info!("[PIPEWIRE] Message Thread Stopped");
+        info!("[PIPEWIRE] Stopped");
     }
 }
 

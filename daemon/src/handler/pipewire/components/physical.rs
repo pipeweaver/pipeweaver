@@ -3,11 +3,11 @@ use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{anyhow, bail, Result};
-use ipc::commands::PhysicalDevice;
 use log::debug;
-use pipewire::PipewireNode;
-use profile::{PhysicalDeviceDescriptor, PhysicalSourceDevice};
-use shared::{DeviceType, NodeType};
+use pipeweaver_ipc::commands::PhysicalDevice;
+use pipeweaver_pipewire::PipewireNode;
+use pipeweaver_profile::{PhysicalDeviceDescriptor, PhysicalSourceDevice};
+use pipeweaver_shared::{DeviceType, NodeType};
 use ulid::Ulid;
 
 pub(crate) trait PhysicalDevices {

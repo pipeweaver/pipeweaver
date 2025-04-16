@@ -1,8 +1,8 @@
 mod default;
 
 use enum_map::{enum_map, EnumMap};
+use pipeweaver_shared::{Colour, Mix, MuteState, MuteTarget};
 use serde::{Deserialize, Serialize};
-use shared::{Colour, Mix, MuteState, MuteTarget};
 use std::collections::{HashMap, HashSet};
 use ulid::Ulid;
 

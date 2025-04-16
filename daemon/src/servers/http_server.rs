@@ -24,7 +24,7 @@ use tokio::sync::Mutex;
 
 use crate::handler::packet::{handle_packet, Messenger};
 use crate::APP_NAME;
-use ipc::commands::{
+use pipeweaver_ipc::commands::{
     DaemonRequest, DaemonResponse, DaemonStatus, HttpSettings, WebsocketRequest, WebsocketResponse,
 };
 
@@ -242,9 +242,9 @@ pub async fn spawn_http_server(
     let _ = handle_tx.send(server.handle());
 
     if server.await.is_ok() {
-        info!("HTTP Server Stopped.");
+        info!("[HTTP] Stopped");
     } else {
-        warn!("HTTP Server Stopped with Error");
+        warn!("[HTTP] Stopped with Error");
     }
 }
 

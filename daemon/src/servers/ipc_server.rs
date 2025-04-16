@@ -5,13 +5,13 @@ use interprocess::local_socket::traits::tokio::{Listener, Stream};
 use interprocess::local_socket::{
     GenericFilePath, ListenerOptions, ToFsName,
 };
-use ipc::clients::ipc::ipc_socket::Socket;
-use ipc::commands::{DaemonRequest, DaemonResponse};
 use log::{debug, info, warn};
+use pipeweaver_ipc::clients::ipc::ipc_socket::Socket;
+use pipeweaver_ipc::commands::{DaemonRequest, DaemonResponse};
 use std::fs;
 use std::path::Path;
 
-use crate::{Stop, APP_NAME};
+use crate::{Stop, APP_NAME, APP_NAME_ID};
 
 async fn ipc_tidy() -> Result<()> {
     let socket_path = format!("/tmp/{}.socket", APP_NAME);
@@ -58,7 +58,7 @@ async fn ipc_tidy() -> Result<()> {
 }
 
 pub async fn bind_socket() -> Result<LocalSocketListener> {
-    let socket_path = format!("/tmp/{}.socket", APP_NAME);
+    let socket_path = format!("/tmp/{}.socket", APP_NAME_ID);
     ipc_tidy().await?;
 
     let name = socket_path.to_fs_name::<GenericFilePath>()?;
@@ -86,9 +86,9 @@ pub async fn spawn_ipc_server(
                 });
             }
             () = shutdown_signal.recv() => {
-                if !cfg!(windows) {
-                    let _ = fs::remove_file(socket_path);
-                }
+                info!("[IPC] Stopping");
+                let _ = fs::remove_file(socket_path);
+                info!("[IPC] Stopped");
                 return;
             }
         }

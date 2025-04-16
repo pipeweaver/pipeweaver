@@ -1,4 +1,4 @@
-use pipewire::{FilterHandler, FilterProperty, FilterValue};
+use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
 
 pub struct PassThroughFilter {}
 

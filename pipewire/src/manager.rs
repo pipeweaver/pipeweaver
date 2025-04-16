@@ -3,7 +3,7 @@ use crate::store::{FilterStore, LinkGroupStore, LinkStoreMap, NodeStore, PortLoc
 use crate::{registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties, PipewireReceiver};
 use crate::{MediaClass, PWReceiver, PipewireMessage};
 use anyhow::anyhow;
-use log::{debug, error};
+use log::{debug, error, info};
 use pipewire::core::Core;
 use pipewire::filter::{Filter, FilterFlags, FilterState, PortFlags};
 use pipewire::keys::{APP_ICON_NAME, APP_ID, APP_NAME, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME};
@@ -612,4 +612,6 @@ pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Res
     debug!("Pipewire Initialised, starting mainloop");
     start_tx.send(Ok(())).expect("OneShot Channel is broken!");
     mainloop.run();
+
+    info!("[PIPEWIRE] Main Loop Terminated");
 }

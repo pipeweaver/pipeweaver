@@ -1,5 +1,5 @@
 use crate::handler::pipewire::manager::PipewireManager;
-use profile::{
+use pipeweaver_profile::{
     PhysicalSourceDevice, PhysicalTargetDevice, VirtualSourceDevice, VirtualTargetDevice,
 };
 use ulid::Ulid;

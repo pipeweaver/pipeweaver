@@ -5,8 +5,8 @@ use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{anyhow, bail, Result};
 use log::debug;
-use profile::Volumes;
-use shared::{Mix, MuteState, NodeType};
+use pipeweaver_profile::Volumes;
+use pipeweaver_shared::{Mix, MuteState, NodeType};
 use ulid::Ulid;
 
 pub(crate) trait VolumeManager {

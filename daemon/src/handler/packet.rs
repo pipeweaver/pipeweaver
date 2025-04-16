@@ -3,7 +3,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 
 use crate::handler::messaging::DaemonMessage;
-use ipc::commands::{DaemonRequest, DaemonResponse};
+use pipeweaver_ipc::commands::{DaemonRequest, DaemonResponse};
 
 pub type Messenger = Sender<DaemonMessage>;
 type Response = Result<DaemonResponse>;
