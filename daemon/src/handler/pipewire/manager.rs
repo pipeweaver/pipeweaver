@@ -23,6 +23,7 @@ type StdRecv = std::sync::mpsc::Receiver<PipewireReceiver>;
 pub(crate) struct PipewireManager {
     command_receiver: mpsc::Receiver<ManagerMessage>,
     worker_sender: mpsc::Sender<WorkerMessage>,
+    ready_sender: Option<oneshot::Sender<()>>,
 
     pub(crate) pipewire: Option<PipewireRunner>,
 
@@ -40,15 +41,16 @@ pub(crate) struct PipewireManager {
 }
 
 impl PipewireManager {
-    pub fn new(command_receiver: mpsc::Receiver<ManagerMessage>, worker_sender: mpsc::Sender<WorkerMessage>) -> Self {
+    pub fn new(config: PipewireManagerConfig) -> Self {
         Self {
-            command_receiver,
-            worker_sender,
+            command_receiver: config.command_receiver,
+            worker_sender: config.worker_sender,
+            ready_sender: config.ready_sender,
 
             pipewire: None,
 
-            //profile: Profile::base_settings(),
-            profile: Default::default(),
+            profile: Profile::base_settings(),
+            //profile: Default::default(),
 
             source_map: HashMap::default(),
             target_map: HashMap::default(),
@@ -108,6 +110,8 @@ impl PipewireManager {
         // A simple list of devices which have been discovered, but not flagged 'Ready'
         let mut discovered_devices: HashMap<u32, PipewireNode> = HashMap::new();
 
+        // Let the primary worker know we're ready
+        let _ = self.ready_sender.take().expect("Ready Sender Missing").send(());
 
         loop {
             select!(
@@ -170,7 +174,7 @@ impl PipewireManager {
                                             let _ = self.target_device_removed(id).await;
                                         }
                                     }
-                                    let _ = self.worker_sender.send(WorkerMessage::RefreshState).await;
+                                    let _ = self.worker_sender.send(WorkerMessage::ProfileChanged).await;
                                 }
                             }
                         }
@@ -208,7 +212,7 @@ impl PipewireManager {
 
                         // Add node to our definitive list
                         self.physical_nodes.insert(device.node_id, device);
-                        let _ = self.worker_sender.send(WorkerMessage::RefreshState).await;
+                        let _ = self.worker_sender.send(WorkerMessage::ProfileChanged).await;
                     } else {
                         panic!("Got a Timer Ready for non-existent Node");
                     }
@@ -243,11 +247,18 @@ pub fn run_receiver_wrapper(recv: StdRecv, resend: mpsc::Sender<PipewireReceiver
     info!("[MessageWrapper] Stopped");
 }
 
-pub async fn run_pipewire_manager(command_receiver: mpsc::Receiver<ManagerMessage>, worker_sender: mpsc::Sender<WorkerMessage>, stopped: oneshot::Sender<()>) {
-    let mut manager = PipewireManager::new(command_receiver, worker_sender);
+pub async fn run_pipewire_manager(config: PipewireManagerConfig, stopped: oneshot::Sender<()>) {
+    let mut manager = PipewireManager::new(config);
     manager.run().await;
 
 
     drop(manager);
     let _ = stopped.send(());
+}
+
+pub(crate) struct PipewireManagerConfig {
+    pub(crate) command_receiver: mpsc::Receiver<ManagerMessage>,
+    pub(crate) worker_sender: mpsc::Sender<WorkerMessage>,
+
+    pub(crate) ready_sender: Option<oneshot::Sender<()>>,
 }

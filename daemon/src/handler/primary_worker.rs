@@ -1,5 +1,5 @@
 use crate::handler::messaging::DaemonMessage;
-use crate::handler::pipewire::manager::run_pipewire_manager;
+use crate::handler::pipewire::manager::{run_pipewire_manager, PipewireManagerConfig};
 use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfiguration};
 use crate::servers::http_server::PatchEvent;
 use crate::stop::Stop;
@@ -8,7 +8,7 @@ use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{
     APICommand, APICommandResponse, AudioConfiguration, DaemonResponse, DaemonStatus,
 };
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::{mpsc, oneshot};
@@ -34,33 +34,52 @@ impl PrimaryWorker {
         }
     }
 
-    async fn run(&mut self, mut message_receiver: mpsc::Receiver<DaemonMessage>, config_path: PathBuf) {
-        info!("[PrimaryWorker] Starting Primary Worker..");
+    async fn run(&mut self, mut message_receiver: mpsc::Receiver<DaemonMessage>, profile_path: PathBuf) {
+        info!("[PrimaryWorker] Starting Primary Worker");
+
+        info!("[PrimaryWorker] Loading Profile");
+
 
         // Used to pass messages into the Pipewire Manager
-        let (pipewire_sender, pipewire_receiver) = mpsc::channel(32);
+        let (command_sender, command_receiver) = mpsc::channel(32);
         let (worker_sender, mut worker_receiver) = mpsc::channel(32);
-        let (stop_sender, stop_receiver) = tokio::sync::oneshot::channel();
+        let (stop_sender, stop_receiver) = oneshot::channel();
+        let (ready_sender, ready_receiver) = oneshot::channel();
+
 
         debug!("[PrimaryWorker] Spawning Pipewire Task..");
-        task::spawn(run_pipewire_manager(pipewire_receiver, worker_sender, stop_sender));
+        let config = PipewireManagerConfig {
+            command_receiver,
+            worker_sender,
+            ready_sender: Some(ready_sender),
+        };
+        task::spawn(run_pipewire_manager(config, stop_sender));
 
-        // Until we're doing this properly...
-        sleep(Duration::from_secs(3)).await;
-        self.update_status(&pipewire_sender).await;
+        // Wait until the manager reports itself as ready
+        let _ = ready_receiver.await;
+
+        let mut profile_changed = false;
 
         loop {
             select! {
                 Some(message) = message_receiver.recv() => {
-                    if self.handle_message(&pipewire_sender, message).await {
-                        self.update_status(&pipewire_sender).await;
+                    if self.handle_message(&command_sender, message).await {
+                        self.update_status(&command_sender).await;
+                        profile_changed = true;
                     }
                 }
 
                 Some(message) = worker_receiver.recv() => {
                     match message {
-                        WorkerMessage::RefreshState => {
-                            self.update_status(&pipewire_sender).await;
+                        WorkerMessage::DevicesChanged => {
+                            // A physical device has changed, we need to update the main
+                            // status to include it.
+                            self.update_status(&command_sender).await;
+                        }
+                        WorkerMessage::ProfileChanged => {
+                            // Something's been changed in the Profile
+                            self.update_status(&command_sender).await;
+                            profile_changed = true;
                         }
                     }
                 }
@@ -68,7 +87,7 @@ impl PrimaryWorker {
                 _ = self.shutdown.recv() => {
                     info!("[PrimaryWorker] Stopping");
                     info!("[PrimaryWorker] Stopping Pipewire Manager");
-                    let _ = pipewire_sender.send(ManagerMessage::Quit).await;
+                    let _ = command_sender.send(ManagerMessage::Quit).await;
 
                     // Wait for the Stop message
                     let _ = stop_receiver.await;
@@ -149,7 +168,8 @@ pub enum ManagerMessage {
 }
 
 pub enum WorkerMessage {
-    RefreshState,
+    DevicesChanged,
+    ProfileChanged,
 }
 
 pub async fn start_primary_worker(
