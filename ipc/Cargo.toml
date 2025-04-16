@@ -1,12 +1,12 @@
 [package]
-name = "ipc"
+name = "pipeweaver-ipc"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 # Local Dependencies
-shared = { path = "../shared" }
-profile = { path = "../profile" }
+pipeweaver-shared = { path = "../shared" }
+pipeweaver-profile = { path = "../profile" }
 
 ### Inherited Dependencies ###
 anyhow = { workspace = true }
