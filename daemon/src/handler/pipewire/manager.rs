@@ -1,6 +1,5 @@
 use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
-use crate::handler::pipewire::ipc::ipc::IPCHandler;
 use crate::handler::primary_worker::{ManagerMessage, WorkerMessage};
 use enum_map::EnumMap;
 use log::{debug, error, info};
@@ -14,6 +13,7 @@ use std::time::Duration;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 
+use crate::handler::pipewire::ipc::IPCHandler;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use ulid::Ulid;

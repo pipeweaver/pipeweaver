@@ -20,6 +20,9 @@ impl IPCHandler for PipewireManager {
             Cmd::CreateNode(node_type, id) => {
                 self.node_new(node_type, id).await.map(Resp::Id)
             }
+            Cmd::RenameNode(id, new) => {
+                self.node_rename(id, new).await.map(|_| Resp::Ok)
+            }
             Cmd::SetNodeColour(id, colour) => {
                 self.node_set_colour(id, colour).await.map(|_| Resp::Ok)
             }

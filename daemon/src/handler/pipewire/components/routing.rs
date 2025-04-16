@@ -10,6 +10,8 @@ use ulid::Ulid;
 
 pub(crate) trait RoutingManagement {
     async fn routing_load(&mut self) -> Result<()>;
+    async fn routing_load_source(&mut self, source: &Ulid) -> Result<()>;
+    async fn routing_load_target(&mut self, target: &Ulid) -> Result<()>;
 
     async fn routing_set_route(&mut self, source: Ulid, target: Ulid, enabled: bool) -> Result<()>;
     async fn routing_route_exists(&self, source: Ulid, target: Ulid) -> Result<bool>;
@@ -24,8 +26,16 @@ impl RoutingManagement for PipewireManager {
         // and establish links between the sources and targets
         debug!("Loading Routing..");
 
-        let routing = &self.profile.routes;
-        for (source, targets) in routing {
+        let routing = &self.profile.routes.clone();
+        for source in routing.keys() {
+            self.routing_load_source(source).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn routing_load_source(&mut self, source: &Ulid) -> Result<()> {
+        if let Some(targets) = self.profile.routes.get(source) {
             for target in targets {
                 let target_node = self.get_target_filter_node(*target)?;
                 if !self.is_source_muted_to_some(*source, *target).await? {
@@ -37,7 +47,20 @@ impl RoutingManagement for PipewireManager {
                 }
             }
         }
+        Ok(())
+    }
 
+    async fn routing_load_target(&mut self, target: &Ulid) -> Result<()> {
+        // This one's a little different, it's for a newly appearing target that may need routing
+        for (source, targets) in &self.profile.routes {
+            if targets.contains(target) && !self.is_source_muted_to_some(*source, *target).await? {
+                let target_node = self.get_target_filter_node(*target)?;
+                if let Some(map) = self.source_map.get(source) {
+                    let mix = self.routing_get_target_mix(target).await?;
+                    self.link_create_filter_to_filter(map[mix], target_node).await?;
+                }
+            }
+        }
         Ok(())
     }
 

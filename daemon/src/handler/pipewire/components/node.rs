@@ -1,6 +1,7 @@
 use crate::handler::pipewire::components::filters::FilterManagement;
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::profile::ProfileManagement;
+use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME};
@@ -21,6 +22,7 @@ pub(crate) trait NodeManagement {
     async fn node_new(&mut self, node_type: NodeType, name: String) -> Result<Ulid>;
 
     async fn node_create(&mut self, node_type: NodeType, description: &DeviceDescription) -> Result<()>;
+    async fn node_rename(&mut self, id: Ulid, name: String) -> Result<()>;
     async fn node_remove(&mut self, id: Ulid) -> Result<()>;
 
     async fn node_set_colour(&mut self, id: Ulid, colour: Colour) -> Result<()>;
@@ -111,6 +113,44 @@ impl NodeManagement for PipewireManager {
         Ok(id)
     }
 
+    async fn node_rename(&mut self, id: Ulid, name: String) -> Result<()> {
+        // If we're renaming a node, we need to teardown the original node, then rebuild it with
+        // the new name. I've checked for an easy way to do this directly in PipeWire, but
+        // ultimately couldn't find one.
+        //
+        // What we need to do here, is teardown the original, update the profile descriptor, then
+        // create a new one with the same settings.
+
+        // First thing we need to do, is to find this node
+        let err = anyhow!("Unable to find Node");
+        let node_type = self.get_node_type(id).ok_or(err)?;
+
+        // Now we remove it, and all associated filters, while leaving it in the profile
+        match node_type {
+            NodeType::PhysicalSource => self.node_remove_physical_source(id, false).await?,
+            NodeType::VirtualSource => self.node_remove_virtual_source(id, false).await?,
+            NodeType::PhysicalTarget => self.node_remove_physical_target(id, false).await?,
+            NodeType::VirtualTarget => self.node_remove_virtual_target(id, false).await?,
+        }
+
+        // Update the name in the profile
+        let description = self.get_device_description(id)?;
+        description.name = name;
+
+        // Create a local version of this description, create the node tree and load volumes
+        let local_desc = description.clone();
+        self.node_create(node_type, &local_desc).await?;
+        self.load_initial_volume(id).await?;
+
+        // Re-load the routes
+        match node_type {
+            NodeType::PhysicalSource | NodeType::PhysicalTarget => self.routing_load_source(&id).await?,
+            NodeType::VirtualSource | NodeType::VirtualTarget => self.routing_load_target(&id).await?,
+        }
+
+        Ok(())
+    }
+
     async fn node_create(&mut self, node_type: NodeType, desc: &DeviceDescription) -> Result<()> {
         // Create the Node or Filter depending on the device
         match node_type {
@@ -129,10 +169,10 @@ impl NodeManagement for PipewireManager {
 
         if let Some(node_type) = self.get_node_type(id) {
             match node_type {
-                NodeType::PhysicalSource => self.node_remove_physical_source(id).await?,
-                NodeType::VirtualSource => self.node_remove_virtual_source(id).await?,
-                NodeType::PhysicalTarget => self.node_remove_physical_target(id).await?,
-                NodeType::VirtualTarget => self.node_remove_virtual_target(id).await?,
+                NodeType::PhysicalSource => self.node_remove_physical_source(id, true).await?,
+                NodeType::VirtualSource => self.node_remove_virtual_source(id, true).await?,
+                NodeType::PhysicalTarget => self.node_remove_physical_target(id, true).await?,
+                NodeType::VirtualTarget => self.node_remove_virtual_target(id, true).await?,
             }
         }
         Ok(())
@@ -166,10 +206,10 @@ trait NodeManagementLocal {
     async fn node_create_a_b_volumes(&mut self, desc: &DeviceDescription) -> Result<(Ulid, Ulid)>;
     async fn node_pw_create(&mut self, props: NodeProperties) -> Result<()>;
 
-    async fn node_remove_physical_source(&mut self, id: Ulid) -> Result<()>;
-    async fn node_remove_virtual_source(&mut self, id: Ulid) -> Result<()>;
-    async fn node_remove_physical_target(&mut self, id: Ulid) -> Result<()>;
-    async fn node_remove_virtual_target(&mut self, id: Ulid) -> Result<()>;
+    async fn node_remove_physical_source(&mut self, id: Ulid, profile_remove: bool) -> Result<()>;
+    async fn node_remove_virtual_source(&mut self, id: Ulid, profile_remove: bool) -> Result<()>;
+    async fn node_remove_physical_target(&mut self, id: Ulid, profile_remove: bool) -> Result<()>;
+    async fn node_remove_virtual_target(&mut self, id: Ulid, profile_remove: bool) -> Result<()>;
     async fn node_pw_remove(&mut self, id: Ulid) -> Result<()>;
 
 
@@ -259,11 +299,10 @@ impl NodeManagementLocal for PipewireManager {
         Ok(())
     }
 
-    async fn node_remove_physical_source(&mut self, id: Ulid) -> Result<()> {
+    async fn node_remove_physical_source(&mut self, id: Ulid, profile_remove: bool) -> Result<()> {
         // So this ID represents the filter attached to one or more physical nodes, so
         // we need to first make sure nothing is connected, and if it is, remove it.
         if let Some(devices) = self.physical_source.get(&id) {
-            // TODO: Wanker Check
             for device in devices.clone() {
                 self.link_remove_unmanaged_to_filter(device, id).await?;
             }
@@ -289,19 +328,21 @@ impl NodeManagementLocal for PipewireManager {
         // Remove the A/B Filter mapping
         self.source_map.remove(&id);
 
-        // Remove Routing from the Profile Tree
-        self.profile.routes.remove(&id);
-
         // Remove our knowledge of this node inside the General Struct
         self.physical_source.remove(&id);
 
-        // And finally, remove the Node from the profile tree
-        self.profile.devices.sources.physical_devices.retain(|device| device.description.id != id);
+        if profile_remove {
+            // Remove Routing from the Profile Tree
+            self.profile.routes.remove(&id);
+
+            // And finally, remove the Node from the profile tree
+            self.profile.devices.sources.physical_devices.retain(|device| device.description.id != id);
+        }
 
         Ok(())
     }
 
-    async fn node_remove_virtual_source(&mut self, id: Ulid) -> Result<()> {
+    async fn node_remove_virtual_source(&mut self, id: Ulid, profile_remove: bool) -> Result<()> {
         // Virtual Sources are a little easier, still a bit of a repeat from the above
         // in places, but we don't have to deal with Unmanaged sources, and our node
         // connects directly to the Mix A / B volume filters
@@ -324,16 +365,17 @@ impl NodeManagementLocal for PipewireManager {
         // Remove the A/B Filter mapping
         self.source_map.remove(&id);
 
-        // Remove Routing from the Profile Tree
-        self.profile.routes.remove(&id);
+        if profile_remove {
+            // Remove Routing from the Profile Tree
+            self.profile.routes.remove(&id);
 
-        // And finally, remove the Node from the profile tree
-        self.profile.devices.sources.virtual_devices.retain(|device| device.description.id != id);
-
+            // And finally, remove the Node from the profile tree
+            self.profile.devices.sources.virtual_devices.retain(|device| device.description.id != id);
+        }
         Ok(())
     }
 
-    async fn node_remove_physical_target(&mut self, id: Ulid) -> Result<()> {
+    async fn node_remove_physical_target(&mut self, id: Ulid, profile_remove: bool) -> Result<()> {
         // These are kinda similar to PhysicalSources, except we're looking in the other
         // direction (Filter -> Device)
         // So this ID represents the filter attached to one or more physical nodes, so
@@ -374,13 +416,15 @@ impl NodeManagementLocal for PipewireManager {
         // Remove knowledge of our node
         self.physical_target.remove(&id);
 
-        // And finally, remove the Node from the profile tree
-        self.profile.devices.targets.physical_devices.retain(|device| device.description.id != id);
+        if profile_remove {
+            // And finally, remove the Node from the profile tree
+            self.profile.devices.targets.physical_devices.retain(|device| device.description.id != id);
+        }
 
         Ok(())
     }
 
-    async fn node_remove_virtual_target(&mut self, id: Ulid) -> Result<()> {
+    async fn node_remove_virtual_target(&mut self, id: Ulid, profile_remove: bool) -> Result<()> {
         // Again, similar to physical targets, but we need to check the target map to
         // find our volume filter then un-route and remove it
         if let Some(volume) = self.target_map.clone().get(&id) {
@@ -409,12 +453,13 @@ impl NodeManagementLocal for PipewireManager {
         // Remove it from the target map
         self.target_map.remove(&id);
 
-        // Remove ourselves as a target from any routes we're active in
-        self.profile.routes.iter_mut().for_each(|(_, targets)| targets.retain(|t| *t != id));
+        if profile_remove {
+            // Remove ourselves as a target from any routes we're active in
+            self.profile.routes.iter_mut().for_each(|(_, targets)| targets.retain(|t| *t != id));
 
-        // Finally remove this node from the profile
-        self.profile.devices.targets.virtual_devices.retain(|device| device.description.id != id);
-
+            // Finally remove this node from the profile
+            self.profile.devices.targets.virtual_devices.retain(|device| device.description.id != id);
+        }
         Ok(())
     }
 

@@ -44,6 +44,7 @@ pub enum DaemonCommand {}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum APICommand {
     CreateNode(NodeType, String),
+    RenameNode(Ulid, String),
     SetNodeColour(Ulid, Colour),
     RemoveNode(Ulid),
 
