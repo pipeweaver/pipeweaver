@@ -7,11 +7,13 @@ import {FontAwesomeIcon} from "@fortawesome/vue-fontawesome";
 import PopupBox from "@/components/inputs/PopupBox.vue";
 import MuteTargetSelector from "@/components/channels/MuteTargetSelector.vue";
 import MixAssignment from "@/components/channels/MixAssignment.vue";
-import PhysicalDeviceSelector from "@/components/channels/PhysicalDeviceSelector.vue";
+import PhysicalDeviceSelector from "@/components/channels/DevicePopup.vue";
+import DevicePopup from "@/components/channels/DevicePopup.vue";
 
 export default {
   name: 'ChannelColumn',
   components: {
+    DevicePopup,
     PhysicalDeviceSelector,
     MixAssignment,
     MuteTargetSelector, PopupBox, FontAwesomeIcon, ChannelColumnVolume, ColourSettings
@@ -227,28 +229,6 @@ export default {
       }
     },
 
-    remove_click: function (e) {
-
-      // TODO: Send this upstream
-      let name = prompt("New Device Name:");
-
-      // CreateNode(NodeType, String),
-      let command = {
-        "RenameNode": [this.getId(), name]
-      }
-      websocket.send_command(command)
-      return;
-      //
-      let result = confirm("Are you sure you want to remove this channel?");
-      if (result) {
-        // CreateNode(NodeType, String),
-        let command = {
-          "RemoveNode": this.getId()
-        }
-        websocket.send_command(command)
-      }
-    },
-
     target_change: function (target, e) {
       // SetTargetMix(Ulid, Mix),
       let command = {
@@ -335,20 +315,12 @@ export default {
                       :type='type' target="TargetB"
                       @closed="output_closed"/>
 
-  <PhysicalDeviceSelector v-if="is_physical()" id="select_device" ref="dev_selector" :index='index'
-                          :type='type'/>
-
   <div class="mix">
     <div class="title">
       <div class="start"></div>
       <div class="name">{{ getChannelName() }}</div>
       <div class="end">
-        <button v-if="!is_physical()" @click="remove_click">
-          <font-awesome-icon :icon="['fas', 'xmark']"/>
-        </button>
-        <button v-else @click="menu_click">
-          <font-awesome-icon :icon="['fas', 'bars']"/>
-        </button>
+        <DevicePopup id="select_device" :index='index' :type='type'/>
       </div>
     </div>
     <div class="top" @click="colour_clicked"></div>

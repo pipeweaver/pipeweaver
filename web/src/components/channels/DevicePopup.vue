@@ -7,12 +7,13 @@ import {
   getFullTargetList,
   getSourcePhysicalDevices,
   getTargetPhysicalDevices,
+  is_physical,
   is_source
 } from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
 
 export default {
-  name: "PhysicalDeviceSelector",
+  name: "DevicePopup",
   components: {PopupBox},
 
   props: {
@@ -34,6 +35,10 @@ export default {
 
     getId: function () {
       return this.getDevice().description.id;
+    },
+
+    isPhysicalNode: function () {
+      return is_physical(this.type);
     },
 
     getDevices: function () {
@@ -125,6 +130,10 @@ export default {
       return device.description;
     },
 
+    menuClick: function (e) {
+      this.$refs.popup.showDialog(e, this.id);
+    },
+
     onClick: function (device) {
       // AttachPhysicalNode(Ulid, u32),
       // RemovePhysicalNode(Ulid, usize),
@@ -144,52 +153,77 @@ export default {
       websocket.send_command(command);
     },
 
-    onClosed(e) {
-      this.$emit('closed', e);
-    },
-
     onRenameClick(e) {
-      // TODO: Send this upstream
       let name = prompt("New Device Name:");
 
-      // CreateNode(NodeType, String),
-      let command = {
-        "RenameNode": [this.getId(), name]
+      if (name !== null) {
+        // CreateNode(NodeType, String),
+        let command = {
+          "RenameNode": [this.getId(), name]
+        }
+        websocket.send_command(command)
+        this.$refs.popup.hideDialog();
       }
-      websocket.send_command(command)
+    },
+
+    onRemoveClicked(e) {
+      let result = confirm("Are you sure you want to remove this channel?");
+      if (result) {
+        // CreateNode(NodeType, String),
+        let command = {
+          "RemoveNode": this.getId()
+        }
+        websocket.send_command(command)
+        this.$refs.popup.hideDialog();
+      }
+
     }
   }
 }
 </script>
 
 <template>
-  <PopupBox ref="popup" @closed="onClosed">
+  <button @click="menuClick">
+    <font-awesome-icon :icon="['fas', 'bars']"/>
+  </button>
+
+  <PopupBox ref="popup" @closed="">
     <div class="entry" @click="onRenameClick">
       <span class="selected"></span>
-      <span>Rename?</span>
+      <span>Rename</span>
     </div>
-    <div class="separator"/>
-    <div v-for="device of getDevices()"
-         :class="{error: !isDevicePresent(device), entry: isDevicePresent(device)}"
+    <div v-if="isPhysicalNode()" class="separator"/>
+    <div v-for="device of getDevices()" v-if="isPhysicalNode()"
+         :class="{error: !isDevicePresent(device)}"
+         class="entry"
          @click="e => onClick(device)">
-        <span class="selected">
-          <font-awesome-icon v-if="isConfigDevice(device)" :icon="['fas', 'check']"/>
-        </span>
+      <span class="selected">
+        <font-awesome-icon v-if="isConfigDevice(device)" :icon="['fas', 'check']"/>
+      </span>
       <span class="title">
         <span v-if="!isDevicePresent(device)" class="not_connected"><b>[Not Connected]</b></span>
         <span>{{ getDeviceName(device) }}</span>
       </span>
     </div>
     <div class="separator"/>
-    <div class="entry" @click="">
+    <div class="entry" @click="onRemoveClicked">
       <span class="selected"></span>
-      <span>Remove?</span>
+      <span>Remove</span>
     </div>
 
   </PopupBox>
 </template>
 
 <style scoped>
+button {
+  all: unset;
+}
+
+button:hover {
+  cursor: pointer;
+}
+
+
 .separator {
   height: 5px;
   background-color: #3b413f;
@@ -218,7 +252,8 @@ export default {
 
 .entry {
   white-space: nowrap;
-  padding: 6px 20px 6px 6px;
+  padding: 6px 25px 6px 6px;
+  text-align: left;
 }
 
 .entry:hover {
@@ -233,6 +268,10 @@ export default {
 .not_connected {
   display: inline-block;
   margin-right: 10px;
+}
+
+span {
+  text-align: left;
 }
 
 </style>
