@@ -190,7 +190,7 @@ export default {
   <PopupBox ref="popup" @closed="">
     <div class="entry" @click="onRenameClick">
       <span class="selected"></span>
-      <span>Rename</span>
+      <span>Rename Channel</span>
     </div>
     <div v-if="isPhysicalNode()" class="separator"/>
     <div v-for="device of getDevices()" v-if="isPhysicalNode()"
@@ -208,7 +208,7 @@ export default {
     <div class="separator"/>
     <div class="entry" @click="onRemoveClicked">
       <span class="selected"></span>
-      <span>Remove</span>
+      <span>Remove Channel</span>
     </div>
 
   </PopupBox>
