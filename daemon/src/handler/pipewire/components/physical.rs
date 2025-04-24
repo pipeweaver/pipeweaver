@@ -241,8 +241,6 @@ impl PhysicalDevices for PipewireManager {
 
         // Find the Pipewire Node
         let node = self.physical_nodes.get(&node_id).ok_or(pw_error)?.clone();
-
-
         match node_type {
             NodeType::PhysicalSource => {
                 let device = self.get_physical_source_mut(id).ok_or(error)?;
@@ -317,11 +315,14 @@ trait PhysicalDevicesLocal {
 impl PhysicalDevicesLocal for PipewireManager {
     fn locate_node(&self, descriptor: PhysicalDeviceDescriptor) -> Option<&PipewireNode> {
         if let Some(name) = descriptor.name {
-            self.physical_nodes.values().find(|node| node.name.as_ref() == Some(&name));
+            let node = self.physical_nodes.values().find(|node| node.name.as_ref() == Some(&name));
+            if let Some(node) = node {
+                return Some(node);
+            }
         }
 
         if let Some(desc) = descriptor.description {
-            self.physical_nodes.values().find(|node| node.description.as_ref() == Some(&desc));
+            return self.physical_nodes.values().find(|node| node.description.as_ref() == Some(&desc));
         }
 
         None
