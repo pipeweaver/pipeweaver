@@ -54,6 +54,7 @@ When you shut down pipeweaver, all the nodes and routes will be automatically re
 
 Planned but not yet implemented:
 
+* Command Line configuration tool
 * Channel Re-ordering
 * Tray Icon and .desktop Files
 * Custom Channel Colours
