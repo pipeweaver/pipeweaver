@@ -180,8 +180,6 @@ impl PrimaryWorker {
     }
 
     fn load_profile(&self, path: &PathBuf) -> Profile {
-        return Profile::base_settings();
-
         info!("[Profile] Loading");
         match File::open(path) {
             Ok(reader) => {

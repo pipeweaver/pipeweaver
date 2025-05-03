@@ -34,8 +34,6 @@ pub(crate) struct FilterData {
     pub callback: Box<dyn FilterHandler>,
 }
 
-struct Test {}
-
 struct PipewireManager {
     core: Core,
     registry: PipewireRegistry,
