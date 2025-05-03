@@ -14,8 +14,9 @@ be stable enough to check out and play with.
 Also note, that until I'm doing 'formal' releases changes to code may reset your settings. You have been warned!
 ****
 
-PipeWeaver is an attempt to bring a simple way to manage complex audio setups, it allows creation of virtual audio
-sources, as well as attaching physical audio sources, then route them through to physical and virtual audio targets.
+PipeWeaver is an attempt to bring a simple way to manage complex streaming audio setups, it allows creation of virtual
+audio sources, attaching physical audio sources, managing volumes (including matrix mixing), 'complex' mute
+arrangements, and finally routing to physical and virtual outputs.
 
 This readme is a work in progress, so details are a little on the slim side at the moment!
 
