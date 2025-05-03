@@ -52,7 +52,14 @@ When you shut down pipeweaver, all the nodes and routes will be automatically re
 
 ## Current Status
 
-Planned but not yet implemented:
+Implemented:
+
+* Virtual Channel Creation
+* Physical Device Mapping
+* Volumes, Muting, Routing
+* Configuration Saving and Recall
+
+Planned:
 
 * Command Line configuration tool
 * Channel Re-ordering
@@ -64,7 +71,7 @@ Planned but not yet implemented:
 * Useful Documentation
 * Channel Metering
 
-Potential Features:
+Possible Future Plans:
 
 * Application Management (Move Applications to channels inside the UI)
 * LV2 support for Mic Effects (Gate, Compressor, Expander, Eq etc)
