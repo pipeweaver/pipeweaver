@@ -10,7 +10,10 @@ use anyhow::{anyhow, bail, Result};
 use enum_map::enum_map;
 use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{MediaClass, NodeProperties, PipewireMessage};
-use pipeweaver_profile::{DeviceDescription, PhysicalSourceDevice, PhysicalTargetDevice, VirtualSourceDevice, VirtualTargetDevice};
+use pipeweaver_profile::{
+    DeviceDescription, PhysicalSourceDevice, PhysicalTargetDevice, VirtualSourceDevice,
+    VirtualTargetDevice,
+};
 use pipeweaver_shared::{Colour, Mix, NodeType};
 use strum::IntoEnumIterator;
 use ulid::Ulid;
@@ -22,7 +25,11 @@ pub(crate) trait NodeManagement {
 
     async fn node_new(&mut self, node_type: NodeType, name: String) -> Result<Ulid>;
 
-    async fn node_create(&mut self, node_type: NodeType, description: &DeviceDescription) -> Result<()>;
+    async fn node_create(
+        &mut self,
+        node_type: NodeType,
+        description: &DeviceDescription,
+    ) -> Result<()>;
     async fn node_rename(&mut self, id: Ulid, name: String) -> Result<()>;
     async fn node_remove(&mut self, id: Ulid) -> Result<()>;
 
@@ -33,18 +40,34 @@ pub(crate) trait NodeManagement {
 impl NodeManagement for PipewireManager {
     fn get_node_type(&self, id: Ulid) -> Option<NodeType> {
         let sources = &self.profile.devices.sources;
-        if sources.physical_devices.iter().any(|d| d.description.id == id) {
+        if sources
+            .physical_devices
+            .iter()
+            .any(|d| d.description.id == id)
+        {
             return Some(NodeType::PhysicalSource);
         }
-        if sources.virtual_devices.iter().any(|d| d.description.id == id) {
+        if sources
+            .virtual_devices
+            .iter()
+            .any(|d| d.description.id == id)
+        {
             return Some(NodeType::VirtualSource);
         }
 
         let targets = &self.profile.devices.targets;
-        if targets.physical_devices.iter().any(|d| d.description.id == id) {
+        if targets
+            .physical_devices
+            .iter()
+            .any(|d| d.description.id == id)
+        {
             return Some(NodeType::PhysicalTarget);
         }
-        if targets.virtual_devices.iter().any(|d| d.description.id == id) {
+        if targets
+            .virtual_devices
+            .iter()
+            .any(|d| d.description.id == id)
+        {
             return Some(NodeType::VirtualTarget);
         }
         None
@@ -53,7 +76,10 @@ impl NodeManagement for PipewireManager {
     fn get_target_filter_node(&self, id: Ulid) -> Result<Ulid> {
         let err = anyhow!("Target Node not Found");
         let node_type = self.get_node_type(id).ok_or(err)?;
-        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+        if !matches!(
+            node_type,
+            NodeType::PhysicalTarget | NodeType::VirtualTarget
+        ) {
             bail!("Provided Target is a Source Node");
         }
 
@@ -64,7 +90,6 @@ impl NodeManagement for PipewireManager {
             Ok(*self.target_map.get(&id).ok_or(err)?)
         }
     }
-
 
     async fn node_new(&mut self, node_type: NodeType, name: String) -> Result<Ulid> {
         // This is relatively simple, firstly generate the ID, and build the description
@@ -78,30 +103,50 @@ impl NodeManagement for PipewireManager {
         // Store this in the profile, and setup default blank routing table
         match node_type {
             NodeType::PhysicalSource => {
-                self.profile.devices.sources.physical_devices.push(PhysicalSourceDevice {
-                    description: description.clone(),
-                    ..Default::default()
-                });
+                self.profile
+                    .devices
+                    .sources
+                    .physical_devices
+                    .push(PhysicalSourceDevice {
+                        description: description.clone(),
+                        ..Default::default()
+                    });
                 self.profile.routes.insert(id, Default::default());
+                self.profile.devices.sources.device_order.push(id);
             }
             NodeType::VirtualSource => {
-                self.profile.devices.sources.virtual_devices.push(VirtualSourceDevice {
-                    description: description.clone(),
-                    ..Default::default()
-                });
+                self.profile
+                    .devices
+                    .sources
+                    .virtual_devices
+                    .push(VirtualSourceDevice {
+                        description: description.clone(),
+                        ..Default::default()
+                    });
                 self.profile.routes.insert(id, Default::default());
+                self.profile.devices.sources.device_order.push(id);
             }
             NodeType::PhysicalTarget => {
-                self.profile.devices.targets.physical_devices.push(PhysicalTargetDevice {
-                    description: description.clone(),
-                    ..Default::default()
-                });
+                self.profile
+                    .devices
+                    .targets
+                    .physical_devices
+                    .push(PhysicalTargetDevice {
+                        description: description.clone(),
+                        ..Default::default()
+                    });
+                self.profile.devices.targets.device_order.push(id);
             }
             NodeType::VirtualTarget => {
-                self.profile.devices.targets.virtual_devices.push(VirtualTargetDevice {
-                    description: description.clone(),
-                    ..Default::default()
-                });
+                self.profile
+                    .devices
+                    .targets
+                    .virtual_devices
+                    .push(VirtualTargetDevice {
+                        description: description.clone(),
+                        ..Default::default()
+                    });
+                self.profile.devices.targets.device_order.push(id);
             }
         }
 
@@ -157,8 +202,12 @@ impl NodeManagement for PipewireManager {
 
         // Re-load the routes
         match node_type {
-            NodeType::PhysicalSource | NodeType::VirtualSource => self.routing_load_source(&id).await?,
-            NodeType::PhysicalTarget | NodeType::VirtualTarget => self.routing_load_target(&id).await?,
+            NodeType::PhysicalSource | NodeType::VirtualSource => {
+                self.routing_load_source(&id).await?
+            }
+            NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                self.routing_load_target(&id).await?
+            }
         }
 
         if node_type == NodeType::PhysicalSource || node_type == NodeType::PhysicalTarget {
@@ -167,7 +216,6 @@ impl NodeManagement for PipewireManager {
 
         Ok(())
     }
-
 
     async fn node_remove(&mut self, id: Ulid) -> Result<()> {
         // This is complicated, it depends purely on the node type and what we're trying to do here.
@@ -187,10 +235,30 @@ impl NodeManagement for PipewireManager {
         if let Some(node_type) = self.get_node_type(id) {
             let err = anyhow!("Cannot Find Node");
             match node_type {
-                NodeType::PhysicalSource => self.get_physical_source_mut(id).ok_or(err)?.description.colour = colour,
-                NodeType::PhysicalTarget => self.get_physical_target_mut(id).ok_or(err)?.description.colour = colour,
-                NodeType::VirtualSource => self.get_virtual_source_mut(id).ok_or(err)?.description.colour = colour,
-                NodeType::VirtualTarget => self.get_virtual_target_mut(id).ok_or(err)?.description.colour = colour,
+                NodeType::PhysicalSource => {
+                    self.get_physical_source_mut(id)
+                        .ok_or(err)?
+                        .description
+                        .colour = colour
+                }
+                NodeType::PhysicalTarget => {
+                    self.get_physical_target_mut(id)
+                        .ok_or(err)?
+                        .description
+                        .colour = colour
+                }
+                NodeType::VirtualSource => {
+                    self.get_virtual_source_mut(id)
+                        .ok_or(err)?
+                        .description
+                        .colour = colour
+                }
+                NodeType::VirtualTarget => {
+                    self.get_virtual_target_mut(id)
+                        .ok_or(err)?
+                        .description
+                        .colour = colour
+                }
             }
         }
         Ok(())
@@ -217,7 +285,6 @@ trait NodeManagementLocal {
     async fn node_remove_virtual_target(&mut self, id: Ulid, profile_remove: bool) -> Result<()>;
     async fn node_pw_remove(&mut self, id: Ulid) -> Result<()>;
 
-
     /// Used to Remove all Links from a Filter
     async fn remove_routes(&mut self, source: Ulid, target: Ulid) -> Result<()>;
 
@@ -231,7 +298,8 @@ impl NodeManagementLocal for PipewireManager {
     async fn node_create_physical_source(&mut self, desc: &DeviceDescription) -> Result<()> {
         // A 'Physical' source is an audio source that starts with a 'Pass Through' Filter which
         // maps to the Description's ID
-        self.filter_pass_create_id(desc.name.clone(), desc.id).await?;
+        self.filter_pass_create_id(desc.name.clone(), desc.id)
+            .await?;
 
         let (mix_a, mix_b) = self.node_create_a_b_volumes(desc).await?;
 
@@ -240,7 +308,8 @@ impl NodeManagementLocal for PipewireManager {
         self.link_create_filter_to_filter(desc.id, mix_b).await?;
 
         // Create a map for this ID to the mixes
-        self.source_map.insert(desc.id, enum_map! { Mix::A => mix_a, Mix::B => mix_b });
+        self.source_map
+            .insert(desc.id, enum_map! { Mix::A => mix_a, Mix::B => mix_b });
 
         // And we're done :)
         Ok(())
@@ -258,7 +327,8 @@ impl NodeManagementLocal for PipewireManager {
         self.link_create_node_to_filter(desc.id, mix_b).await?;
 
         // Create a map for this ID to the mixes
-        self.source_map.insert(desc.id, enum_map! { Mix::A => mix_a, Mix::B => mix_b });
+        self.source_map
+            .insert(desc.id, enum_map! { Mix::A => mix_a, Mix::B => mix_b });
 
         // And we're done :)
         Ok(())
@@ -266,7 +336,8 @@ impl NodeManagementLocal for PipewireManager {
 
     async fn node_create_physical_target(&mut self, desc: &DeviceDescription) -> Result<()> {
         // A 'Physical' Target is just a volume filter by itself with the ID of the device
-        self.filter_volume_create_id(desc.name.clone(), desc.id).await?;
+        self.filter_volume_create_id(desc.name.clone(), desc.id)
+            .await?;
 
         Ok(())
     }
@@ -287,8 +358,12 @@ impl NodeManagementLocal for PipewireManager {
     }
 
     async fn node_create_a_b_volumes(&mut self, desc: &DeviceDescription) -> Result<(Ulid, Ulid)> {
-        let mix_a = self.filter_volume_create(format!("{} A", desc.name)).await?;
-        let mix_b = self.filter_volume_create(format!("{} B", desc.name)).await?;
+        let mix_a = self
+            .filter_volume_create(format!("{} A", desc.name))
+            .await?;
+        let mix_b = self
+            .filter_volume_create(format!("{} B", desc.name))
+            .await?;
 
         Ok((mix_a, mix_b))
     }
@@ -340,8 +415,18 @@ impl NodeManagementLocal for PipewireManager {
             // Remove Routing from the Profile Tree
             self.profile.routes.remove(&id);
 
+            self.profile
+                .devices
+                .sources
+                .device_order
+                .retain(|node_id| node_id != &id);
+
             // And finally, remove the Node from the profile tree
-            self.profile.devices.sources.physical_devices.retain(|device| device.description.id != id);
+            self.profile
+                .devices
+                .sources
+                .physical_devices
+                .retain(|device| device.description.id != id);
         }
 
         Ok(())
@@ -375,7 +460,17 @@ impl NodeManagementLocal for PipewireManager {
             self.profile.routes.remove(&id);
 
             // And finally, remove the Node from the profile tree
-            self.profile.devices.sources.virtual_devices.retain(|device| device.description.id != id);
+            self.profile
+                .devices
+                .sources
+                .virtual_devices
+                .retain(|device| device.description.id != id);
+
+            self.profile
+                .devices
+                .sources
+                .device_order
+                .retain(|node_id| node_id != &id);
         }
         Ok(())
     }
@@ -425,7 +520,17 @@ impl NodeManagementLocal for PipewireManager {
 
         if profile_remove {
             // And finally, remove the Node from the profile tree
-            self.profile.devices.targets.physical_devices.retain(|device| device.description.id != id);
+            self.profile
+                .devices
+                .targets
+                .physical_devices
+                .retain(|device| device.description.id != id);
+
+            self.profile
+                .devices
+                .targets
+                .device_order
+                .retain(|node_id| node_id != &id);
         }
 
         Ok(())
@@ -444,7 +549,8 @@ impl NodeManagementLocal for PipewireManager {
                     if let Some(mix_map) = self.source_map.get(&source) {
                         let mix_map = *mix_map;
                         for mix in Mix::iter() {
-                            self.link_remove_filter_to_filter(mix_map[mix], *volume).await?;
+                            self.link_remove_filter_to_filter(mix_map[mix], *volume)
+                                .await?;
                         }
                     }
                 }
@@ -462,10 +568,23 @@ impl NodeManagementLocal for PipewireManager {
 
         if profile_remove {
             // Remove ourselves as a target from any routes we're active in
-            self.profile.routes.iter_mut().for_each(|(_, targets)| targets.retain(|t| *t != id));
+            self.profile
+                .routes
+                .iter_mut()
+                .for_each(|(_, targets)| targets.retain(|t| *t != id));
+
+            self.profile
+                .devices
+                .targets
+                .device_order
+                .retain(|node_id| node_id != &id);
 
             // Finally remove this node from the profile
-            self.profile.devices.targets.virtual_devices.retain(|device| device.description.id != id);
+            self.profile
+                .devices
+                .targets
+                .virtual_devices
+                .retain(|device| device.description.id != id);
         }
         Ok(())
     }
@@ -508,18 +627,66 @@ impl NodeManagementLocal for PipewireManager {
         // This is probably unhelpful in most use cases, but here are some default
         // colours for what people would have as potential default devices.
         match name.as_str() {
-            "Microphone" => Colour { red: 47, green: 24, blue: 71 },
-            "PC Line In" => Colour { red: 98, green: 17, blue: 99 },
-            "System" => Colour { red: 153, green: 98, blue: 30 },
-            "Browser" => Colour { red: 211, green: 139, blue: 93 },
-            "Game" => Colour { red: 243, green: 255, blue: 182 },
-            "Music" => Colour { red: 115, green: 158, blue: 130 },
-            "Chat" => Colour { red: 44, green: 85, blue: 48 },
-            "Headphones" => Colour { red: 0, green: 255, blue: 255 },
-            "Stream Mix" => Colour { red: 19, green: 64, blue: 116 },
-            "VOD" => Colour { red: 19, green: 49, blue: 92 },
-            "Chat Mic" => Colour { red: 11, green: 37, blue: 69 },
-            _ => Colour { red: 0, green: 255, blue: 255 }
+            "Microphone" => Colour {
+                red: 47,
+                green: 24,
+                blue: 71,
+            },
+            "PC Line In" => Colour {
+                red: 98,
+                green: 17,
+                blue: 99,
+            },
+            "System" => Colour {
+                red: 153,
+                green: 98,
+                blue: 30,
+            },
+            "Browser" => Colour {
+                red: 211,
+                green: 139,
+                blue: 93,
+            },
+            "Game" => Colour {
+                red: 243,
+                green: 255,
+                blue: 182,
+            },
+            "Music" => Colour {
+                red: 115,
+                green: 158,
+                blue: 130,
+            },
+            "Chat" => Colour {
+                red: 44,
+                green: 85,
+                blue: 48,
+            },
+            "Headphones" => Colour {
+                red: 0,
+                green: 255,
+                blue: 255,
+            },
+            "Stream Mix" => Colour {
+                red: 19,
+                green: 64,
+                blue: 116,
+            },
+            "VOD" => Colour {
+                red: 19,
+                green: 49,
+                blue: 92,
+            },
+            "Chat Mic" => Colour {
+                red: 11,
+                green: 37,
+                blue: 69,
+            },
+            _ => Colour {
+                red: 0,
+                green: 255,
+                blue: 255,
+            },
         }
     }
 }

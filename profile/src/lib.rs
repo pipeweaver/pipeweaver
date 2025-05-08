@@ -30,6 +30,9 @@ pub struct SourceDevices {
 
     /// Virtual Source devices
     pub virtual_devices: Vec<VirtualSourceDevice>,
+
+    /// The Ordering of devices
+    pub device_order: Vec<Ulid>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -39,6 +42,9 @@ pub struct TargetDevices {
 
     /// Virtual Sink Devices
     pub virtual_devices: Vec<VirtualTargetDevice>,
+
+    /// The Ordering of devices
+    pub device_order: Vec<Ulid>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
