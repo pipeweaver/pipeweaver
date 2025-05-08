@@ -33,6 +33,8 @@ pub(crate) trait NodeManagement {
     async fn node_rename(&mut self, id: Ulid, name: String) -> Result<()>;
     async fn node_remove(&mut self, id: Ulid) -> Result<()>;
 
+    async fn node_set_position(&mut self, id: Ulid, position: u8) -> Result<()>;
+
     async fn node_set_colour(&mut self, id: Ulid, colour: Colour) -> Result<()>;
     fn get_target_node_count(&self) -> usize;
 }
@@ -226,6 +228,31 @@ impl NodeManagement for PipewireManager {
                 NodeType::VirtualSource => self.node_remove_virtual_source(id, true).await?,
                 NodeType::PhysicalTarget => self.node_remove_physical_target(id, true).await?,
                 NodeType::VirtualTarget => self.node_remove_virtual_target(id, true).await?,
+            }
+        }
+        Ok(())
+    }
+
+    async fn node_set_position(&mut self, id: Ulid, position: u8) -> Result<()> {
+        if let Some(node_type) = self.get_node_type(id) {
+            let position = position as usize;
+
+            let device_order = match node_type {
+                NodeType::PhysicalSource | NodeType::VirtualSource => {
+                    &mut self.profile.devices.sources.device_order
+                }
+                NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                    &mut self.profile.devices.targets.device_order
+                }
+            };
+
+            // Remove it from the existing list
+            device_order.retain(|d| d != &id);
+
+            if position >= device_order.len() {
+                device_order.push(id);
+            } else {
+                device_order.insert(position, id);
             }
         }
         Ok(())

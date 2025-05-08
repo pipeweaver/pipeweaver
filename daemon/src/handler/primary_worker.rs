@@ -186,12 +186,12 @@ impl PrimaryWorker {
                 let settings = serde_json::from_reader(reader);
                 settings.unwrap_or_else(|e| {
                     warn!("[Profile] Found, but unable to Load ({}), sending default", e);
-                    Default::default()
+                    Profile::base_settings()
                 })
             }
             Err(_) => {
                 warn!("[Profile] Not Found, sending default");
-                Default::default()
+                Profile::base_settings()
             }
         }
     }

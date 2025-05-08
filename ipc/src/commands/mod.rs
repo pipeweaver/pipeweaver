@@ -67,6 +67,9 @@ pub enum APICommand {
     // Attach or Detach physical nodes
     AttachPhysicalNode(Ulid, u32),
     RemovePhysicalNode(Ulid, usize),
+
+    // Set the position of a node in the order tree
+    SetOrder(Ulid, u8),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
