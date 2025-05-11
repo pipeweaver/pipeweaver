@@ -26,14 +26,15 @@ export default {
   data() {
     return {
       localValue: 50,
-      window_size: window.innerHeight,
-
       update_locked: false,
+
+      slider_height: 100,
     }
   },
 
   mounted() {
     this.$nextTick(() => {
+      this.calculateHeight();
       window.addEventListener('resize', this.onResize)
     })
   },
@@ -44,7 +45,7 @@ export default {
 
   methods: {
     onResize: function () {
-      this.window_size = window.innerHeight
+      this.calculateHeight();
     },
 
     getDevice: function () {
@@ -66,24 +67,15 @@ export default {
     },
 
     calculateHeight: function () {
-      // We'll start with a base 'full' slider height
-      let size = Math.max(this.window_size - 400, 220)
-
-      // Remove 30px for either the Link item on Inputs, or the Mix Option on Outputs
-      size -= 30
-
-      // Cut 30 for the first button (if applicable)
-      if (this.hasBasicMute()) {
-        size -= 30
+      if (this.$refs.fader_container === undefined) {
+        console.log("This shouldn't get called..");
       }
 
-      // Cut 30 for the Second Button (if applicable)
-      if (this.hasComplexMute()) {
-        size -= 30
-      }
+      // Firstly, get the base height (including padding and borders)
+      let base_height = this.$refs.fader_container.clientHeight;
 
-      // Done :)
-      return size
+      // We have 15px of padding on this element, so remove from top and bottom
+      this.slider_height = base_height - 30;
     },
 
     getVolume: function () {
@@ -303,7 +295,7 @@ export default {
     topHeight: function () {
       return '7px'
     }
-  }
+  },
 }
 </script>
 
@@ -324,25 +316,27 @@ export default {
       </div>
     </div>
     <div class="top" @click="colour_clicked"></div>
-    <div class="faders">
-      <ChannelColumnVolume
-        :colour1="getMixAColour()"
-        :current-value="getVolume()"
-        :height="calculateHeight()"
-        colour2="#252927"
-        @change="event => volume_changed('A', false, event)"
-        @input="event => volume_changed('A', true, event)"
-      />
-      <ChannelColumnVolume
-        v-if="hasMix()"
-        :current-value="getMixVolume()"
-        :height="calculateHeight()"
-        colour1="#E07C24"
-        colour2="#252927"
+    <div ref="fader_container" class="faders">
+      <div class="fader_child">
+        <ChannelColumnVolume
+          :colour1="getMixAColour()"
+          :current-value="getVolume()"
+          :height="this.slider_height"
+          colour2="#252927"
+          @change="event => volume_changed('A', false, event)"
+          @input="event => volume_changed('A', true, event)"
+        />
+        <ChannelColumnVolume
+          v-if="hasMix()"
+          :current-value="getMixVolume()"
+          :height="this.slider_height"
+          colour1="#E07C24"
+          colour2="#252927"
 
-        @change="event => volume_changed('B', false, event)"
-        @input="event => volume_changed('B', true, event)"
-      />
+          @change="event => volume_changed('B', false, event)"
+          @input="event => volume_changed('B', true, event)"
+        />
+      </div>
     </div>
     <div v-if="hasMix()" class="link" @click="toggleLinked">
       <img v-if="isLinked()" alt="Linked" src="/images/submix/linked-white.png"/>
@@ -391,10 +385,14 @@ export default {
 
 <style scoped>
 .mix {
+  height: 100%;
   min-width: 150px;
   background-color: #353937;
   border: 1px solid #666666;
   border-radius: 5px;
+
+  display: flex;
+  flex-direction: column;
 }
 
 .title {
@@ -438,7 +436,17 @@ export default {
 }
 
 .faders {
+  position: relative;
   padding: 15px;
+  flex: 1;
+}
+
+.fader_child {
+  position: absolute;
+
+  left: 50%;
+  transform: translate(-50%, 0);
+
   display: flex;
   flex-direction: row;
   justify-content: center;

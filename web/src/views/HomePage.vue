@@ -2,8 +2,8 @@
 
 import {DeviceType, get_devices} from "@/app/util.js";
 import ChannelColumn from "@/components/channels/ChannelColumn.vue";
-import Router from "@/components/routing/Router.vue";
 import {websocket} from "@/app/sockets.js";
+import Router from "@/components/routing/Router.vue";
 
 function addDevice(type, e) {
   let name = prompt("Device Name:");
@@ -65,7 +65,9 @@ function addDevice(type, e) {
 }
 
 .wrapper {
+  min-height: 250px;
   display: flex;
+  flex: 1;
   flex-direction: row;
   gap: 20px;
 }
