@@ -13,12 +13,14 @@ import {
   faBars,
   faCheck,
   faCircleCheck,
+  faGripVertical,
   faVolumeHigh,
   faVolumeXmark,
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 
-library.add(faVolumeHigh, faVolumeXmark, faAngleDown, faCircleCheck, faXmark, faCheck, faBars);
+library.add(faVolumeHigh, faVolumeXmark, faAngleDown, faCircleCheck, faXmark, faCheck, faBars, faGripVertical);
+
 
 const app = createApp(App);
 app.component('font-awesome-icon', FontAwesomeIcon);

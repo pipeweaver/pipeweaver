@@ -14,3 +14,7 @@ body {
     height: 100vh;
     user-select: none;
 }
+
+body.dragging {
+    cursor: move !important;
+}

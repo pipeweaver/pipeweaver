@@ -1,6 +1,6 @@
 <script>
 import PopupBox from "@/components/inputs/PopupBox.vue";
-import {get_devices, getFullTargetList} from "@/app/util.js";
+import {get_device_by_id, getFullTargetList} from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
 
 export default {
@@ -9,8 +9,8 @@ export default {
 
   props: {
     type: {type: String, required: true},
-    index: {type: Number, required: true},
     target: {type: String, required: true},
+    device_id: {type: String, required: true},
     id: {type: String, required: true},
   },
 
@@ -22,7 +22,7 @@ export default {
     },
 
     getDevice() {
-      return get_devices(this.type)[this.index];
+      return get_device_by_id(this.device_id);
     },
 
     getId: function () {

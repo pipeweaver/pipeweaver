@@ -1,7 +1,7 @@
 <script>
 import ColourSettings from '@/components/channels/ColourSettings.vue'
 import ChannelColumnVolume from '@/components/channels/ChannelColumnVolume.vue'
-import {DeviceType, get_devices, is_physical, is_source} from "@/app/util.js";
+import {DeviceType, get_device_by_id, is_physical, is_source} from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
 import {FontAwesomeIcon} from "@fortawesome/vue-fontawesome";
 import PopupBox from "@/components/inputs/PopupBox.vue";
@@ -20,11 +20,13 @@ export default {
   },
   props: {
     type: DeviceType,
-    index: Number,
+    id: String,
   },
 
   data() {
     return {
+      device: null,
+
       localValue: 50,
       update_locked: false,
 
@@ -49,7 +51,7 @@ export default {
     },
 
     getDevice: function () {
-      return get_devices(this.type)[this.index];
+      return get_device_by_id(this.id);
     },
 
     getId: function () {
@@ -300,19 +302,21 @@ export default {
 </script>
 
 <template>
-  <MuteTargetSelector v-if="is_source()" id="mute_a" ref="mute_a" :index='index'
+  <MuteTargetSelector v-if="is_source()" id="mute_a" ref="mute_a" :device_id='id'
                       :type='type'
                       target="TargetA" @closed="output_closed"/>
-  <MuteTargetSelector v-if="is_source()" id="mute_b" ref="mute_b" :index='index'
+  <MuteTargetSelector v-if="is_source()" id="mute_b" ref="mute_b" :device_id='id'
                       :type='type' target="TargetB"
                       @closed="output_closed"/>
 
   <div class="mix">
     <div class="title">
-      <div class="start"></div>
+      <div class="start drag-handle">
+        <font-awesome-icon :icon="['fas', 'grip-vertical']"/>
+      </div>
       <div class="name">{{ getChannelName() }}</div>
       <div class="end">
-        <DevicePopup id="select_device" :index='index' :type='type'/>
+        <DevicePopup id="select_device" :device_id="id" :type='type'/>
       </div>
     </div>
     <div class="top" @click="colour_clicked"></div>
@@ -406,6 +410,10 @@ export default {
 
 .title .start {
   width: 20px;
+}
+
+.title .start:hover {
+  cursor: move;
 }
 
 .title .name {

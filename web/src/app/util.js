@@ -8,6 +8,17 @@ export const DeviceType = Object.freeze({
   VirtualTarget: 'VirtualTarget',
 });
 
+export function get_device_order(is_source) {
+  if (store.getProfile().devices === undefined) {
+    return [];
+  }
+  if (is_source) {
+    return store.getProfile().devices.sources.device_order;
+  } else {
+    return store.getProfile().devices.targets.device_order;
+  }
+}
+
 export function get_devices(type) {
   if (store.getProfile().devices === undefined) {
     return [];
@@ -24,6 +35,68 @@ export function get_devices(type) {
   }
   if (type === DeviceType.VirtualTarget) {
     return store.getProfile().devices.targets.virtual_devices;
+  }
+}
+
+export function get_device_by_id(id) {
+  if (store.getProfile().devices === undefined) {
+    return undefined;
+  }
+
+  // Iterate through all the device lists, and try to find this device
+  for (let device of store.getProfile().devices.sources.physical_devices) {
+    if (device.description.id === id) {
+      return device;
+    }
+  }
+
+  for (let device of store.getProfile().devices.sources.virtual_devices) {
+    if (device.description.id === id) {
+      return device;
+    }
+  }
+
+  for (let device of store.getProfile().devices.targets.physical_devices) {
+    if (device.description.id === id) {
+      return device;
+    }
+  }
+
+  for (let device of store.getProfile().devices.targets.virtual_devices) {
+    if (device.description.id === id) {
+      return device;
+    }
+  }
+}
+
+export function get_device_type(id) {
+  if (store.getProfile().devices === undefined) {
+    return [];
+  }
+
+  // Iterate through all the device lists, and try to find this device
+  for (let device of store.getProfile().devices.sources.physical_devices) {
+    if (device.description.id === id) {
+      return DeviceType.PhysicalSource;
+    }
+  }
+
+  for (let device of store.getProfile().devices.sources.virtual_devices) {
+    if (device.description.id === id) {
+      return DeviceType.VirtualSource;
+    }
+  }
+
+  for (let device of store.getProfile().devices.targets.physical_devices) {
+    if (device.description.id === id) {
+      return DeviceType.PhysicalTarget;
+    }
+  }
+
+  for (let device of store.getProfile().devices.targets.virtual_devices) {
+    if (device.description.id === id) {
+      return DeviceType.VirtualTarget;
+    }
   }
 }
 
