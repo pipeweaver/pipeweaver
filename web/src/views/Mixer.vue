@@ -1,12 +1,15 @@
 <script>
 import ChannelColumn from "@/components/channels/ChannelColumn.vue";
-import {get_device_order, get_device_type} from "@/app/util.js";
+import {DeviceType, get_device_order, get_device_type} from "@/app/util.js";
 import {Sortable} from "@shopify/draggable";
 import {websocket} from "@/app/sockets.js";
+import PopupBox from "@/components/inputs/PopupBox.vue";
+
+const INTERNAL_SCALE = 0.8;
 
 export default {
   name: "Mixer",
-  components: {ChannelColumn},
+  components: {PopupBox, ChannelColumn},
 
   props: {
     is_source: Boolean,
@@ -14,15 +17,45 @@ export default {
   data() {
     return {
       deviceOrder: get_device_order(this.is_source),
-      dragOffsetX: 0,
     };
   },
   methods: {
     get_device_type,
 
-    handleSort() {
-      console.log("Device order updated:", this.deviceOrder);
+    show_popup(e) {
+      this.$refs.popup.showDialog(e)
     },
+
+    add_device(is_physical) {
+      this.$refs.popup.hideDialog();
+      let name = prompt("Device Name:");
+
+      if (name === undefined || name === "" || name === null) {
+        return;
+      }
+
+      // We need to break down the type
+      let final_type = undefined;
+      if (is_physical) {
+        if (this.is_source) {
+          final_type = DeviceType.PhysicalSource;
+        } else {
+          final_type = DeviceType.PhysicalTarget;
+        }
+      } else {
+        if (this.is_source) {
+          final_type = DeviceType.VirtualSource;
+        } else {
+          final_type = DeviceType.VirtualTarget;
+        }
+      }
+
+      // CreateNode(NodeType, String),
+      let command = {
+        "CreateNode": [final_type, name]
+      }
+      websocket.send_command(command)
+    }
   },
 
   mounted() {
@@ -40,7 +73,7 @@ export default {
     });
 
     draggable.on('drag:start', (event) => {
-
+      event.source.dataset.originalLeft = event.source.getBoundingClientRect().left.toString();
     })
 
     draggable.on('mirror:created', (event) => {
@@ -51,24 +84,52 @@ export default {
 
     draggable.on('drag:move', (event) => {
       const mirror = document.querySelector('.draggable-mirror');
-      if (!mirror) return;
-
       const placeholder = document.querySelector('.drag-placeholder');
-      if (!placeholder) return;
+      if (!mirror || !placeholder) return;
 
-      const rect = placeholder.getBoundingClientRect();
+      let positionX = placeholder.getBoundingClientRect().left;
+      let positionY = placeholder.getBoundingClientRect().top;
 
-      // We want to key the Y axis central to the parent
-      const positionY = rect.top;
-      const positionX = rect.left;
-
-      mirror.style.left = `${positionX}px`;
-      mirror.style.top = `${positionY}px`;
+      mirror.style.transform = `translate3d(${positionX}px, ${positionY}px, 0px) scale(${INTERNAL_SCALE})`;
+      if (!mirror.classList.contains("custom-mirror-small")) {
+        mirror.classList.add("custom-mirror-small");
+      }
     });
 
     draggable.on('drag:stop', (event) => {
-      event.source.classList.remove('drag-placeholder');
-      document.body.classList.remove('dragging');
+      const mirror = document.querySelector('.draggable-mirror');
+      if (mirror) {
+        const id = event.source.dataset.id;
+
+        // Clone the mirror to keep visible after drag ends
+        const clone = mirror.cloneNode(true);
+        clone.style.cssText = mirror.style.cssText;
+        const appRoot = document.getElementById('app');
+        appRoot.appendChild(clone);
+
+        const placeholder = document.querySelector('.drag-placeholder');
+        if (!placeholder) return;
+
+        let localX = event.source.getBoundingClientRect().left;
+        let localY = event.source.getBoundingClientRect().top;
+
+        // Animate fadeout and remove clone after delay
+        clone.style.transform = `translate3d(${localX}px, ${localY}px, 0px) scale(1)`;
+
+        // Remove the cursor drag icon
+        document.body.classList.remove('dragging');
+
+        // Forcibly re-add the placeholder class to the target location
+        let ref = this.$refs[id][0];
+        ref.classList.add('drag-placeholder');
+
+        // Wait for 300ms for the transform to complete
+        setTimeout(() => {
+          clone.remove()
+          ref.classList.remove('drag-placeholder')
+        }, 300);
+      }
+
 
       // Wait for the DOM to settle before we update PipeWeaver
       this.$nextTick(() => {
@@ -89,39 +150,90 @@ export default {
       })
 
     })
-
-
     this.draggable = draggable;
-  }
+  },
+  computed: {}
 }
 </script>
 
 <template>
-  <div ref="deviceList" class="mixer">
-    <div v-for="id of deviceOrder" :key="id" :data-id="id" class="channel-column">
-      <ChannelColumn :id="id" :type="get_device_type(id)"/>
+  <PopupBox ref="popup" @closed="">
+    <div class="entry" @click="add_device(false)">
+      <span>Add Virtual Channel</span>
+    </div>
+    <div class="separator"/>
+    <div class="entry" @click="add_device(true)">
+      <span>Add Physical Channel</span>
+    </div>
+  </PopupBox>
+
+  <div class="mix-list">
+    <div class="title">
+      <div class="start"></div>
+      <div class="text">{{ is_source ? "Sources" : "Targets" }}</div>
+      <div class="end">
+        <button @click="show_popup">+</button>
+      </div>
+    </div>
+
+    <div ref="deviceList" class="mixer">
+      <div v-for="id of deviceOrder" :key="id" :ref="id" :data-id="id" class="channel-column">
+        <ChannelColumn :id="id" :type="get_device_type(id)"/>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.mixer {
-  background-color: #2d3230;
-  padding: 15px;
+.mix-list {
   display: flex;
-  gap: 15px;
+  flex-direction: column;
+  border: 1px solid #666;
+  border-radius: 6px 6px 0 0;
+  background-color: #2d3230;
 }
 
-.mixer button {
+.mix-list .title {
+  font-weight: bold;
+  text-align: center;
+  padding-top: 10px;
+
+  display: flex;
+  flex-direction: row;
+}
+
+.mix-list .title .start {
+  width: 40px;
+}
+
+.mix-list .title .text {
+  flex: 1;
+}
+
+.mix-list .title .end {
+  width: 40px;
+}
+
+.mix-list .title .end button {
+  all: unset;
+  height: 20px;
+  width: 20px;
   color: #fff;
   border: 1px solid #666666;
   background-color: #353937;
   border-radius: 5px;
 }
 
-.mixer button:hover {
-  background-color: #49514e;
+.mix-list .title .end button:hover {
   cursor: pointer;
+}
+
+.mixer {
+  flex: 1;
+  background-color: #2d3230;
+  padding: 10px;
+  display: flex;
+  gap: 15px;
 }
 
 /* We need to hide the contents of the original to so we can instead use a placeholder */
@@ -146,11 +258,36 @@ export default {
   position: fixed !important;
   pointer-events: none;
   opacity: 0.6;
+}
+
+.custom-mirror-small {
+  transition: all 0.3s;
 
   transform-origin: center center !important;
-  transform: scale(0.8) !important;
   will-change: transform, top, left;
 }
 
+.separator {
+  height: 5px;
+  background-color: #3b413f;
+}
+
+.title {
+  white-space: nowrap;
+}
+
+.entry {
+  white-space: nowrap;
+  padding: 6px 20px 6px 20px;
+}
+
+.entry:hover {
+  background-color: #49514e;
+  cursor: pointer;
+}
+
+.entry:not(:last-child) {
+  border-bottom: 1px solid #3b413f;
+}
 
 </style>

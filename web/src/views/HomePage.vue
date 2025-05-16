@@ -28,7 +28,8 @@ function addDevice(type, e) {
 
 <style scoped>
 .content {
-  height: 100vh;
+  /* Height is full page minus page margin */
+  height: calc(100vh - 20px);
   display: flex;
   gap: 20px;
   flex-direction: column;

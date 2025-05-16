@@ -393,7 +393,7 @@ export default {
   min-width: 150px;
   background-color: #353937;
   border: 1px solid #666666;
-  border-radius: 5px;
+  border-radius: 3px 3px 0 0;
 
   display: flex;
   flex-direction: column;
