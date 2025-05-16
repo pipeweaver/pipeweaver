@@ -17,6 +17,8 @@ export default {
   data() {
     return {
       deviceOrder: get_device_order(this.is_source),
+      draggedId: null,
+      draggable: null,
     };
   },
   methods: {
@@ -55,104 +57,146 @@ export default {
         "CreateNode": [final_type, name]
       }
       websocket.send_command(command)
+    },
+
+    setup_draggable() {
+      if (this.draggable) {
+        this.draggable.destroy();
+        this.draggable = null;
+      }
+
+      const container = this.$refs.deviceList;
+      const draggable = new Sortable(container, {
+        draggable: '.channel-column',
+        handle: '.drag-handle',
+        delay: 0,
+
+        mirror: {
+          xAxis: false,
+          yAxis: false,
+          constrainDimensions: true,
+        },
+      });
+
+      draggable.on('drag:start', (event) => {
+        event.source.dataset.originalLeft = event.source.getBoundingClientRect().left.toString();
+        this.draggedId = event.source.dataset.id;
+      })
+
+      draggable.on('mirror:created', (event) => {
+        event.source.classList.add('drag-placeholder');
+        event.mirror.classList.add('custom-mirror');
+        document.body.classList.add('dragging');
+      });
+
+      draggable.on('drag:move', (event) => {
+        const mirror = document.querySelector('.draggable-mirror');
+        const placeholder = document.querySelector('.drag-placeholder');
+
+        if (!mirror || !placeholder) return;
+        let positionX = placeholder.getBoundingClientRect().left;
+        let positionY = placeholder.getBoundingClientRect().top;
+
+        mirror.style.transform = `translate3d(${positionX}px, ${positionY}px, 0px) scale(${INTERNAL_SCALE})`;
+        if (!mirror.classList.contains("custom-mirror-small")) {
+          mirror.classList.add("custom-mirror-small");
+        }
+      });
+
+      draggable.on('drag:stop', (event) => {
+        const mirror = document.querySelector('.draggable-mirror');
+        const dev_id = event.source.dataset.id;
+        if (mirror) {
+
+          // Clone the mirror to keep visible after drag ends
+          const clone = mirror.cloneNode(true);
+          clone.style.cssText = mirror.style.cssText;
+          const appRoot = document.getElementById('app');
+          appRoot.appendChild(clone);
+
+          const placeholder = document.querySelector('.drag-placeholder');
+          if (!placeholder) return;
+
+          let localX = event.source.getBoundingClientRect().left;
+          let localY = event.source.getBoundingClientRect().top;
+
+          // Animate fadeout and remove clone after delay
+          clone.style.transform = `translate3d(${localX}px, ${localY}px, 0px) scale(1)`;
+
+          // Remove the cursor drag icon
+          document.body.classList.remove('dragging');
+
+          // Forcibly re-add the placeholder class to the target location
+          let ref = this.$refs[dev_id][0];
+          this.draggedId = dev_id;
+
+          // Wait (literally) 2ticks for Vue to internally reorganise and redraw it's DOM
+          this.$nextTick(() => {
+            // Set the 'placeholder' class back on the original ref to keep it invisible while
+            // the restore animation plays.
+            ref.classList.add('drag-placeholder');
+          });
+
+          // Wait for 300ms for the transform to complete
+          setTimeout(() => {
+            this.draggedId = null;
+            clone.remove()
+
+            let ref = this.$refs[dev_id][0];
+            ref.classList.remove('drag-placeholder')
+          }, 300);
+        }
+
+
+        // Wait for the DOM to settle before we update PipeWeaver
+        this.$nextTick(() => {
+          const id = event.source.dataset.id;
+
+          // Grab the list children, then map the order
+          const children = Array.from(this.$refs.deviceList.children);
+          const newOrder = children.map(el => el.dataset.id);
+
+          // Locate the 'new' index of this item
+          const newIndex = newOrder.indexOf(id);
+
+          // Send the message to the websocket that we've reordered
+          let command = {
+            "SetOrder": [id, newIndex]
+          }
+          websocket.send_command(command);
+        })
+
+      })
+      this.draggable = draggable;
     }
   },
 
-  mounted() {
-    const container = this.$refs.deviceList;
-    const draggable = new Sortable(container, {
-      draggable: '.channel-column',
-      handle: '.drag-handle',
-      delay: 0,
-
-      mirror: {
-        xAxis: false,
-        yAxis: false,
-        constrainDimensions: true,
-      },
-    });
-
-    draggable.on('drag:start', (event) => {
-      event.source.dataset.originalLeft = event.source.getBoundingClientRect().left.toString();
-    })
-
-    draggable.on('mirror:created', (event) => {
-      event.source.classList.add('drag-placeholder');
-      event.mirror.classList.add('custom-mirror');
-      document.body.classList.add('dragging');
-    });
-
-    draggable.on('drag:move', (event) => {
-      const mirror = document.querySelector('.draggable-mirror');
-      const placeholder = document.querySelector('.drag-placeholder');
-      if (!mirror || !placeholder) return;
-
-      let positionX = placeholder.getBoundingClientRect().left;
-      let positionY = placeholder.getBoundingClientRect().top;
-
-      mirror.style.transform = `translate3d(${positionX}px, ${positionY}px, 0px) scale(${INTERNAL_SCALE})`;
-      if (!mirror.classList.contains("custom-mirror-small")) {
-        mirror.classList.add("custom-mirror-small");
-      }
-    });
-
-    draggable.on('drag:stop', (event) => {
-      const mirror = document.querySelector('.draggable-mirror');
-      if (mirror) {
-        const id = event.source.dataset.id;
-
-        // Clone the mirror to keep visible after drag ends
-        const clone = mirror.cloneNode(true);
-        clone.style.cssText = mirror.style.cssText;
-        const appRoot = document.getElementById('app');
-        appRoot.appendChild(clone);
-
-        const placeholder = document.querySelector('.drag-placeholder');
-        if (!placeholder) return;
-
-        let localX = event.source.getBoundingClientRect().left;
-        let localY = event.source.getBoundingClientRect().top;
-
-        // Animate fadeout and remove clone after delay
-        clone.style.transform = `translate3d(${localX}px, ${localY}px, 0px) scale(1)`;
-
-        // Remove the cursor drag icon
-        document.body.classList.remove('dragging');
-
-        // Forcibly re-add the placeholder class to the target location
-        let ref = this.$refs[id][0];
-        ref.classList.add('drag-placeholder');
-
-        // Wait for 300ms for the transform to complete
-        setTimeout(() => {
-          clone.remove()
-          ref.classList.remove('drag-placeholder')
-        }, 300);
-      }
-
-
-      // Wait for the DOM to settle before we update PipeWeaver
-      this.$nextTick(() => {
-        const id = event.source.dataset.id;
-
-        // Grab the list children, then map the order
-        const children = Array.from(this.$refs.deviceList.children);
-        const newOrder = children.map(el => el.dataset.id);
-
-        // Locate the 'new' index of this item
-        const newIndex = newOrder.indexOf(id);
-
-        // Send the message to the websocket that we've reordered
-        let command = {
-          "SetOrder": [id, newIndex]
-        }
-        websocket.send_command(command);
-      })
-
-    })
-    this.draggable = draggable;
+  computed: {
+    deviceOrderKey() {
+      return this.deviceOrder.join("-");
+    }
   },
-  computed: {}
+  watch: {
+    deviceOrderKey() {
+      this.$nextTick(() => {
+        if (this.draggedId) {
+          let ref = this.$refs[this.draggedId][0];
+          ref.classList.add('drag-placeholder');
+        }
+        this.setup_draggable();
+      })
+    }
+  },
+  mounted() {
+    this.setup_draggable();
+  },
+  beforeUnmount() {
+    if (this.draggable) {
+      this.draggable.destroy();
+      this.draggable = null;
+    }
+  }
+
 }
 </script>
 
@@ -176,8 +220,9 @@ export default {
       </div>
     </div>
 
-    <div ref="deviceList" class="mixer">
-      <div v-for="id of deviceOrder" :key="id" :ref="id" :data-id="id" class="channel-column">
+    <div :key="deviceOrderKey" ref="deviceList" class="mixer">
+      <div v-for="id of deviceOrder" :key="id" :ref="id"
+           :data-id="id" class="channel-column">
         <ChannelColumn :id="id" :type="get_device_type(id)"/>
       </div>
     </div>
