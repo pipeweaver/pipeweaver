@@ -1,4 +1,3 @@
-use log::debug;
 use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
 
 // This is created as such by the lib
@@ -45,7 +44,6 @@ impl FilterHandler for MeterFilter {
             // Find the peak sample
             let peak = values.iter().copied().map(f32::abs).fold(0.0, f32::max);
             let meter = (peak * 100.0).clamp(0.0, 100.0) as u8;
-            debug!("Audio Percent: {}", meter);
         }
 
         // We can meter as u8 here to get a 'percentage'
