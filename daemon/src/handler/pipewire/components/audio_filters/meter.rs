@@ -1,10 +1,19 @@
+use log::debug;
 use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
 
-pub struct MeterFilter {}
+// This is created as such by the lib
+static SAMPLE_RATE: u32 = 48000;
+static MILLISECONDS: u32 = 100;
+
+pub struct MeterFilter {
+    buffer: ChunkedBuffer,
+}
 
 impl MeterFilter {
     pub(crate) fn new() -> Self {
-        Self {}
+        Self {
+            buffer: ChunkedBuffer::new((SAMPLE_RATE * MILLISECONDS / 1000) as usize),
+        }
     }
 }
 
@@ -30,16 +39,61 @@ impl FilterHandler for MeterFilter {
 
         let samples: Vec<f32> = inputs[0].iter().zip(inputs[1].iter()).map(|(l, r)| (l + r) / 2.0).collect();
 
-        // Use a RMS calc to work out what our 'volume' level is
-        let rms = (samples.iter().map(|&s| s * s).sum::<f32>() / samples.len() as f32).sqrt(); // RMS calculation
+        if let Some(values) = self.buffer.push(&samples) {
+            // Use a RMS calc to work out what our 'volume' level is
+            let rms = (values.iter().map(|&s| s * s).sum::<f32>() / values.len() as f32).sqrt(); // RMS calculation
 
-        if rms == 0.0 {
-            // Silence Case, we're at 0%, we need to bail here to prevent a divide by zero :D
+            if rms == 0.0 {
+                // Silence Case, we're at 0%, we need to bail here to prevent a divide by zero :D
+            }
+
+            let db = 20.0 * rms.log10(); // Convert to dB
+            let meter = ((db + 60.0) / 60.0 * 100.0).clamp(0.0, 100.0) as u8; // Normalize to a percentage
+
+            debug!("Audio Percent: {}", meter);
         }
 
-        let db = 20.0 * rms.log10(); // Convert to dB
-        let meter = ((db + 60.0) / 60.0 * 100.0).clamp(0.0, 100.0) as u8; // Normalize to a percentage
-
         // We can meter as u8 here to get a 'percentage'
+    }
+}
+
+struct ChunkedBuffer {
+    buffer: Vec<f32>,
+    len: usize,
+    chunk_size: usize,
+}
+
+impl ChunkedBuffer {
+    pub fn new(chunk_size: usize) -> Self {
+        Self {
+            buffer: vec![0.0; chunk_size],
+            len: 0,
+            chunk_size,
+        }
+    }
+
+    pub fn push(&mut self, samples: &[f32]) -> Option<&[f32]> {
+        let total_len = self.len + samples.len();
+
+        if total_len >= self.chunk_size {
+            let needed = self.chunk_size - self.len;
+            self.buffer[self.len..].copy_from_slice(&samples[..needed]);
+
+            // Handle remaining right-hand samples (but discard anything beyond one chunk)
+            let remaining = &samples[needed..];
+            if !remaining.is_empty() {
+                let right_len = remaining.len().min(self.chunk_size);
+                let start = remaining.len() - right_len;
+                self.buffer[..right_len].copy_from_slice(&remaining[start..]);
+                self.len = right_len;
+            } else {
+                self.len = 0;
+            }
+            Some(&self.buffer[..self.chunk_size])
+        } else {
+            self.buffer[self.len..self.len + samples.len()].copy_from_slice(samples);
+            self.len += samples.len();
+            None
+        }
     }
 }
