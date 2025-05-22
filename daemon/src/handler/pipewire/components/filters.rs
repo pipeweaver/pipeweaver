@@ -1,3 +1,4 @@
+use crate::handler::pipewire::components::audio_filters::meter::MeterFilter;
 use crate::handler::pipewire::components::audio_filters::pass_through::PassThroughFilter;
 use crate::handler::pipewire::components::audio_filters::volume::VolumeFilter;
 use crate::handler::pipewire::manager::PipewireManager;
@@ -13,6 +14,10 @@ pub(crate) trait FilterManagement {
 
     async fn filter_volume_create(&mut self, name: String) -> Result<Ulid>;
     async fn filter_volume_create_id(&mut self, name: String, id: Ulid) -> Result<()>;
+
+    async fn filter_meter_create(&mut self, name: String) -> Result<Ulid>;
+    async fn filter_meter_create_id(&mut self, name: String, id: Ulid) -> Result<()>;
+
     async fn filter_volume_set(&self, id: Ulid, volume: u8) -> Result<()>;
 
     async fn filter_remove(&mut self, id: Ulid) -> Result<()>;
@@ -40,6 +45,19 @@ impl FilterManagement for PipewireManager {
         let props = self.filter_volume_get_props(name, id);
         self.filter_pw_create(props).await
     }
+
+    async fn filter_meter_create(&mut self, name: String) -> Result<Ulid> {
+        let id = Ulid::new();
+        self.filter_meter_create_id(name, id).await?;
+
+        Ok(id)
+    }
+
+    async fn filter_meter_create_id(&mut self, name: String, id: Ulid) -> Result<()> {
+        let props = self.filter_meter_get_props(name, id);
+        self.filter_pw_create(props).await
+    }
+
     async fn filter_volume_set(&self, id: Ulid, volume: u8) -> Result<()> {
         if !(0..=100).contains(&volume) {
             bail!("Volume must be between 0 and 100");
@@ -63,6 +81,7 @@ trait FilterManagementLocal {
 
     fn filter_pass_get_props(&self, name: String, id: Ulid) -> FilterProperties;
     fn filter_volume_get_props(&self, name: String, id: Ulid) -> FilterProperties;
+    fn filter_meter_get_props(&self, name: String, id: Ulid) -> FilterProperties;
 }
 
 impl FilterManagementLocal for PipewireManager {
@@ -81,24 +100,6 @@ impl FilterManagementLocal for PipewireManager {
         self.pipewire().send_message(message)
     }
 
-    fn filter_volume_get_props(&self, name: String, id: Ulid) -> FilterProperties {
-        let description = name.to_lowercase().replace(" ", "-");
-
-        FilterProperties {
-            filter_id: id,
-            filter_name: "Volume".into(),
-            filter_nick: name.to_string(),
-            filter_description: format!("{}/{}", APP_NAME_ID, description),
-
-            class: MediaClass::Duplex,
-            app_id: APP_ID.to_string(),
-            app_name: APP_NAME.to_string(),
-            linger: false,
-            callback: Box::new(VolumeFilter::new(0)),
-            ready_sender: None,
-        }
-    }
-
     fn filter_pass_get_props(&self, name: String, id: Ulid) -> FilterProperties {
         let description = name.to_lowercase().replace(" ", "-");
 
@@ -113,6 +114,48 @@ impl FilterManagementLocal for PipewireManager {
             app_name: APP_NAME.to_string(),
             linger: false,
             callback: Box::new(PassThroughFilter::new()),
+
+            receive_only: false,
+            ready_sender: None,
+        }
+    }
+
+    fn filter_volume_get_props(&self, name: String, id: Ulid) -> FilterProperties {
+        let description = name.to_lowercase().replace(" ", "-");
+
+        FilterProperties {
+            filter_id: id,
+            filter_name: "Volume".into(),
+            filter_nick: name.to_string(),
+            filter_description: format!("{}/{}", APP_NAME_ID, description),
+
+            class: MediaClass::Duplex,
+            app_id: APP_ID.to_string(),
+            app_name: APP_NAME.to_string(),
+            linger: false,
+            callback: Box::new(VolumeFilter::new(0)),
+
+            receive_only: false,
+            ready_sender: None,
+        }
+    }
+
+    fn filter_meter_get_props(&self, name: String, id: Ulid) -> FilterProperties {
+        let description = name.to_lowercase().replace(" ", "-");
+
+        FilterProperties {
+            filter_id: id,
+            filter_name: "Meter".into(),
+            filter_nick: name.to_string(),
+            filter_description: format!("{}/{}", APP_NAME_ID, description),
+
+            class: MediaClass::Duplex,
+            app_id: APP_ID.to_string(),
+            app_name: APP_NAME.to_string(),
+            linger: false,
+            callback: Box::new(MeterFilter::new()),
+
+            receive_only: true,
             ready_sender: None,
         }
     }
