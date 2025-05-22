@@ -153,7 +153,7 @@ impl FilterManagementLocal for PipewireManager {
             app_id: APP_ID.to_string(),
             app_name: APP_NAME.to_string(),
             linger: false,
-            callback: Box::new(MeterFilter::new()),
+            callback: Box::new(MeterFilter::new(id, self.meter_callback.clone())),
 
             receive_only: true,
             ready_sender: None,

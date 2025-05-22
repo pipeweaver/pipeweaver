@@ -328,6 +328,12 @@ impl NodeManagementLocal for PipewireManager {
         self.filter_pass_create_id(desc.name.clone(), desc.id)
             .await?;
 
+        // Create and attach a meter
+        let filter_name = format!("{}-meter", desc.name);
+        let meter = self.filter_meter_create(filter_name).await?;
+        self.link_create_filter_to_filter(desc.id, meter).await?;
+        self.meter_map.insert(desc.id, meter);
+
         let (mix_a, mix_b) = self.node_create_a_b_volumes(desc).await?;
 
         // Now we need to link our filter to the Mixes
@@ -347,6 +353,16 @@ impl NodeManagementLocal for PipewireManager {
         let properties = self.create_node_props(MediaClass::Sink, desc);
         self.node_pw_create(properties).await?;
 
+
+        // Create a Meter
+        let filter_name = format!("{}-meter", desc.name);
+        let meter = self.filter_meter_create(filter_name).await?;
+
+        // Attach this to the original source
+        self.link_create_node_to_filter(desc.id, meter).await?;
+        self.meter_map.insert(desc.id, meter);
+
+        // Generate the A/B Mixes
         let (mix_a, mix_b) = self.node_create_a_b_volumes(desc).await?;
 
         // Now we need to link our node to the Mixes
@@ -415,6 +431,12 @@ impl NodeManagementLocal for PipewireManager {
             }
         }
 
+        // Detach and destroy the Meter
+        if let Some(&meter) = self.meter_map.get(&id) {
+            self.link_remove_filter_to_filter(id, meter).await?;
+            self.filter_remove(meter).await?;
+        }
+
         // Next, we detach the links from the pass through to the A/B mixes
         if let Some(mix_map) = self.source_map.get(&id) {
             let mix_map = *mix_map;
@@ -474,6 +496,12 @@ impl NodeManagementLocal for PipewireManager {
                 // Should be fully detached, remove the Mix filter
                 self.filter_remove(mix_map[mix]).await?
             }
+        }
+
+        // Detach and destroy the Meter
+        if let Some(&meter) = self.meter_map.get(&id) {
+            self.link_remove_node_to_filter(id, meter).await?;
+            self.filter_remove(meter).await?;
         }
 
         // Remove the Node from the Pipewire tree

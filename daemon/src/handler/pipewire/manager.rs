@@ -1,5 +1,6 @@
 use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
+use crate::handler::pipewire::ipc::IPCHandler;
 use crate::handler::primary_worker::{ManagerMessage, WorkerMessage};
 use enum_map::EnumMap;
 use log::{debug, error, info};
@@ -11,9 +12,8 @@ use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 use tokio::select;
+use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, oneshot};
-
-use crate::handler::pipewire::ipc::IPCHandler;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use ulid::Ulid;
@@ -22,7 +22,7 @@ type StdRecv = std::sync::mpsc::Receiver<PipewireReceiver>;
 
 pub(crate) struct PipewireManager {
     command_receiver: mpsc::Receiver<ManagerMessage>,
-    worker_sender: mpsc::Sender<WorkerMessage>,
+    worker_sender: Sender<WorkerMessage>,
     ready_sender: Option<oneshot::Sender<()>>,
 
     pub(crate) pipewire: Option<PipewireRunner>,
@@ -35,6 +35,13 @@ pub(crate) struct PipewireManager {
     pub(crate) physical_source: HashMap<Ulid, Vec<u32>>,
     pub(crate) physical_target: HashMap<Ulid, Vec<u32>>,
 
+    // Maps node to a Meter
+    pub(crate) meter_map: HashMap<Ulid, Ulid>,
+    pub(crate) meter_callback: Sender<(Ulid, u8)>,
+
+    meter_receiver: Option<mpsc::Receiver<(Ulid, u8)>>,
+    meter_values: HashMap<Ulid, u8>,
+
     // A list of physical nodes
     pub(crate) node_list: EnumMap<DeviceType, Vec<PhysicalDevice>>,
     pub(crate) physical_nodes: HashMap<u32, PipewireNode>,
@@ -42,21 +49,27 @@ pub(crate) struct PipewireManager {
 
 impl PipewireManager {
     pub fn new(config: PipewireManagerConfig) -> Self {
+        let (meter_tx, meter_rx) = mpsc::channel(128);
+
         Self {
             command_receiver: config.command_receiver,
             worker_sender: config.worker_sender,
             ready_sender: config.ready_sender,
+            meter_receiver: Some(meter_rx),
 
             pipewire: None,
 
             profile: config.profile,
-            //profile: Default::default(),
 
             source_map: HashMap::default(),
             target_map: HashMap::default(),
 
             physical_source: HashMap::default(),
             physical_target: HashMap::default(),
+
+            meter_map: HashMap::default(),
+            meter_callback: meter_tx,
+            meter_values: HashMap::default(),
 
             node_list: Default::default(),
             physical_nodes: Default::default(),
@@ -112,6 +125,9 @@ impl PipewireManager {
 
         // Let the primary worker know we're ready
         let _ = self.ready_sender.take().expect("Ready Sender Missing").send(());
+
+        // Pull out the Meter Receiver
+        let mut meter_receiver = self.meter_receiver.take().unwrap();
 
         loop {
             select!(
@@ -218,6 +234,9 @@ impl PipewireManager {
                     } else {
                         panic!("Got a Timer Ready for non-existent Node");
                     }
+                }
+                Some((id, percent)) = meter_receiver.recv() => {
+                    self.meter_values.insert(id, percent);
                 }
             );
         }

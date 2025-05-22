@@ -1,4 +1,6 @@
 use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
+use tokio::sync::mpsc;
+use ulid::Ulid;
 
 // This is created as such by the lib
 const SAMPLE_RATE: u32 = 48000;
@@ -6,12 +8,16 @@ const MILLISECONDS: u32 = 50;
 const CHUNK_SIZE: usize = (SAMPLE_RATE * MILLISECONDS / 1000) as usize;
 
 pub struct MeterFilter {
+    node_id: Ulid,
+    callback: mpsc::Sender<(Ulid, u8)>,
     buffer: ChunkedBuffer,
 }
 
 impl MeterFilter {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(node_id: Ulid, callback: mpsc::Sender<(Ulid, u8)>) -> Self {
         Self {
+            node_id,
+            callback,
             buffer: ChunkedBuffer::new(CHUNK_SIZE),
         }
     }
@@ -44,6 +50,8 @@ impl FilterHandler for MeterFilter {
             // Find the peak sample
             let peak = values.iter().copied().map(f32::abs).fold(0.0, f32::max);
             let meter = (peak * 100.0).clamp(0.0, 100.0) as u8;
+
+            let _ = self.callback.blocking_send((self.node_id, meter));
         }
 
         // We can meter as u8 here to get a 'percentage'
