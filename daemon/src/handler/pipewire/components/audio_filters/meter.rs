@@ -2,8 +2,9 @@ use log::debug;
 use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
 
 // This is created as such by the lib
-static SAMPLE_RATE: u32 = 48000;
-static MILLISECONDS: u32 = 100;
+const SAMPLE_RATE: u32 = 48000;
+const MILLISECONDS: u32 = 50;
+const CHUNK_SIZE: usize = (SAMPLE_RATE * MILLISECONDS / 1000) as usize;
 
 pub struct MeterFilter {
     buffer: ChunkedBuffer,
@@ -12,7 +13,7 @@ pub struct MeterFilter {
 impl MeterFilter {
     pub(crate) fn new() -> Self {
         Self {
-            buffer: ChunkedBuffer::new((SAMPLE_RATE * MILLISECONDS / 1000) as usize),
+            buffer: ChunkedBuffer::new(CHUNK_SIZE),
         }
     }
 }
@@ -31,25 +32,19 @@ impl FilterHandler for MeterFilter {
     }
 
     fn process_samples(&mut self, inputs: Vec<&mut [f32]>, mut _outputs: Vec<&mut [f32]>) {
-        // Outputs will be empty in this case, but we need to take the input samples from stereo
-        // and convert them to a mono input, so we can calculate a percentage. We are going to
-        // HARD assume that inputs has 2 entries, left and right (this is how the filter should
-        // be created), so we'll generate an average from it. We're also assuming that the number
-        // of samples coming on the left and right side is identical
-
-        let samples: Vec<f32> = inputs[0].iter().zip(inputs[1].iter()).map(|(l, r)| (l + r) / 2.0).collect();
+        // Outputs will be empty in this case, but we need to take the input samples from stereo.
+        // Once we have the samples, we'll determine whether the left or right is louder and use
+        // that as our meter sample.
+        let samples: Vec<f32> = inputs[0]
+            .iter()
+            .zip(inputs[1].iter())
+            .map(|(l, r)| if l.abs() > r.abs() { *l } else { *r })
+            .collect();
 
         if let Some(values) = self.buffer.push(&samples) {
-            // Use a RMS calc to work out what our 'volume' level is
-            let rms = (values.iter().map(|&s| s * s).sum::<f32>() / values.len() as f32).sqrt(); // RMS calculation
-
-            if rms == 0.0 {
-                // Silence Case, we're at 0%, we need to bail here to prevent a divide by zero :D
-            }
-
-            let db = 20.0 * rms.log10(); // Convert to dB
-            let meter = ((db + 60.0) / 60.0 * 100.0).clamp(0.0, 100.0) as u8; // Normalize to a percentage
-
+            // Find the peak sample
+            let peak = values.iter().copied().map(f32::abs).fold(0.0, f32::max);
+            let meter = (peak * 100.0).clamp(0.0, 100.0) as u8;
             debug!("Audio Percent: {}", meter);
         }
 
