@@ -1,12 +1,21 @@
 use crate::registry::PipewireRegistry;
 use crate::store::{FilterStore, LinkGroupStore, LinkStoreMap, NodeStore, PortLocation, Store};
-use crate::{registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties, PipewireReceiver};
+use crate::{
+    registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties,
+    PipewireReceiver,
+};
 use crate::{MediaClass, PWReceiver, PipewireMessage};
 use anyhow::anyhow;
 use log::{debug, error, info};
 use pipewire::core::Core;
 use pipewire::filter::{Filter, FilterFlags, FilterState, PortFlags};
-use pipewire::keys::{APP_ICON_NAME, APP_ID, APP_NAME, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME};
+use pipewire::keys::{
+    APP_ICON_NAME, APP_ID, APP_NAME, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME,
+    FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT,
+    MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION,
+    NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME,
+    NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME,
+};
 use pipewire::link::{Link, LinkListener, LinkState};
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
@@ -15,7 +24,11 @@ use pipewire::registry::Registry;
 use pipewire::spa::pod::builder::Builder;
 use pipewire::spa::pod::deserialize::PodDeserializer;
 use pipewire::spa::pod::{Pod, Value, ValueArray};
-use pipewire::spa::sys::{spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position, SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_TYPE_OBJECT_ParamProcessLatency, SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR};
+use pipewire::spa::sys::{
+    spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position,
+    SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_TYPE_OBJECT_ParamProcessLatency,
+    SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR,
+};
 use pipewire::spa::utils::Direction;
 
 use pipewire::{context, main_loop};
@@ -30,6 +43,8 @@ use std::sync::mpsc;
 use strum::IntoEnumIterator;
 use ulid::Ulid;
 
+static SAMPLE_RATE: i32 = 48000;
+
 pub(crate) struct FilterData {
     pub callback: Box<dyn FilterHandler>,
 }
@@ -43,7 +58,11 @@ struct PipewireManager {
 }
 
 impl PipewireManager {
-    pub fn new(core: Core, registry: Registry, callback_tx: mpsc::Sender<PipewireReceiver>) -> Self {
+    pub fn new(
+        core: Core,
+        registry: Registry,
+        callback_tx: mpsc::Sender<PipewireReceiver>,
+    ) -> Self {
         let store = Rc::new(RefCell::new(Store::new(callback_tx.clone())));
         let registry = PipewireRegistry::new(registry, store.clone());
 
@@ -81,14 +100,14 @@ impl PipewireManager {
             },
 
             *AUDIO_CHANNELS => "2",
-            *NODE_LATENCY => "128/48000",
-            *NODE_MAX_LATENCY => "128/48000",
+            *NODE_LATENCY => format!("{}/{}", properties.buffer, SAMPLE_RATE),
+            *NODE_MAX_LATENCY => format!("{}/{}", properties.buffer, SAMPLE_RATE),
 
 
             // Force the QUANTUM and the RATE to ensure that we're not internally adjusted when
             // latency occurs following a link
-            *NODE_FORCE_QUANTUM => "128",
-            *NODE_FORCE_RATE => "48000",
+            *NODE_FORCE_QUANTUM => properties.buffer.to_string(),
+            *NODE_FORCE_RATE => SAMPLE_RATE.to_string(),
 
             // We don't want to set a driver here. If creating a large number of nodes each of them
             // will pick a different device while finding a clock source, resulting in the nodes
@@ -113,7 +132,6 @@ impl PipewireManager {
             // Keep the monitor as close to 'real-time' as possible
             "monitor.passthrough" => "false",
         };
-
 
         debug!(
             "[{}] Attempting to Create Device '{}'",
@@ -175,7 +193,6 @@ impl PipewireManager {
                                 .iter()
                                 .find(|p| p.key == SPA_PARAM_PORT_CONFIG_format);
 
-
                             // Format is optional
                             if let Some(prop) = prop {
                                 if let Value::Object(object) = &prop.value {
@@ -194,10 +211,18 @@ impl PipewireManager {
                                             for (index, value) in array.iter().enumerate() {
                                                 let index = index as u32;
                                                 if value.0 == SPA_AUDIO_CHANNEL_FL {
-                                                    store.node_add_port(listener_id, PortLocation::LEFT, index);
+                                                    store.node_add_port(
+                                                        listener_id,
+                                                        PortLocation::LEFT,
+                                                        index,
+                                                    );
                                                 }
                                                 if value.0 == SPA_AUDIO_CHANNEL_FR {
-                                                    store.node_add_port(listener_id, PortLocation::RIGHT, index);
+                                                    store.node_add_port(
+                                                        listener_id,
+                                                        PortLocation::RIGHT,
+                                                        index,
+                                                    );
                                                 }
                                             }
                                             return;
@@ -273,35 +298,46 @@ impl PipewireManager {
         if props.class == MediaClass::Source || props.class == MediaClass::Duplex {
             debug!("[{}] Registering Input Ports", props.filter_id);
             for (index, port) in PortLocation::iter().enumerate() {
-                input_ports.borrow_mut().push(filter.add_port(
-                    Direction::Input,
-                    PortFlags::MAP_BUFFERS,
-                    properties! {
-                        *FORMAT_DSP => "32 bit float mono audio",
-                        *PORT_NAME => format!("input_{}", port),
-                        *AUDIO_CHANNEL => format!("{}", port)
-                    },
-                    &mut params,
-                ).expect("Filter Input Creation Failed"));
+                input_ports.borrow_mut().push(
+                    filter
+                        .add_port(
+                            Direction::Input,
+                            PortFlags::MAP_BUFFERS,
+                            properties! {
+                                *FORMAT_DSP => "32 bit float mono audio",
+                                *PORT_NAME => format!("input_{}", port),
+                                *AUDIO_CHANNEL => format!("{}", port)
+                            },
+                            &mut params,
+                        )
+                        .expect("Filter Input Creation Failed"),
+                );
                 input_port_map[port] = index as u32;
             }
         }
 
-        if props.class == MediaClass::Sink || props.class == MediaClass::Duplex {
-            debug!("[{}] Registering Output Ports", props.filter_id);
+        #[allow(clippy::collapsible_if)]
+        if !props.receive_only {
+            if props.class == MediaClass::Sink || props.class == MediaClass::Duplex {
+                debug!("[{}] Registering Output Ports", props.filter_id);
 
-            for (index, port) in PortLocation::iter().enumerate() {
-                output_ports.borrow_mut().push(filter.add_port(
-                    Direction::Output,
-                    PortFlags::MAP_BUFFERS,
-                    properties! {
-                        *FORMAT_DSP => "32 bit float mono audio",
-                        *PORT_NAME => format!("output_{}", port),
-                        *AUDIO_CHANNEL => format!("{}", port)
-                    },
-                    &mut params,
-                ).expect("Filter Input Creation Failed"));
-                output_port_map[port] = index as u32;
+                for (index, port) in PortLocation::iter().enumerate() {
+                    output_ports.borrow_mut().push(
+                        filter
+                            .add_port(
+                                Direction::Output,
+                                PortFlags::MAP_BUFFERS,
+                                properties! {
+                                    *FORMAT_DSP => "32 bit float mono audio",
+                                    *PORT_NAME => format!("output_{}", port),
+                                    *AUDIO_CHANNEL => format!("{}", port)
+                                },
+                                &mut params,
+                            )
+                            .expect("Filter Input Creation Failed"),
+                    );
+                    output_port_map[port] = index as u32;
+                }
             }
         }
 
@@ -343,7 +379,9 @@ impl PipewireManager {
                     output_list.push(out_buffer.unwrap());
                 }
 
-                data.write().callback.process_samples(input_list, output_list);
+                data.write()
+                    .callback
+                    .process_samples(input_list, output_list);
             })
             .register()
             .expect("Filter Borked.");
@@ -415,7 +453,8 @@ impl PipewireManager {
             let (tgt_id, tgt_index) = self.get_port(dest, registry::Direction::In, port);
 
             // Now we simply create the link
-            let (link, lis) = self.create_port_link(link_id, parent_id, src_id, src_index, tgt_id, tgt_index);
+            let (link, lis) =
+                self.create_port_link(link_id, parent_id, src_id, src_index, tgt_id, tgt_index);
 
             // Create the LinkStore Mapping for this link
             let store = LinkStoreMap {
@@ -445,7 +484,12 @@ impl PipewireManager {
         self.store.borrow_mut().link_remove(source, destination);
     }
 
-    fn get_port(&self, link: LinkType, direction: registry::Direction, location: PortLocation) -> (u32, u32) {
+    fn get_port(
+        &self,
+        link: LinkType,
+        direction: registry::Direction,
+        location: PortLocation,
+    ) -> (u32, u32) {
         // Ok, simple enough, pull out the relevant type, and get the port at location
         let store = self.store.borrow();
         match link {
@@ -502,7 +546,8 @@ impl PipewireManager {
         dest_port: u32,
     ) -> (Link, LinkListener) {
         let listener_info_store = self.store.clone();
-        let link = self.core
+        let link = self
+            .core
             .create_object::<Link>(
                 "link-factory",
                 &properties! {
@@ -523,18 +568,27 @@ impl PipewireManager {
             )
             .expect("Failed to create link");
 
-        let link_listener = link.add_listener_local().info(move |link| {
-            if let LinkState::Active = link.state() {
-                // We're alive, let the store know
-                listener_info_store.borrow_mut().link_ready(parent_id, id, link.id());
-            }
-        }).register();
+        let link_listener = link
+            .add_listener_local()
+            .info(move |link| {
+                if let LinkState::Active = link.state() {
+                    // We're alive, let the store know
+                    listener_info_store
+                        .borrow_mut()
+                        .link_ready(parent_id, id, link.id());
+                }
+            })
+            .register();
 
         (link, link_listener)
     }
 }
 
-pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Result<()>>, callback_tx: mpsc::Sender<PipewireReceiver>) {
+pub fn run_pw_main_loop(
+    pw_rx: PWReceiver,
+    start_tx: oneshot::Sender<anyhow::Result<()>>,
+    callback_tx: mpsc::Sender<PipewireReceiver>,
+) {
     debug!("Initialising Pipewire..");
 
     let Ok(mainloop) = main_loop::MainLoop::new(None) else {
@@ -549,7 +603,6 @@ pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Res
             .expect("OneShot Channel is broken!");
         return;
     };
-
 
     // Wrap the mainloop so we shuffle it around
     let mainloop = Rc::new(mainloop);
@@ -571,8 +624,11 @@ pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Res
         return;
     };
 
-
-    let manager = Rc::new(RefCell::new(PipewireManager::new(core, registry, callback_tx)));
+    let manager = Rc::new(RefCell::new(PipewireManager::new(
+        core,
+        registry,
+        callback_tx,
+    )));
 
     let receiver_clone = mainloop.clone();
     let _receiver = pw_rx.attach(mainloop.loop_(), {
@@ -587,7 +643,9 @@ pub fn run_pw_main_loop(pw_rx: PWReceiver, start_tx: oneshot::Sender<anyhow::Res
                 manager.borrow_mut().create_filter(props);
             }
             PipewireMessage::CreateDeviceLink(source, destination, sender) => {
-                manager.borrow_mut().create_link(source, destination, sender);
+                manager
+                    .borrow_mut()
+                    .create_link(source, destination, sender);
             }
 
             PipewireMessage::RemoveDeviceNode(id) => {
