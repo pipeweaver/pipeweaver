@@ -158,6 +158,9 @@ pub struct NodeProperties {
     pub linger: bool,
     pub class: MediaClass,
 
+    // Latency Configuration
+    pub buffer: u32,
+
     // Ready Sender
     pub ready_sender: Option<oneshot::Sender<()>>,
 }
@@ -176,6 +179,7 @@ pub struct FilterProperties {
     pub linger: bool,
     pub callback: Box<dyn FilterHandler>,
 
+    pub receive_only: bool,
     pub ready_sender: Option<oneshot::Sender<()>>,
 }
 

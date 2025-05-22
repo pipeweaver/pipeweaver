@@ -646,6 +646,7 @@ impl NodeManagementLocal for PipewireManager {
             app_name: APP_NAME.to_lowercase(),
             linger: false,
             class,
+            buffer: 512,
             ready_sender: None,
         }
     }
