@@ -1,7 +1,7 @@
 use crate::handler::messaging::DaemonMessage;
 use crate::handler::pipewire::manager::{run_pipewire_manager, PipewireManagerConfig};
 use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfiguration};
-use crate::servers::http_server::PatchEvent;
+use crate::servers::http_server::{MeterEvent, PatchEvent};
 use crate::stop::Stop;
 use crate::APP_NAME_ID;
 use anyhow::Context;
@@ -26,27 +26,32 @@ type Manage = mpsc::Sender<ManagerMessage>;
 pub struct PrimaryWorker {
     last_status: DaemonStatus,
     patch_broadcast: Sender<PatchEvent>,
+    meter_broadcast: Sender<MeterEvent>,
 
     shutdown: Stop,
 }
 
 impl PrimaryWorker {
-    fn new(shutdown: Stop, patch_broadcast: Sender<PatchEvent>) -> Self {
+    fn new(shutdown: Stop, patch: Sender<PatchEvent>, meter: Sender<MeterEvent>) -> Self {
         Self {
             last_status: DaemonStatus::default(),
-            patch_broadcast,
+            patch_broadcast: patch,
+            meter_broadcast: meter,
 
             shutdown,
         }
     }
 
-    async fn run(&mut self, mut message_receiver: mpsc::Receiver<DaemonMessage>, config_path: PathBuf) {
+    async fn run(
+        &mut self,
+        mut message_receiver: mpsc::Receiver<DaemonMessage>,
+        config_path: PathBuf,
+    ) {
         info!("[PrimaryWorker] Starting Primary Worker");
 
         info!("[PrimaryWorker] Loading Profile");
         let profile_path = config_path.join(format!("{}-profile.json", APP_NAME_ID));
         let profile = self.load_profile(&profile_path);
-
 
         // Used to pass messages into the Pipewire Manager
         let (command_sender, command_receiver) = mpsc::channel(32);
@@ -62,6 +67,7 @@ impl PrimaryWorker {
             command_receiver,
             worker_sender,
 
+            meter_sender: self.meter_broadcast.clone(),
             ready_sender: Some(ready_sender),
         };
         task::spawn(run_pipewire_manager(config, stop_sender));
@@ -185,7 +191,10 @@ impl PrimaryWorker {
             Ok(reader) => {
                 let settings = serde_json::from_reader(reader);
                 settings.unwrap_or_else(|e| {
-                    warn!("[Profile] Found, but unable to Load ({}), sending default", e);
+                    warn!(
+                        "[Profile] Found, but unable to Load ({}), sending default",
+                        e
+                    );
                     Profile::base_settings()
                 })
             }
@@ -238,8 +247,9 @@ pub async fn start_primary_worker(
     message_receiver: mpsc::Receiver<DaemonMessage>,
     shutdown: Stop,
     broadcast_tx: Sender<PatchEvent>,
+    meter_tx: Sender<MeterEvent>,
     config_path: PathBuf,
 ) {
-    let mut manager = PrimaryWorker::new(shutdown, broadcast_tx);
+    let mut manager = PrimaryWorker::new(shutdown, broadcast_tx, meter_tx);
     manager.run(message_receiver, config_path).await;
 }

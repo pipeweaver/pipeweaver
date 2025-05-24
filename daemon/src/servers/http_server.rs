@@ -1,5 +1,7 @@
 use std::ops::DerefMut;
 
+use crate::handler::packet::{handle_packet, Messenger};
+use crate::APP_NAME;
 use actix::{
     Actor, ActorContext, AsyncContext, ContextFutureSpawner, Handler, Message, StreamHandler,
     WrapFuture,
@@ -11,24 +13,80 @@ use actix_web::middleware::Condition;
 use actix_web::web::Data;
 use actix_web::{get, post, web, App, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
-use actix_web_actors::ws::{CloseCode, CloseReason};
+use actix_web_actors::ws::{CloseCode, CloseReason, ProtocolError};
 use anyhow::{anyhow, Result};
 use include_dir::{include_dir, Dir};
 use json_patch::Patch;
 use log::{debug, error, info, warn};
 use mime_guess::MimeGuess;
+use pipeweaver_ipc::commands::{
+    DaemonRequest, DaemonResponse, DaemonStatus, HttpSettings, WebsocketRequest, WebsocketResponse,
+};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::oneshot::Sender;
 use tokio::sync::Mutex;
-
-use crate::handler::packet::{handle_packet, Messenger};
-use crate::APP_NAME;
-use pipeweaver_ipc::commands::{
-    DaemonRequest, DaemonResponse, DaemonStatus, HttpSettings, WebsocketRequest, WebsocketResponse,
-};
+use ulid::Ulid;
 
 const WEB_CONTENT: Dir = include_dir!("./daemon/web-content/");
+
+#[derive(Debug, Clone, Serialize, Deserialize, Message)]
+#[rtype(result = "()")]
+pub struct MeterEvent {
+    pub(crate) id: Ulid,
+    pub(crate) percent: u8,
+}
+
+struct MeterWebsocket {
+    broadcast_tx: BroadcastSender<MeterEvent>,
+}
+
+impl Actor for MeterWebsocket {
+    type Context = ws::WebsocketContext<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        let address = ctx.address();
+        let mut broadcast_rx = self.broadcast_tx.subscribe();
+
+        let future = Box::pin(async move {
+            loop {
+                if let Ok(event) = broadcast_rx.recv().await {
+                    if let Err(error) = address.clone().try_send(event) {
+                        error!("Failed to send Meter to websocket: {:?}", error);
+                        break;
+                    }
+                }
+            }
+        });
+
+        let future = future.into_actor(self);
+        ctx.spawn(future);
+    }
+}
+
+impl Handler<MeterEvent> for MeterWebsocket {
+    type Result = ();
+
+    fn handle(&mut self, msg: MeterEvent, ctx: &mut Self::Context) -> Self::Result {
+        if let Ok(result) = serde_json::to_string(&msg) {
+            ctx.text(result);
+        }
+    }
+}
+
+impl StreamHandler<Result<ws::Message, ProtocolError>> for MeterWebsocket {
+    fn handle(&mut self, item: Result<ws::Message, ProtocolError>, ctx: &mut Self::Context) {
+        // This is an omi-directional stream, all we need to check for is close
+        match item {
+            Ok(ws::Message::Close(reason)) => {
+                ctx.close(reason);
+                ctx.stop();
+            }
+            _ => {}
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct PatchEvent {
@@ -87,8 +145,8 @@ impl Handler<WsResponse> for Websocket {
     }
 }
 
-impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for Websocket {
-    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+impl StreamHandler<Result<ws::Message, ProtocolError>> for Websocket {
+    fn handle(&mut self, msg: Result<ws::Message, ProtocolError>, ctx: &mut Self::Context) {
         match msg {
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
             Ok(ws::Message::Text(text)) => {
@@ -197,12 +255,14 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for Websocket {
 struct AppData {
     messenger: Messenger,
     broadcast_tx: BroadcastSender<PatchEvent>,
+    meter_tx: BroadcastSender<MeterEvent>,
 }
 
 pub async fn spawn_http_server(
     messenger: Messenger,
     handle_tx: Sender<ServerHandle>,
     broadcast_tx: tokio::sync::broadcast::Sender<PatchEvent>,
+    meter_tx: tokio::sync::broadcast::Sender<MeterEvent>,
     settings: HttpSettings,
 ) {
     let server = HttpServer::new(move || {
@@ -217,14 +277,17 @@ pub async fn spawn_http_server(
         App::new()
             .wrap(Condition::new(settings.cors_enabled, cors))
             .app_data(Data::new(Mutex::new(AppData {
-                broadcast_tx: broadcast_tx.clone(),
                 messenger: messenger.clone(),
+                broadcast_tx: broadcast_tx.clone(),
+                meter_tx: meter_tx.clone(),
             })))
             .service(execute_command)
             .service(get_devices)
             .service(websocket)
+            .service(websocket_meter)
             .default_service(web::to(default))
-    }).bind((settings.bind_address.clone(), settings.port));
+    })
+        .bind((settings.bind_address.clone(), settings.port));
 
     if let Err(e) = server {
         warn!("Error Running HTTP Server: {:#?}", e);
@@ -260,6 +323,23 @@ async fn websocket(
         Websocket {
             usb_tx: data.messenger.clone(),
             broadcast_tx: data.broadcast_tx.clone(),
+        },
+        &req,
+        stream,
+    )
+}
+
+#[get("/api/websocket/meter")]
+async fn websocket_meter(
+    usb_mutex: Data<Mutex<AppData>>,
+    req: HttpRequest,
+    stream: web::Payload,
+) -> Result<HttpResponse, actix_web::Error> {
+    let data = usb_mutex.lock().await;
+
+    ws::start(
+        MeterWebsocket {
+            broadcast_tx: data.meter_tx.clone(),
         },
         &req,
         stream,

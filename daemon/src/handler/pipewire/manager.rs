@@ -2,6 +2,7 @@ use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
 use crate::handler::pipewire::ipc::IPCHandler;
 use crate::handler::primary_worker::{ManagerMessage, WorkerMessage};
+use crate::servers::http_server::MeterEvent;
 use enum_map::EnumMap;
 use log::{debug, error, info};
 use pipeweaver_ipc::commands::{APICommandResponse, AudioConfiguration, PhysicalDevice};
@@ -13,7 +14,7 @@ use std::thread;
 use std::time::Duration;
 use tokio::select;
 use tokio::sync::mpsc::Sender;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use ulid::Ulid;
@@ -40,7 +41,7 @@ pub(crate) struct PipewireManager {
     pub(crate) meter_callback: Sender<(Ulid, u8)>,
 
     meter_receiver: Option<mpsc::Receiver<(Ulid, u8)>>,
-    meter_values: HashMap<Ulid, u8>,
+    meter_broadcast: broadcast::Sender<MeterEvent>,
 
     // A list of physical nodes
     pub(crate) node_list: EnumMap<DeviceType, Vec<PhysicalDevice>>,
@@ -55,7 +56,6 @@ impl PipewireManager {
             command_receiver: config.command_receiver,
             worker_sender: config.worker_sender,
             ready_sender: config.ready_sender,
-            meter_receiver: Some(meter_rx),
 
             pipewire: None,
 
@@ -69,7 +69,8 @@ impl PipewireManager {
 
             meter_map: HashMap::default(),
             meter_callback: meter_tx,
-            meter_values: HashMap::default(),
+            meter_receiver: Some(meter_rx),
+            meter_broadcast: config.meter_sender,
 
             node_list: Default::default(),
             physical_nodes: Default::default(),
@@ -236,7 +237,11 @@ impl PipewireManager {
                     }
                 }
                 Some((id, percent)) = meter_receiver.recv() => {
-                    self.meter_values.insert(id, percent);
+                    // Broadcast this out to anything listening
+                    let _ = self.meter_broadcast.send(MeterEvent {
+                        id,
+                        percent
+                    });
                 }
             );
         }
@@ -281,7 +286,9 @@ pub(crate) struct PipewireManagerConfig {
     pub(crate) profile: Profile,
 
     pub(crate) command_receiver: mpsc::Receiver<ManagerMessage>,
-    pub(crate) worker_sender: mpsc::Sender<WorkerMessage>,
+    pub(crate) worker_sender: Sender<WorkerMessage>,
+
+    pub(crate) meter_sender: broadcast::Sender<MeterEvent>,
 
     pub(crate) ready_sender: Option<oneshot::Sender<()>>,
 }

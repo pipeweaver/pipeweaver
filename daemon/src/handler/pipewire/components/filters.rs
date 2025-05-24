@@ -15,8 +15,8 @@ pub(crate) trait FilterManagement {
     async fn filter_volume_create(&mut self, name: String) -> Result<Ulid>;
     async fn filter_volume_create_id(&mut self, name: String, id: Ulid) -> Result<()>;
 
-    async fn filter_meter_create(&mut self, name: String) -> Result<Ulid>;
-    async fn filter_meter_create_id(&mut self, name: String, id: Ulid) -> Result<()>;
+    async fn filter_meter_create(&mut self, node: Ulid, name: String) -> Result<Ulid>;
+    async fn filter_meter_create_id(&mut self, node: Ulid, name: String, id: Ulid) -> Result<()>;
 
     async fn filter_volume_set(&self, id: Ulid, volume: u8) -> Result<()>;
 
@@ -46,15 +46,15 @@ impl FilterManagement for PipewireManager {
         self.filter_pw_create(props).await
     }
 
-    async fn filter_meter_create(&mut self, name: String) -> Result<Ulid> {
+    async fn filter_meter_create(&mut self, node: Ulid, name: String) -> Result<Ulid> {
         let id = Ulid::new();
-        self.filter_meter_create_id(name, id).await?;
+        self.filter_meter_create_id(node, name, id).await?;
 
         Ok(id)
     }
 
-    async fn filter_meter_create_id(&mut self, name: String, id: Ulid) -> Result<()> {
-        let props = self.filter_meter_get_props(name, id);
+    async fn filter_meter_create_id(&mut self, node: Ulid, name: String, id: Ulid) -> Result<()> {
+        let props = self.filter_meter_get_props(node, name, id);
         self.filter_pw_create(props).await
     }
 
@@ -81,7 +81,7 @@ trait FilterManagementLocal {
 
     fn filter_pass_get_props(&self, name: String, id: Ulid) -> FilterProperties;
     fn filter_volume_get_props(&self, name: String, id: Ulid) -> FilterProperties;
-    fn filter_meter_get_props(&self, name: String, id: Ulid) -> FilterProperties;
+    fn filter_meter_get_props(&self, node: Ulid, name: String, id: Ulid) -> FilterProperties;
 }
 
 impl FilterManagementLocal for PipewireManager {
@@ -89,7 +89,8 @@ impl FilterManagementLocal for PipewireManager {
         let (send, recv) = oneshot::channel();
 
         props.ready_sender = Some(send);
-        self.pipewire().send_message(PipewireMessage::CreateFilterNode(props))?;
+        self.pipewire()
+            .send_message(PipewireMessage::CreateFilterNode(props))?;
         recv.await?;
 
         Ok(())
@@ -140,7 +141,7 @@ impl FilterManagementLocal for PipewireManager {
         }
     }
 
-    fn filter_meter_get_props(&self, name: String, id: Ulid) -> FilterProperties {
+    fn filter_meter_get_props(&self, node: Ulid, name: String, id: Ulid) -> FilterProperties {
         let description = name.to_lowercase().replace(" ", "-");
 
         FilterProperties {
@@ -153,7 +154,7 @@ impl FilterManagementLocal for PipewireManager {
             app_id: APP_ID.to_string(),
             app_name: APP_NAME.to_string(),
             linger: false,
-            callback: Box::new(MeterFilter::new(id, self.meter_callback.clone())),
+            callback: Box::new(MeterFilter::new(node, self.meter_callback.clone())),
 
             receive_only: true,
             ready_sender: None,

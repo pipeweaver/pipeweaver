@@ -78,12 +78,15 @@ async fn main() -> Result<()> {
 
     let (httpd_tx, httpd_rx) = tokio::sync::oneshot::channel();
     let (broadcast_tx, broadcast_rx) = broadcast::channel(16);
+    let (meter_tx, meter_rx) = broadcast::channel(32);
     drop(broadcast_rx);
+    drop(meter_rx);
 
     tokio::spawn(spawn_http_server(
         manager_send.clone(),
         httpd_tx,
         broadcast_tx.clone(),
+        meter_tx.clone(),
         http_settings,
     ));
     let http_server = httpd_rx.await?;
@@ -93,6 +96,7 @@ async fn main() -> Result<()> {
         manager_recv,
         shutdown.clone(),
         broadcast_tx.clone(),
+        meter_tx.clone(),
         config_dir,
     ));
 

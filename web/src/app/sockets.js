@@ -1,38 +1,5 @@
-/**
- * A class designed to help manage request and responses to the App via Websockets and HTTP.
- *
- * A lot of commands do not require responses as they're 'fire and forget', the only response that could possibly
- * be returned is an error which means that something has likely gone *SERIOUSLY* wrong, and we should abandon
- * all hope. As such, the daemon doesn't provide a response for most requests, and will only send errors, and
- * responses to GetStatus up the pipe to us, which we simply handle here. If you absolutely require a response from
- * a request (eg, profile management), send it as a standard command, and not a websocket command.
- *
- * Commands are sent via JSON, and are handled by serde on the rear end, this class will include some
- * helper methods for sending commands but the command structure will need to be understood first.
- *
- * Commands are documented in ipc/src/lib.rs under the GoXLRCommand enum, as an example, the Command to
- * change a volume level is defined as:
- * SetVolume(ChannelName, u8)
- *
- * Following the ChannelName to types/src/lib.rs, we get a list of channel names in the enum. Unless otherwise
- * stated by a #[repr] macro (See CompressorRatio), Serde expects these to be sent as Strings. Values to a
- * command are expected to be sent as an array of values. Using the above, SetVolume can be represented in JSON as:
- * { "SetVolume": ["Chat", 145] }
- *
- * If there is only one parameter for a command, an array isn't required.
- *
- * Extra Technical Stuff (not needed for most people), Obviously a command requires a serial, and the actual message
- * sent to the Daemon is a Command object, in this case, the same rules as above apply. Command is defined as:
- * Command(String, GoXLRCommand)
- *
- * With String being the serial. So expanding out the above, you end up with JSON that looks like:
- * {"Command": ["serial", { "SetVolume": ["Chat", 145]}]}
- *
- * The websocket class will abstract away the need to build a complete message.
- */
 import {store} from '@/app/store.js'
 
-// TODO: Error checking and handling!
 export class Websocket {
   #connection_promise = []
   #disconnect_callback = undefined
@@ -134,13 +101,6 @@ export class Websocket {
     return this.#sendRequest(request)
   }
 
-  get_mic_level(serial) {
-    let request = {
-      GetMicLevel: serial
-    }
-    return this.#sendRequest(request)
-  }
-
   #sendRequest(request) {
     let id = this.#command_index++
 
@@ -171,6 +131,59 @@ export class Websocket {
 
 export const websocket = new Websocket()
 
+/*
+  This is a comparatively dumb websocket, meter data is simply 'Push on Receive', so we just
+  need a basic connect / disconnect and handle behaviour
+ */
+export class WebsocketMeter {
+  #index = 0;
+  #websocket = undefined;
+  #callbacks = [];
+
+  connect() {
+    this.#websocket = new WebSocket(getWebsocketAddress() + "/meter");
+
+    let self = this
+    self.#websocket.addEventListener('message', function (event) {
+      let json = JSON.parse(event.data);
+      for (const callback of self.#callbacks) {
+        if (callback.node === json.id) {
+          callback.executor(json.percent);
+        }
+      }
+    });
+
+    self.#websocket.addEventListener('close', function () {
+      self.#websocket.close()
+    })
+
+    self.#websocket.addEventListener('error', function () {
+      self.#websocket.close()
+    })
+  }
+
+  register_callback(node, executor) {
+    let index = this.#index++;
+    this.#callbacks.push({
+      index: index, node: node, executor: executor,
+    });
+    return index;
+  }
+
+  unregister_callback(id) {
+    this.#callbacks = this.#callbacks.filter(function (item) {
+      return item.index !== id
+    });
+  }
+
+  disconnect() {
+    this.#websocket.close();
+  }
+}
+
+export const websocket_meter = new WebsocketMeter()
+
+
 export function runWebsocket() {
   console.log('Connecting..')
   // Let's attempt to connect the websocket...
@@ -179,9 +192,11 @@ export function runWebsocket() {
     .then(() => {
       // We got a connection, try fetching the status...
       websocket.get_status().then((data) => {
+        websocket_meter.connect();
         store.socketConnected(data)
 
         websocket.on_disconnect(() => {
+          websocket_meter.disconnect();
           store.socketDisconnected()
           setTimeout(runWebsocket, 1000)
         })

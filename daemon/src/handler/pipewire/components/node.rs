@@ -330,7 +330,7 @@ impl NodeManagementLocal for PipewireManager {
 
         // Create and attach a meter
         let filter_name = format!("{}-meter", desc.name);
-        let meter = self.filter_meter_create(filter_name).await?;
+        let meter = self.filter_meter_create(desc.id, filter_name).await?;
         self.link_create_filter_to_filter(desc.id, meter).await?;
         self.meter_map.insert(desc.id, meter);
 
@@ -356,7 +356,7 @@ impl NodeManagementLocal for PipewireManager {
 
         // Create a Meter
         let filter_name = format!("{}-meter", desc.name);
-        let meter = self.filter_meter_create(filter_name).await?;
+        let meter = self.filter_meter_create(desc.id, filter_name).await?;
 
         // Attach this to the original source
         self.link_create_node_to_filter(desc.id, meter).await?;
