@@ -458,6 +458,8 @@ export default {
   display: flex;
   flex-direction: row;
   justify-content: center;
+
+  width: 20px;
   gap: 35px;
 }
 
