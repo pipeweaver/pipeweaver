@@ -37,7 +37,6 @@ export default {
 
     // Colours for the thumb and 'active' section, and the unselected colour
     selectedColour: {type: String, required: false, default: '#82CFD0'},
-    meterColour: {type: String, required: false, default: '#9cfdff'},
     deselectedColour: {type: String, required: false, default: '#000000'},
 
     // The value to report to Screen Readers
@@ -162,6 +161,8 @@ input[type='range'] {
   /*
     If we ever were to do metering in the UI, we could use something like this to attach it
     directly to the range bar:
+
+    TODO: This doesn't work, metering is too heavy to redraw a linear gradient
 
     background: linear-gradient(
       to right,
