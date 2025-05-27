@@ -289,12 +289,7 @@ impl Store {
         self.unmanaged_node_check(id);
     }
 
-    pub fn unmanaged_device_node_get(&self, id: u32) -> Option<&RegistryDeviceNode> {
-        self.unmanaged_device_nodes.get(&id)
-    }
-
-    // TODO: Do we need this? Can't we just sent the previous mutably?
-    pub fn unmanaged_device_node_get_mut(&mut self, id: u32) -> Option<&mut RegistryDeviceNode> {
+    pub fn unmanaged_device_node_get(&mut self, id: u32) -> Option<&mut RegistryDeviceNode> {
         self.unmanaged_device_nodes.get_mut(&id)
     }
 

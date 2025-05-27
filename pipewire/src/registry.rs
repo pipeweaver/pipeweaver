@@ -107,7 +107,7 @@ impl PipewireRegistry {
                                 // We need to extract the NodeID and PortID from the data..
                                 if let Some(node_id) = node_id.and_then(|s| s.parse::<u32>().ok()) {
                                     if let Some(port_id) = pid.and_then(|s| s.parse::<u32>().ok()) {
-                                        if let Some(node) = store.unmanaged_device_node_get_mut(node_id) {
+                                        if let Some(node) = store.unmanaged_device_node_get(node_id) {
                                             node.add_port(
                                                 port_id,
                                                 direction,

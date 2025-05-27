@@ -485,13 +485,13 @@ impl PipewireManager {
     }
 
     fn get_port(
-        &self,
+        &mut self,
         link: LinkType,
         direction: registry::Direction,
         location: PortLocation,
     ) -> (u32, u32) {
         // Ok, simple enough, pull out the relevant type, and get the port at location
-        let store = self.store.borrow();
+        let mut store = self.store.borrow_mut();
         match link {
             LinkType::Node(id) => {
                 let node = store.managed_node_get(id).unwrap();
