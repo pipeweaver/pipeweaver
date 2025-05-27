@@ -353,7 +353,6 @@ impl NodeManagementLocal for PipewireManager {
         let properties = self.create_node_props(MediaClass::Sink, desc);
         self.node_pw_create(properties).await?;
 
-
         // Create a Meter
         let filter_name = format!("{}-meter", desc.name);
         let meter = self.filter_meter_create(desc.id, filter_name).await?;
@@ -382,6 +381,11 @@ impl NodeManagementLocal for PipewireManager {
         self.filter_volume_create_id(desc.name.clone(), desc.id)
             .await?;
 
+        let filter_name = format!("{}-meter", desc.name);
+        let meter = self.filter_meter_create(desc.id, filter_name).await?;
+        self.link_create_filter_to_filter(desc.id, meter).await?;
+        self.meter_map.insert(desc.id, meter);
+
         Ok(())
     }
 
@@ -393,6 +397,12 @@ impl NodeManagementLocal for PipewireManager {
         // Link the Volume to the Target Node
         let volume = self.filter_volume_create(desc.name.clone()).await?;
         self.link_create_filter_to_node(volume, desc.id).await?;
+
+        // Create a meter and attach it to the volume
+        let filter_name = format!("{}-meter", desc.name);
+        let meter = self.filter_meter_create(desc.id, filter_name).await?;
+        self.link_create_filter_to_filter(volume, meter).await?;
+        self.meter_map.insert(desc.id, meter);
 
         // Map this Node to this Volume
         self.target_map.insert(desc.id, volume);
@@ -542,6 +552,12 @@ impl NodeManagementLocal for PipewireManager {
             }
         }
 
+        // Detach and destroy the Meter
+        if let Some(&meter) = self.meter_map.get(&id) {
+            self.link_remove_filter_to_filter(id, meter).await?;
+            self.filter_remove(meter).await?;
+        }
+
         // Next, we need to detach anything that may be routing to us
         for (source, targets) in self.profile.routes.clone() {
             // Are we a target for this route?
@@ -595,6 +611,12 @@ impl NodeManagementLocal for PipewireManager {
         // Again, similar to physical targets, but we need to check the target map to
         // find our volume filter then un-route and remove it
         if let Some(volume) = self.target_map.clone().get(&id) {
+            // Detach and destroy the Meter
+            if let Some(&meter) = self.meter_map.get(&id) {
+                self.link_remove_filter_to_filter(*volume, meter).await?;
+                self.filter_remove(meter).await?;
+            }
+
             // Detach from the Volume Filter to the Target Node
             self.link_remove_filter_to_node(*volume, id).await?;
 
