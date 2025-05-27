@@ -203,7 +203,7 @@ impl PipewireManager {
                         }
                         PipewireReceiver::ManagedLinkDropped(source, target) => {
                             warn!("Managed Link Removed: {:?} {:?}, reestablishing", source, target);
-                            let _ = self.link_create_type_to_type(source, target).await;
+                            //let _ = self.link_create_type_to_type(source, target).await;
                         }
                         _ => {}
                     }
