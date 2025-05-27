@@ -1,9 +1,6 @@
 use crate::registry::PipewireRegistry;
 use crate::store::{FilterStore, LinkStore, LinkStoreMap, NodeStore, PortLocation, Store};
-use crate::{
-    registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties,
-    PipewireReceiver,
-};
+use crate::{registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties, PipewireInternalMessage, PipewireReceiver};
 use crate::{MediaClass, PWReceiver, PipewireMessage};
 use anyhow::Result;
 use anyhow::{anyhow, bail};
@@ -659,16 +656,16 @@ pub fn run_pw_main_loop(
     let receiver_clone = mainloop.clone();
     let _receiver = pw_rx.attach(mainloop.loop_(), {
         move |message| match message {
-            PipewireMessage::Quit => {
+            PipewireInternalMessage::Quit => {
                 receiver_clone.quit();
             }
-            PipewireMessage::CreateDeviceNode(props, result) => {
+            PipewireInternalMessage::CreateDeviceNode(props, result) => {
                 let _ = result.send(manager.borrow_mut().create_node(props));
             }
-            PipewireMessage::CreateFilterNode(props, result) => {
+            PipewireInternalMessage::CreateFilterNode(props, result) => {
                 let _ = result.send(manager.borrow_mut().create_filter(props));
             }
-            PipewireMessage::CreateDeviceLink(source, destination, sender, result) => {
+            PipewireInternalMessage::CreateDeviceLink(source, destination, sender, result) => {
                 let _ = result.send(
                     manager
                         .borrow_mut()
@@ -676,17 +673,17 @@ pub fn run_pw_main_loop(
                 );
             }
 
-            PipewireMessage::RemoveDeviceNode(id, result) => {
+            PipewireInternalMessage::RemoveDeviceNode(id, result) => {
                 let _ = result.send(manager.borrow_mut().remove_node(id));
             }
 
-            PipewireMessage::RemoveDeviceLink(source, destination, result) => {
+            PipewireInternalMessage::RemoveDeviceLink(source, destination, result) => {
                 let _ = result.send(manager.borrow_mut().remove_link(source, destination));
             }
-            PipewireMessage::RemoveFilterNode(ulid, result) => {
+            PipewireInternalMessage::RemoveFilterNode(ulid, result) => {
                 let _ = result.send(manager.borrow_mut().remove_filter(ulid));
             }
-            PipewireMessage::SetFilterValue(id, key, value, result) => {
+            PipewireInternalMessage::SetFilterValue(id, key, value, result) => {
                 let _ = result.send(manager.borrow_mut().set_filter_value(id, key, value));
             }
         }

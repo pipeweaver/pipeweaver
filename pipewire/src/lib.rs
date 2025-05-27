@@ -14,12 +14,27 @@ use std::time::Duration;
 use ulid::Ulid;
 
 type PWSender = pipewire::channel::Sender<PipewireMessage>;
-type PWReceiver = pipewire::channel::Receiver<PipewireMessage>;
+type PWInternalSender = pipewire::channel::Sender<PipewireInternalMessage>;
+type PWReceiver = pipewire::channel::Receiver<PipewireInternalMessage>;
 
-type Sender = mpsc::Sender<PipewireMessage>;
-type Receiver = mpsc::Receiver<PipewireMessage>;
+type Sender = mpsc::Sender<PipewireInternalMessage>;
+type Receiver = mpsc::Receiver<PipewireInternalMessage>;
 
 pub enum PipewireMessage {
+    CreateDeviceNode(NodeProperties),
+    CreateFilterNode(FilterProperties),
+    CreateDeviceLink(LinkType, LinkType, Option<oneshot::Sender<()>>),
+
+    RemoveDeviceNode(Ulid),
+    RemoveFilterNode(Ulid),
+    RemoveDeviceLink(LinkType, LinkType),
+
+    SetFilterValue(Ulid, u32, FilterValue),
+
+    Quit,
+}
+
+pub enum PipewireInternalMessage {
     CreateDeviceNode(NodeProperties, oneshot::Sender<Result<()>>),
     CreateFilterNode(FilterProperties, oneshot::Sender<Result<()>>),
     CreateDeviceLink(
@@ -31,7 +46,11 @@ pub enum PipewireMessage {
 
     RemoveDeviceNode(Ulid, oneshot::Sender<Result<()>>),
     RemoveFilterNode(Ulid, oneshot::Sender<Result<()>>),
-    RemoveDeviceLink(LinkType, LinkType, oneshot::Sender<Result<()>>),
+    RemoveDeviceLink(
+        LinkType,
+        LinkType,
+        oneshot::Sender<Result<()>>,
+    ),
 
     SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<()>>),
 
@@ -102,9 +121,38 @@ impl PipewireRunner {
     }
 
     pub fn send_message(&self, message: PipewireMessage) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        let message = match message {
+            PipewireMessage::CreateDeviceNode(n) => {
+                PipewireInternalMessage::CreateDeviceNode(n, tx)
+            }
+            PipewireMessage::CreateFilterNode(f) => {
+                PipewireInternalMessage::CreateFilterNode(f, tx)
+            }
+            PipewireMessage::CreateDeviceLink(lt, lt2, cb) => {
+                PipewireInternalMessage::CreateDeviceLink(lt, lt2, cb, tx)
+            }
+            PipewireMessage::RemoveDeviceNode(id) => {
+                PipewireInternalMessage::RemoveDeviceNode(id, tx)
+            }
+            PipewireMessage::RemoveFilterNode(id) => {
+                PipewireInternalMessage::RemoveFilterNode(id, tx)
+            }
+            PipewireMessage::RemoveDeviceLink(lt, lt2) => {
+                PipewireInternalMessage::RemoveDeviceLink(lt, lt2, tx)
+            }
+            PipewireMessage::SetFilterValue(id, prop, value) => {
+                PipewireInternalMessage::SetFilterValue(id, prop, value, tx)
+            }
+            PipewireMessage::Quit => PipewireInternalMessage::Quit,
+        };
+
         self.message_sender
             .send(message)
-            .map_err(|e| anyhow!("Unable to Send Message: {}", e))
+            .map_err(|e| anyhow!("Unable to Send Message: {}", e))?;
+
+        rx.recv().map_err(|e| anyhow!("Error: {}", e))?
     }
 }
 
@@ -112,7 +160,7 @@ impl Drop for PipewireRunner {
     fn drop(&mut self) {
         info!("[PIPEWIRE] Stopping");
         // Send an exit message
-        let _ = self.message_sender.send(PipewireMessage::Quit);
+        let _ = self.message_sender.send(PipewireInternalMessage::Quit);
 
         // Wait on the threads to exit..
         if let Some(pipewire_thread) = self.pipewire_thread.take() {
@@ -133,12 +181,12 @@ impl Drop for PipewireRunner {
 }
 
 // Maps messages from an mpsc::channel to a pipewire::channel
-fn run_message_loop(receiver: Receiver, sender: PWSender) {
+fn run_message_loop(receiver: Receiver, sender: PWInternalSender) {
     loop {
-        match receiver.recv().unwrap_or(PipewireMessage::Quit) {
-            PipewireMessage::Quit => {
+        match receiver.recv().unwrap_or(PipewireInternalMessage::Quit) {
+            PipewireInternalMessage::Quit => {
                 // Send this message to pipewire
-                let _ = sender.send(PipewireMessage::Quit);
+                let _ = sender.send(PipewireInternalMessage::Quit);
                 break;
             }
             message => {
