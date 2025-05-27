@@ -2,6 +2,9 @@ use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
 use tokio::sync::mpsc;
 use ulid::Ulid;
 
+// Power Factor is inherited from audio_filters/volume.rs
+const POWER_FACTOR: f32 = 3.8;
+
 // This is how we should be setup
 const SAMPLE_RATE: u32 = 48000;
 
@@ -10,9 +13,6 @@ const MILLISECONDS: u32 = 100;
 
 // The number of samples which should represent a MILLISECONDS time period
 const CHUNK_SIZE: usize = ((SAMPLE_RATE / 1000) * MILLISECONDS) as usize;
-
-// The 0% floor for audio in decibels
-const DB_FLOOR: f32 = -60.0;
 
 pub struct MeterFilter {
     count: usize,
@@ -56,8 +56,12 @@ impl FilterHandler for MeterFilter {
 
         if self.count >= CHUNK_SIZE {
             let peak = self.peak;
-            let db = 20.0 * peak.max(1e-9).log10();
-            let meter = (((db - DB_FLOOR) / -DB_FLOOR) * 100.0).clamp(0.0, 100.0) as u8;
+
+            // We calculate the gain percent by doing the inverse of what the volume filter does,
+            // meaning that if you reduce a source channels volume by 50%, it's correctly 
+            // represented on the output channels
+            let gain = peak.max(1e-9);
+            let meter = (100.0 * gain.powf(1.0 / POWER_FACTOR)).clamp(0.0, 100.0) as u8;
 
             let _ = self.callback.blocking_send((self.node_id, meter));
 
