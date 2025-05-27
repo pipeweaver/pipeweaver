@@ -1,12 +1,15 @@
+use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
 use crate::handler::pipewire::ipc::IPCHandler;
 use crate::handler::primary_worker::{ManagerMessage, WorkerMessage};
 use crate::servers::http_server::MeterEvent;
 use enum_map::EnumMap;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{APICommandResponse, AudioConfiguration, PhysicalDevice};
-use pipeweaver_pipewire::{MediaClass, PipewireMessage, PipewireNode, PipewireReceiver, PipewireRunner};
+use pipeweaver_pipewire::{
+    MediaClass, PipewireMessage, PipewireNode, PipewireReceiver, PipewireRunner,
+};
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::{DeviceType, Mix};
 use std::collections::HashMap;
@@ -113,7 +116,6 @@ impl PipewireManager {
             error!("Error Loading Profile: {}", e);
         }
 
-
         // So these are small timers which are set up when a new device is sent to us. Rather than
         // immediately processing, we wait half a second to make sure the device doesn't disappear
         // again as it's layout is being calculated, if this timer completes we should be safe to
@@ -125,7 +127,11 @@ impl PipewireManager {
         let mut discovered_devices: HashMap<u32, PipewireNode> = HashMap::new();
 
         // Let the primary worker know we're ready
-        let _ = self.ready_sender.take().expect("Ready Sender Missing").send(());
+        let _ = self
+            .ready_sender
+            .take()
+            .expect("Ready Sender Missing")
+            .send(());
 
         // Pull out the Meter Receiver
         let mut meter_receiver = self.meter_receiver.take().unwrap();
@@ -196,7 +202,8 @@ impl PipewireManager {
                             }
                         }
                         PipewireReceiver::ManagedLinkDropped(source, target) => {
-                            debug!("Managed Link Removed: {:?} {:?}", source, target);
+                            warn!("Managed Link Removed: {:?} {:?}, reestablishing", source, target);
+                            let _ = self.link_create_type_to_type(source, target).await;
                         }
                         _ => {}
                     }
@@ -254,7 +261,6 @@ impl PipewireManager {
         let _ = send_sync.send(PipewireReceiver::Quit);
         let _ = receiver.join();
 
-
         info!("[Manager] Stopped");
     }
 }
@@ -276,7 +282,6 @@ pub fn run_receiver_wrapper(recv: StdRecv, resend: mpsc::Sender<PipewireReceiver
 pub async fn run_pipewire_manager(config: PipewireManagerConfig, stopped: oneshot::Sender<()>) {
     let mut manager = PipewireManager::new(config);
     manager.run().await;
-
 
     drop(manager);
     let _ = stopped.send(());
