@@ -183,7 +183,7 @@ impl Drop for PipewireRunner {
 fn run_message_loop(receiver: Receiver, sender: PWInternalSender) {
     loop {
         match receiver.recv() {
-            Ok(PipewireInternalMessage::Quit(_)) => {
+            Ok(PipewireInternalMessage::Quit(_)) | Err(_) => {
                 let (tx, rx) = oneshot::channel();
                 let _ = sender.send(PipewireInternalMessage::Quit(tx));
                 let _ = rx.recv();
@@ -191,12 +191,6 @@ fn run_message_loop(receiver: Receiver, sender: PWInternalSender) {
             }
             Ok(message) => {
                 let _ = sender.send(message);
-            }
-            Err(_) => {
-                let (tx, rx) = oneshot::channel();
-                let _ = sender.send(PipewireInternalMessage::Quit(tx));
-                let _ = rx.recv();
-                break;
             }
         }
     }
