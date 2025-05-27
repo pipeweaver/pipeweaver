@@ -99,9 +99,9 @@ export default {
       const decayAmount = 1 - Math.exp(-this.meterDecayFactor * delta)
       this.meterCurrentLevel += (this.localMeterValue - this.meterCurrentLevel) * decayAmount;
 
-
       const canvas = this.$refs.meter;
-      const barHeight = (this.meterCurrentLevel / 100) * canvas.height;
+      let barHeight = (this.meterCurrentLevel / 100) * (canvas.height / 100 * this.currentValue);
+
       const y = canvas.height - barHeight;
 
       this.meterContext.clearRect(0, 0, canvas.width, canvas.height);
