@@ -3,6 +3,8 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
+    println!("cargo:rerun-if-changed=../web");
+
     // Grab the current git revision of the project (useful for logging)
     let version = Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
@@ -13,9 +15,10 @@ fn main() {
 
     println!("cargo:rustc-env=GIT_HASH={}", version);
 
-    // Next up, we need to build the UI into the Daemon
 
-    // npm install, to make sure the environment is set up
+    println!("Building Web Interface..");
+
+    // Next up, we need to build the UI into the Daemon
     Command::new("npm")
         .arg("install")
         .current_dir("../web")
