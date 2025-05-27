@@ -389,6 +389,32 @@ impl Store {
         }
     }
 
+    pub fn unmanaged_client_node_check(&mut self, id: u32) {
+        if self.usable_client_nodes.contains(&id) {
+            // We already know this is usable, so don't trigger again
+            return;
+        }
+
+        // Unlike Device nodes, we need to specifically check whether the default links have
+        // been set up for this node before shouting back that we're ready, so lets find out!
+        if let Some(node) = self.unmanaged_client_nodes.get(&id) {
+            for (direction, ports) in &node.ports {
+                for port in ports.values() {
+                    if !self.unmanaged_links.values().any(|link| {
+                        match direction {
+                            Direction::Out => link.output_port == port.global_id,
+                            Direction::In => link.input_port == port.global_id,
+                        }
+                    }) {
+                        return;
+                    }
+                }
+            }
+            self.usable_client_nodes.push(id);
+            debug!("Client Node Ready: {:?}", node);
+        }
+    }
+
     // ----- UNMANAGED LINKS -----
     pub fn unmanaged_link_add(&mut self, id: u32, link: RegistryLink) {
         // Check our Managed Links to see if this is actually unmanaged

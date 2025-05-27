@@ -104,17 +104,19 @@ impl PipewireRegistry {
                                     false
                                 };
 
+                                let port = RegistryPort::new(id, name, channel, is_monitor);
+
                                 // We need to extract the NodeID and PortID from the data..
                                 if let Some(node_id) = node_id.and_then(|s| s.parse::<u32>().ok()) {
                                     if let Some(port_id) = pid.and_then(|s| s.parse::<u32>().ok()) {
                                         if let Some(node) = store.unmanaged_device_node_get(node_id) {
-                                            node.add_port(
-                                                port_id,
-                                                direction,
-                                                RegistryPort::new(id, name, channel, is_monitor),
-                                            );
+                                            node.add_port(id, direction, port);
 
                                             store.unmanaged_node_check(node_id);
+                                            return;
+                                        }
+                                        if let Some(node) = store.unmanaged_client_node_get(node_id) {
+                                            node.add_port(port_id, direction, port);
                                         }
                                     }
                                 }
@@ -125,7 +127,12 @@ impl PipewireRegistry {
                             // We need to track links, to allow callbacks when links are created.
                             if let Some(props) = global.props {
                                 if let Ok(link) = RegistryLink::try_from(props) {
+                                    let input_node = link.input_node;
+                                    let output_node = link.output_node;
+
                                     store.unmanaged_link_add(id, link);
+                                    store.unmanaged_client_node_check(input_node);
+                                    store.unmanaged_client_node_check(output_node);
                                 }
                             }
                         }
@@ -346,15 +353,14 @@ impl TryFrom<&DictRef> for RegistryClient {
     }
 }
 
-/*
-"object.serial": "2581", "factory.id": "7", "client.id": "434", "client.api": "pipewire-pulse", "application.name": "Firefox", "node.name": "Firefox", "media.class": "Stream/Output/Audio"}
- */
-
+#[derive(Debug)]
 pub(crate) struct RegistryClientNode {
     parent_id: u32,
 
     application_name: String,
     node_name: String,
+
+    pub ports: EnumMap<Direction, HashMap<u32, RegistryPort>>,
 }
 
 impl TryFrom<&DictRef> for RegistryClientNode {
@@ -369,7 +375,15 @@ impl TryFrom<&DictRef> for RegistryClientNode {
             parent_id,
             application_name,
             node_name,
+
+            ports: Default::default(),
         })
+    }
+}
+
+impl RegistryClientNode {
+    pub(crate) fn add_port(&mut self, id: u32, direction: Direction, port: RegistryPort) {
+        self.ports[direction].insert(id, port);
     }
 }
 
