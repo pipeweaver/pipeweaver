@@ -1,5 +1,4 @@
-<script>
-/**
+<script>/**
  * This is simply a vertical range slider component. While there's finally a spec for doing this (as of 18/04/2024),
  * it's not implemented in all browsers and other general workarounds for this have severe limitations around things
  * like styling.
@@ -10,6 +9,7 @@
  * div which can be used by the parent, saving us from having to do bullshit workarounds and 'fixes' to get this
  * working correctly.
  */
+import {websocket_meter} from "@/app/sockets.js";
 
 export default {
   name: 'VerticalRange',
@@ -47,7 +47,13 @@ export default {
 
   data() {
     return {
-      localFieldValue: 0
+      localFieldValue: 0,
+      localMeterValue: 0,
+
+      meterLastUpdate: performance.now(),
+      meterCurrentLevel: 0,
+      meterDecayFactor: 0.01,
+      meterContext: undefined,
     }
   },
 
@@ -72,6 +78,37 @@ export default {
           b: parseInt(result[3], 16)
         }
         : null
+    },
+
+    drawMeter: function (e) {
+      if (this.$refs.meter === null) {
+        // Meter hasn't fully drawn yet, wait until it has
+        requestAnimationFrame(this.drawMeter);
+        return;
+      }
+
+      if (this.meterContext === undefined) {
+        this.meterContext = this.$refs.meter.getContext('2d');
+      }
+
+      const now = performance.now();
+      const delta = now - this.meterLastUpdate;
+      this.meterLastUpdate = now;
+
+
+      const decayAmount = 1 - Math.exp(-this.meterDecayFactor * delta)
+      this.meterCurrentLevel += (this.localMeterValue - this.meterCurrentLevel) * decayAmount;
+
+
+      const canvas = this.$refs.meter;
+      const barHeight = (this.meterCurrentLevel / 100) * canvas.height;
+      const y = canvas.height - barHeight;
+
+      this.meterContext.clearRect(0, 0, canvas.width, canvas.height);
+      this.meterContext.fillStyle = 'limegreen';
+      this.meterContext.fillRect(0, y, canvas.width, barHeight);
+
+      requestAnimationFrame(this.drawMeter);
     }
   },
 
@@ -120,12 +157,19 @@ export default {
 
   mounted() {
     this.localFieldValue = this.currentValue
+    this.meterContext = this.$refs.meter.getContext('2d');
+    let self = this;
+    websocket_meter.register_callback(this.id, (value) => {
+      self.localMeterValue = value;
+    });
+    requestAnimationFrame(this.drawMeter)
   }
 }
 </script>
 
 <template>
   <div class="outer">
+    <canvas ref="meter"/>
     <input
       v-model="localFieldValue"
       :aria-description="ariaDescription"
@@ -138,17 +182,30 @@ export default {
 
       type="range"
     />
+
   </div>
 </template>
 
 <style scoped>
 .outer {
+  position: relative;
   width: 20px;
   height: v-bind(calc_height);
 }
 
-input[type='range'] {
+canvas {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, 0);
 
+  border-radius: 15px;
+  width: 6px;
+  height: 100%;
+  z-index: 10;
+  pointer-events: none;
+}
+
+input[type='range'] {
   background: linear-gradient(
     to right,
     v-bind(selectedColour) 0%,

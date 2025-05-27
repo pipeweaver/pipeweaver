@@ -323,6 +323,7 @@ export default {
     <div ref="fader_container" class="faders">
       <div class="fader_child">
         <ChannelColumnVolume
+          :id="this.id"
           :colour1="getMixAColour()"
           :current-value="getVolume()"
           :height="this.slider_height"
@@ -332,6 +333,7 @@ export default {
         />
         <ChannelColumnVolume
           v-if="hasMix()"
+          :id="this.id"
           :current-value="getMixVolume()"
           :height="this.slider_height"
           colour1="#E07C24"
