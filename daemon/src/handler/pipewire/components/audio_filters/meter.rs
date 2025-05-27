@@ -15,17 +15,21 @@ const CHUNK_SIZE: usize = ((SAMPLE_RATE / 1000) * MILLISECONDS) as usize;
 const DB_FLOOR: f32 = -60.0;
 
 pub struct MeterFilter {
+    count: usize,
+    peak: f32,
+
     node_id: Ulid,
     callback: mpsc::Sender<(Ulid, u8)>,
-    buffer: ChunkedBuffer,
 }
 
 impl MeterFilter {
     pub(crate) fn new(node_id: Ulid, callback: mpsc::Sender<(Ulid, u8)>) -> Self {
         Self {
+            count: 0,
+            peak: 0.0,
+
             node_id,
             callback,
-            buffer: ChunkedBuffer::new(CHUNK_SIZE),
         }
     }
 }
@@ -44,65 +48,41 @@ impl FilterHandler for MeterFilter {
     }
 
     fn process_samples(&mut self, inputs: Vec<&mut [f32]>, mut _outputs: Vec<&mut [f32]>) {
-        // Outputs will be empty in this case, but we need to take the input samples from stereo.
-        // Once we have the samples, we'll determine whether the left or right is louder and use
-        // that as our meter sample.
-        let samples: Vec<f32> = inputs[0]
-            .iter()
-            .zip(inputs[1].iter())
-            .map(|(l, r)| if l.abs() > r.abs() { *l } else { *r })
-            .collect();
+        // While we're expecting stereo here, we'll support arbitrary channel numbers
+        let peak = self.peak_amplitude(&inputs);
 
-        if let Some(values) = self.buffer.push(&samples) {
-            // Find the peak sample
-            let peak = values.iter().copied().map(f32::abs).fold(0.0, f32::max);
+        self.peak = self.peak.max(peak);
+        self.count += inputs[0].len();
 
-            // Use 1e-9 as a minimum to prevent a 0.log10()
+        if self.count >= CHUNK_SIZE {
+            let peak = self.peak;
             let db = 20.0 * peak.max(1e-9).log10();
             let meter = (((db - DB_FLOOR) / -DB_FLOOR) * 100.0).clamp(0.0, 100.0) as u8;
 
             let _ = self.callback.blocking_send((self.node_id, meter));
+
+            // Reset our values
+            self.peak = 0.0;
+            self.count -= CHUNK_SIZE
         }
     }
 }
 
-struct ChunkedBuffer {
-    buffer: Vec<f32>,
-    len: usize,
-    chunk_size: usize,
-}
-
-impl ChunkedBuffer {
-    pub fn new(chunk_size: usize) -> Self {
-        Self {
-            buffer: vec![0.0; chunk_size],
-            len: 0,
-            chunk_size,
+impl MeterFilter {
+    fn peak_amplitude(&self, inputs: &[&mut [f32]]) -> f32 {
+        if inputs.is_empty() || inputs[0].is_empty() {
+            return 0.0;
         }
-    }
 
-    pub fn push(&mut self, samples: &[f32]) -> Option<&[f32]> {
-        let total_len = self.len + samples.len();
-
-        if total_len >= self.chunk_size {
-            let needed = self.chunk_size - self.len;
-            self.buffer[self.len..].copy_from_slice(&samples[..needed]);
-
-            // Handle remaining right-hand samples (but discard anything beyond one chunk)
-            let remaining = &samples[needed..];
-            if !remaining.is_empty() {
-                let right_len = remaining.len().min(self.chunk_size);
-                let start = remaining.len() - right_len;
-                self.buffer[..right_len].copy_from_slice(&remaining[start..]);
-                self.len = right_len;
-            } else {
-                self.len = 0;
+        let mut peak = 0.0_f32;
+        for i in 0..inputs[0].len() {
+            let mut frame_peak = 0.0_f32;
+            for channel in inputs {
+                frame_peak = frame_peak.max(channel[i].abs());
             }
-            Some(&self.buffer[..self.chunk_size])
-        } else {
-            self.buffer[self.len..self.len + samples.len()].copy_from_slice(samples);
-            self.len += samples.len();
-            None
+            peak = peak.max(frame_peak);
         }
+
+        peak
     }
 }
