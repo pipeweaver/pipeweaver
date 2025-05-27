@@ -5,7 +5,7 @@ mod store;
 
 use crate::manager::run_pw_main_loop;
 use anyhow::{anyhow, bail, Result};
-use log::{info, warn};
+use log::{debug, info, warn};
 use oneshot::TryRecvError;
 use std::sync::mpsc;
 use std::thread;
@@ -53,8 +53,7 @@ pub enum PipewireInternalMessage {
     ),
 
     SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<()>>),
-
-    Quit,
+    Quit(oneshot::Sender<Result<()>>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -145,7 +144,7 @@ impl PipewireRunner {
             PipewireMessage::SetFilterValue(id, prop, value) => {
                 PipewireInternalMessage::SetFilterValue(id, prop, value, tx)
             }
-            PipewireMessage::Quit => PipewireInternalMessage::Quit,
+            PipewireMessage::Quit => PipewireInternalMessage::Quit(tx),
         };
 
         self.message_sender
@@ -160,7 +159,7 @@ impl Drop for PipewireRunner {
     fn drop(&mut self) {
         info!("[PIPEWIRE] Stopping");
         // Send an exit message
-        let _ = self.message_sender.send(PipewireInternalMessage::Quit);
+        let _ = self.send_message(PipewireMessage::Quit);
 
         // Wait on the threads to exit..
         if let Some(pipewire_thread) = self.pipewire_thread.take() {
@@ -183,17 +182,25 @@ impl Drop for PipewireRunner {
 // Maps messages from an mpsc::channel to a pipewire::channel
 fn run_message_loop(receiver: Receiver, sender: PWInternalSender) {
     loop {
-        match receiver.recv().unwrap_or(PipewireInternalMessage::Quit) {
-            PipewireInternalMessage::Quit => {
-                // Send this message to pipewire
-                let _ = sender.send(PipewireInternalMessage::Quit);
+        match receiver.recv() {
+            Ok(PipewireInternalMessage::Quit(_)) => {
+                let (tx, rx) = oneshot::channel();
+                let _ = sender.send(PipewireInternalMessage::Quit(tx));
+                let _ = rx.recv();
                 break;
             }
-            message => {
+            Ok(message) => {
                 let _ = sender.send(message);
+            }
+            Err(_) => {
+                let (tx, rx) = oneshot::channel();
+                let _ = sender.send(PipewireInternalMessage::Quit(tx));
+                let _ = rx.recv();
+                break;
             }
         }
     }
+    info!("[PW-LIB] Message Loop Stopped");
 }
 
 pub struct NodeProperties {

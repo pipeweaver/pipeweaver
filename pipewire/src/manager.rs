@@ -656,7 +656,9 @@ pub fn run_pw_main_loop(
     let receiver_clone = mainloop.clone();
     let _receiver = pw_rx.attach(mainloop.loop_(), {
         move |message| match message {
-            PipewireInternalMessage::Quit => {
+            PipewireInternalMessage::Quit(result) => {
+                debug!("[PipeWire] Triggering Main Loop Quit");
+                let _ = result.send(Ok(()));
                 receiver_clone.quit();
             }
             PipewireInternalMessage::CreateDeviceNode(props, result) => {
