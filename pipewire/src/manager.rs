@@ -1,5 +1,5 @@
 use crate::registry::PipewireRegistry;
-use crate::store::{FilterStore, LinkGroupStore, LinkStoreMap, NodeStore, PortLocation, Store};
+use crate::store::{FilterStore, LinkStore, LinkStoreMap, NodeStore, PortLocation, Store};
 use crate::{
     registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties,
     PipewireReceiver,
@@ -152,7 +152,7 @@ impl PipewireManager {
             .add_listener_local()
             .bound(move |id| {
                 debug!("[{}] Pipewire NodeID assigned: {}", proxy_id, id);
-                proxy_store.borrow_mut().node_set_pw_id(proxy_id, id);
+                proxy_store.borrow_mut().managed_node_set_pw_id(proxy_id, id);
             })
             .removed(|| {
                 debug!("Removed..");
@@ -176,7 +176,7 @@ impl PipewireManager {
                             "[{}] Ports have appeared, requesting configuration",
                             listener_id
                         );
-                        listener_info_store.borrow().node_request_ports(listener_id);
+                        listener_info_store.borrow().managed_node_request_ports(listener_id);
                     }
                 }
             })
@@ -211,14 +211,14 @@ impl PipewireManager {
                                             for (index, value) in array.iter().enumerate() {
                                                 let index = index as u32;
                                                 if value.0 == SPA_AUDIO_CHANNEL_FL {
-                                                    store.node_add_port(
+                                                    store.managed_node_add_port(
                                                         listener_id,
                                                         PortLocation::LEFT,
                                                         index,
                                                     );
                                                 }
                                                 if value.0 == SPA_AUDIO_CHANNEL_FR {
-                                                    store.node_add_port(
+                                                    store.managed_node_add_port(
                                                         listener_id,
                                                         PortLocation::RIGHT,
                                                         index,
@@ -258,11 +258,11 @@ impl PipewireManager {
             ready_sender: Some(properties.ready_sender),
         };
 
-        self.store.borrow_mut().node_add(store);
+        self.store.borrow_mut().managed_node_add(store);
     }
 
     pub fn remove_node(&mut self, id: Ulid) {
-        self.store.borrow_mut().node_remove(id);
+        self.store.borrow_mut().managed_node_remove(id);
     }
 
     pub fn create_filter(&mut self, props: FilterProperties) {
@@ -360,7 +360,7 @@ impl PipewireManager {
                     debug!("[{}] Filter Connected", listener_id);
                     listener_state_store
                         .borrow_mut()
-                        .filter_set_pw_id(listener_id, filter.node_id());
+                        .managed_filter_set_pw_id(listener_id, filter.node_id());
                 }
             })
             .process(move |filter, data, position| {
@@ -427,16 +427,16 @@ impl PipewireManager {
             ready_sender: Some(props.ready_sender),
         };
 
-        self.store.borrow_mut().filter_add(store);
+        self.store.borrow_mut().managed_filter_add(store);
     }
 
     pub fn remove_filter(&mut self, id: Ulid) {
-        self.store.borrow_mut().filter_remove(id);
+        self.store.borrow_mut().managed_filter_remove(id);
     }
 
     pub fn set_filter_value(&mut self, id: Ulid, key: u32, value: FilterValue) {
         // We need to grab the filter from the store, and pass the value set..
-        self.store.borrow_mut().filter_set_parameter(id, key, value);
+        self.store.borrow_mut().managed_filter_set_parameter(id, key, value);
     }
 
     pub fn create_link(&mut self, source: LinkType, dest: LinkType, sender: Option<Sender<()>>) {
@@ -470,18 +470,18 @@ impl PipewireManager {
         }
 
         // Ok, we're done here, create the main store object
-        let group = LinkGroupStore {
+        let group = LinkStore {
             source,
             destination: dest,
             links: port_map,
             ready_sender: sender,
         };
 
-        self.store.borrow_mut().link_add_group(parent_id, group);
+        self.store.borrow_mut().managed_link_add(parent_id, group);
     }
 
     pub fn remove_link(&mut self, source: LinkType, destination: LinkType) {
-        self.store.borrow_mut().link_remove(source, destination);
+        self.store.borrow_mut().managed_link_remove(source, destination);
     }
 
     fn get_port(
@@ -494,7 +494,7 @@ impl PipewireManager {
         let store = self.store.borrow();
         match link {
             LinkType::Node(id) => {
-                let node = store.node_get(id).unwrap();
+                let node = store.managed_node_get(id).unwrap();
 
                 let id = node.pw_id.unwrap();
                 let port = node.port_map[location].unwrap();
@@ -502,7 +502,7 @@ impl PipewireManager {
                 (id, port)
             }
             LinkType::Filter(id) => {
-                let filter = store.filter_get(id).unwrap();
+                let filter = store.managed_filter_get(id).unwrap();
 
                 let id = filter.pw_id.unwrap();
                 let port = filter.port_map[direction][location];
@@ -510,7 +510,7 @@ impl PipewireManager {
                 (id, port)
             }
             LinkType::UnmanagedNode(id) => {
-                let node = store.unmanaged_node_get(id).expect("Invalid NodeID");
+                let node = store.unmanaged_device_node_get(id).expect("Invalid NodeID");
 
                 let ports = &node.ports[direction];
 
@@ -575,7 +575,7 @@ impl PipewireManager {
                     // We're alive, let the store know
                     listener_info_store
                         .borrow_mut()
-                        .link_ready(parent_id, id, link.id());
+                        .managed_link_ready(parent_id, id, link.id());
                 }
             })
             .register();

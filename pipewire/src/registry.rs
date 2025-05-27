@@ -1,9 +1,10 @@
 use crate::store::Store;
+use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
-use log::debug;
-use pipewire::keys::{AUDIO_CHANNEL, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, PORT_DIRECTION, PORT_ID, PORT_MONITOR, PORT_NAME};
+use pipewire::keys::{ACCESS, APP_NAME, AUDIO_CHANNEL, CLIENT_ID, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FACTORY_TYPE_NAME, FACTORY_TYPE_VERSION, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MODULE_ID, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, PORT_DIRECTION, PORT_ID, PORT_MONITOR, PORT_NAME, PROTOCOL, SEC_GID, SEC_PID, SEC_UID};
 use pipewire::registry::Listener;
 use pipewire::registry::Registry;
+use pipewire::spa::utils::dict::DictRef;
 use pipewire::types::ObjectType;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -45,30 +46,23 @@ impl PipewireRegistry {
                     match global.type_ {
                         ObjectType::Device => {
                             if let Some(props) = global.props {
-                                let nick = props.get(*DEVICE_NICK);
-                                let desc = props.get(*DEVICE_DESCRIPTION);
-                                let name = props.get(*DEVICE_NAME);
-
                                 // Create the Device
-                                let device = RegistryDevice::new(nick, desc, name);
+                                let device = RegistryDevice::from(props);
                                 store.unmanaged_device_add(id, device);
                             }
                         }
                         ObjectType::Node => {
                             if let Some(props) = global.props {
-                                let device = props.get(*DEVICE_ID);
-                                let nick = props.get(*NODE_NICK);
-                                let desc = props.get(*NODE_DESCRIPTION);
-                                let name = props.get(*NODE_NAME);
-
-                                // Can we attach this to a Device?
-                                if let Some(device_id) = device.and_then(|s| s.parse::<u32>().ok()) {
-                                    if let Some(device) = store.unmanaged_device_get(device_id) {
-                                        let node = RegistryNode::new(device_id, nick, desc, name);
+                                if let Ok(node) = RegistryDeviceNode::try_from(props) {
+                                    if let Some(device) = store.unmanaged_device_get(node.parent_id) {
                                         device.add_node(id);
-
-                                        // We only send this node through if it has a device
-                                        store.unmanaged_node_add(id, node);
+                                        store.unmanaged_device_node_add(id, node);
+                                    }
+                                }
+                                if let Ok(node) = RegistryClientNode::try_from(props) {
+                                    if let Some(client) = store.unmanaged_client_get(node.parent_id) {
+                                        client.add_node(id);
+                                        store.unmanaged_client_node_add(id, node);
                                     }
                                 }
                             }
@@ -113,7 +107,7 @@ impl PipewireRegistry {
                                 // We need to extract the NodeID and PortID from the data..
                                 if let Some(node_id) = node_id.and_then(|s| s.parse::<u32>().ok()) {
                                     if let Some(port_id) = pid.and_then(|s| s.parse::<u32>().ok()) {
-                                        if let Some(node) = store.unmanaged_node_get_mut(node_id) {
+                                        if let Some(node) = store.unmanaged_device_node_get_mut(node_id) {
                                             node.add_port(
                                                 port_id,
                                                 direction,
@@ -130,47 +124,41 @@ impl PipewireRegistry {
                         ObjectType::Link => {
                             // We need to track links, to allow callbacks when links are created.
                             if let Some(props) = global.props {
-                                let input_node = props.get(*LINK_INPUT_NODE).and_then(|s| s.parse::<u32>().ok());
-                                let input_port = props.get(*LINK_INPUT_PORT).and_then(|s| s.parse::<u32>().ok());
-                                let output_node = props.get(*LINK_OUTPUT_NODE).and_then(|s| s.parse::<u32>().ok());
-                                let output_port = props.get(*LINK_OUTPUT_PORT).and_then(|s| s.parse::<u32>().ok());
-
-                                // All these variables need to be set..
-                                if input_node.is_none() || input_port.is_none() || output_node.is_none() || output_port.is_none() {
-                                    return;
+                                if let Ok(link) = RegistryLink::try_from(props) {
+                                    store.unmanaged_link_add(id, link);
                                 }
-                                store.unmanaged_link_add(id,
-                                                         RegistryLink {
-                                                             input_node: input_node.unwrap(),
-                                                             input_port: input_port.unwrap(),
-                                                             output_node: output_node.unwrap(),
-                                                             output_port: output_port.unwrap(),
-                                                         });
                             }
                         }
-
-                        // ObjectType::Client => {}
+                        ObjectType::Factory => {
+                            if let Some(props) = global.props {
+                                if let Ok(factory) = RegistryFactory::try_from(props) {
+                                    store.factory_add(id, factory);
+                                }
+                            }
+                        }
+                        ObjectType::Client => {
+                            if let Some(props) = global.props {
+                                if let Ok(client) = RegistryClient::try_from(props) {
+                                    store.unmanaged_client_add(id, client);
+                                }
+                            }
+                        }
                         // ObjectType::ClientEndpoint => {}
                         // ObjectType::ClientNode => {}
                         // ObjectType::ClientSession => {}
                         // ObjectType::Core => {}
-                        // ObjectType::Device => {}
                         // ObjectType::Endpoint => {}
                         // ObjectType::EndpointLink => {}
                         // ObjectType::EndpointStream => {}
-                        // ObjectType::Factory => {}
-                        // ObjectType::Link => {}
                         // ObjectType::Metadata => {}
                         // ObjectType::Module => {}
-                        // ObjectType::Node => {}
-                        // ObjectType::Port => {}
                         // ObjectType::Profiler => {}
                         // ObjectType::Registry => {}
                         // ObjectType::Session => {}
                         // ObjectType::Other(_) => {}
 
                         _ => {
-                            debug!("Unmonitored Global Type: {} - {}", global.type_, global.id);
+                            //debug!("Unmonitored Global Type: {} - {}", global.type_, global.id);
                         }
                     }
                 }
@@ -190,6 +178,33 @@ impl PipewireRegistry {
 }
 
 #[derive(Debug)]
+pub(crate) struct RegistryFactory {
+    pub(crate) module_id: u32,
+
+    pub(crate) name: String,
+    pub(crate) factory_type: ObjectType,
+    pub(crate) version: u32,
+}
+
+impl TryFrom<&DictRef> for RegistryFactory {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &DictRef) -> Result<Self, Self::Error> {
+        let module_id = value.get(*MODULE_ID).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("MODULE_ID"))?;
+        let name = value.get(*FACTORY_NAME).map(|s| s.to_string()).ok_or_else(|| anyhow!("FACTORY_NAME"))?;
+        let factory_type = value.get(*FACTORY_TYPE_NAME).ok_or_else(|| anyhow!("FACTORY_TYPE_NAME"))?;
+        let version = value.get(*FACTORY_TYPE_VERSION).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("FACTORY_VERSION"))?;
+
+        Ok(RegistryFactory {
+            module_id,
+            name,
+            factory_type: to_object_type(factory_type),
+            version,
+        })
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct RegistryDevice {
     nickname: Option<String>,
     description: Option<String>,
@@ -198,21 +213,22 @@ pub(crate) struct RegistryDevice {
     pub(crate) nodes: Vec<u32>,
 }
 
-impl RegistryDevice {
-    pub fn new(nickname: Option<&str>, description: Option<&str>, name: Option<&str>) -> Self {
-        let nickname = nickname.map(|nickname| nickname.to_string());
-        let description = description.map(|description| description.to_string());
-        let name = name.map(|name| name.to_string());
+impl From<&DictRef> for RegistryDevice {
+    fn from(value: &DictRef) -> Self {
+        let nickname = value.get(*DEVICE_NICK).map(|s| s.to_string());
+        let description = value.get(*DEVICE_DESCRIPTION).map(|s| s.to_string());
+        let name = value.get(*DEVICE_NAME).map(|s| s.to_string());
 
         Self {
             nickname,
             description,
             name,
-
             nodes: vec![],
         }
     }
+}
 
+impl RegistryDevice {
     pub fn add_node(&mut self, id: u32) {
         self.nodes.push(id);
     }
@@ -225,7 +241,7 @@ pub(crate) enum Direction {
 }
 
 #[derive(Debug)]
-pub(crate) struct RegistryNode {
+pub(crate) struct RegistryDeviceNode {
     pub parent_id: u32,
 
     pub nickname: Option<String>,
@@ -235,26 +251,31 @@ pub(crate) struct RegistryNode {
     pub ports: EnumMap<Direction, HashMap<u32, RegistryPort>>,
 }
 
-impl RegistryNode {
-    pub(crate) fn add_port(&mut self, id: u32, direction: Direction, port: RegistryPort) {
-        self.ports[direction].insert(id, port);
+impl TryFrom<&DictRef> for RegistryDeviceNode {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &DictRef) -> Result<Self, Self::Error> {
+        let device = value.get(*DEVICE_ID);
+        let nickname = value.get(*NODE_NICK).map(|s| s.to_string());
+        let description = value.get(*NODE_DESCRIPTION).map(|s| s.to_string());
+        let name = value.get(*NODE_NAME).map(|s| s.to_string());
+
+        if let Some(device_id) = device.and_then(|s| s.parse::<u32>().ok()) {
+            return Ok(Self {
+                parent_id: device_id,
+                nickname,
+                description,
+                name,
+                ports: Default::default(),
+            });
+        }
+        bail!("Device ID Missing");
     }
 }
 
-impl RegistryNode {
-    pub fn new(parent_id: u32, nickname: Option<&str>, description: Option<&str>, name: Option<&str>) -> Self {
-        let nickname = nickname.map(|nickname| nickname.to_string());
-        let description = description.map(|description| description.to_string());
-        let name = name.map(|name| name.to_string());
-
-        Self {
-            parent_id,
-            nickname,
-            description,
-            name,
-
-            ports: Default::default(),
-        }
+impl RegistryDeviceNode {
+    pub(crate) fn add_port(&mut self, id: u32, direction: Direction, port: RegistryPort) {
+        self.ports[direction].insert(id, port);
     }
 }
 
@@ -280,10 +301,127 @@ impl RegistryPort {
     }
 }
 
+
+pub(crate) struct RegistryClient {
+    module_id: u32,
+    protocol: String,
+    process_id: u32,
+    user_id: u32,
+    group_id: u32,
+    access: String,
+    application_name: String,
+
+    pub(crate) nodes: Vec<u32>,
+}
+
+impl RegistryClient {
+    pub fn add_node(&mut self, id: u32) {
+        self.nodes.push(id);
+    }
+}
+
+impl TryFrom<&DictRef> for RegistryClient {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &DictRef) -> Result<Self, Self::Error> {
+        // I currently expect all these fields to be present for general usage
+        let module_id = value.get(*MODULE_ID).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("MODULE_ID"))?;
+        let protocol = value.get(*PROTOCOL).map(|s| s.to_string()).ok_or_else(|| anyhow!("PROTOCOL"))?;
+        let process_id = value.get(*SEC_PID).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("SEC_PID"))?;
+        let user_id = value.get(*SEC_UID).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("SEC_UID"))?;
+        let group_id = value.get(*SEC_GID).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("SEC_GID"))?;
+        let access = value.get(*ACCESS).map(|s| s.to_string()).ok_or_else(|| anyhow!("ACCESS"))?;
+        let application_name = value.get(*APP_NAME).map(|s| s.to_string()).ok_or_else(|| anyhow!("APP_NAME"))?;
+
+        Ok(Self {
+            module_id,
+            protocol,
+            process_id,
+            user_id,
+            group_id,
+            access,
+            application_name,
+            nodes: vec![],
+        })
+    }
+}
+
+/*
+"object.serial": "2581", "factory.id": "7", "client.id": "434", "client.api": "pipewire-pulse", "application.name": "Firefox", "node.name": "Firefox", "media.class": "Stream/Output/Audio"}
+ */
+
+pub(crate) struct RegistryClientNode {
+    parent_id: u32,
+
+    application_name: String,
+    node_name: String,
+}
+
+impl TryFrom<&DictRef> for RegistryClientNode {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &DictRef) -> Result<Self, Self::Error> {
+        let parent_id = value.get(*CLIENT_ID).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("CLIENT_ID"))?;
+        let node_name = value.get(*NODE_NAME).map(|s| s.to_string()).ok_or_else(|| anyhow!("NODE_NAME"))?;
+        let application_name = value.get("application.name").map(|s| s.to_string()).ok_or_else(|| anyhow!("APPLICATION_NAME"))?;
+
+        Ok(Self {
+            parent_id,
+            application_name,
+            node_name,
+        })
+    }
+}
+
+
 #[derive(Debug, PartialEq)]
 pub(crate) struct RegistryLink {
     pub input_node: u32,
     pub input_port: u32,
     pub output_node: u32,
     pub output_port: u32,
+}
+
+impl TryFrom<&DictRef> for RegistryLink {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &DictRef) -> Result<Self, Self::Error> {
+        let input_node = value.get(*LINK_INPUT_NODE).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("LINK_INPUT_NODE"))?;
+        let input_port = value.get(*LINK_INPUT_PORT).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("LINK_INPUT_PORT"))?;
+        let output_node = value.get(*LINK_OUTPUT_NODE).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("LINK_OUTPUT_NODE"))?;
+        let output_port = value.get(*LINK_OUTPUT_PORT).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("LINK_OUTPUT_PORT"))?;
+
+        Ok(RegistryLink {
+            input_node,
+            input_port,
+            output_node,
+            output_port,
+        })
+    }
+}
+
+// pipewire-rs doesn't seem to provide one of these, it does have from_str and to_str, but they're
+// crate public, so we can't use them, and they're only looking for the last chunk.
+fn to_object_type(input: &str) -> ObjectType {
+    match input {
+        "PipeWire:Interface:Client" => ObjectType::Client,
+        "PipeWire:Interface:ClientEndpoint" => ObjectType::ClientEndpoint,
+        "PipeWire:Interface:ClientNode" => ObjectType::ClientNode,
+        "PipeWire:Interface:ClientSession" => ObjectType::ClientSession,
+        "PipeWire:Interface:Core" => ObjectType::Core,
+        "PipeWire:Interface:Device" => ObjectType::Device,
+        "PipeWire:Interface:Endpoint" => ObjectType::Endpoint,
+        "PipeWire:Interface:EndpointLink" => ObjectType::EndpointLink,
+        "PipeWire:Interface:EndpointStream" => ObjectType::EndpointStream,
+        "PipeWire:Interface:Factory" => ObjectType::Factory,
+        "PipeWire:Interface:Link" => ObjectType::Link,
+        "PipeWire:Interface:Metadata" => ObjectType::Metadata,
+        "PipeWire:Interface:Module" => ObjectType::Module,
+        "PipeWire:Interface:Node" => ObjectType::Node,
+        "PipeWire:Interface:Port" => ObjectType::Port,
+        "PipeWire:Interface:Profiler" => ObjectType::Profiler,
+        "PipeWire:Interface:Registry" => ObjectType::Registry,
+        "PipeWire:Interface:Session" => ObjectType::Session,
+        _ => ObjectType::Other(input.to_string())
+    }
 }

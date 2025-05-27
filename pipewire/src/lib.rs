@@ -63,7 +63,7 @@ impl PipewireRunner {
         let (tx, rx) = mpsc::channel();
 
         // This channel lets us call back once the pipewire code is ready
-        let (start_tx, mut start_rx) = oneshot::channel();
+        let (start_tx, start_rx) = oneshot::channel();
 
         // Next, spawn up the pipewire mainloop in a separate thread
         let pipewire_handle = thread::spawn(|| run_pw_main_loop(pw_rx, start_tx, callback_tx));
