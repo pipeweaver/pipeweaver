@@ -1,11 +1,11 @@
 pub extern crate oneshot;
-mod store;
 mod manager;
 mod registry;
+mod store;
 
 use crate::manager::run_pw_main_loop;
 use anyhow::{anyhow, bail, Result};
-use log::{debug, info, warn};
+use log::{info, warn};
 use oneshot::TryRecvError;
 use std::sync::mpsc;
 use std::thread;
@@ -20,15 +20,20 @@ type Sender = mpsc::Sender<PipewireMessage>;
 type Receiver = mpsc::Receiver<PipewireMessage>;
 
 pub enum PipewireMessage {
-    CreateDeviceNode(NodeProperties),
-    CreateFilterNode(FilterProperties),
-    CreateDeviceLink(LinkType, LinkType, Option<oneshot::Sender<()>>),
+    CreateDeviceNode(NodeProperties, oneshot::Sender<Result<()>>),
+    CreateFilterNode(FilterProperties, oneshot::Sender<Result<()>>),
+    CreateDeviceLink(
+        LinkType,
+        LinkType,
+        Option<oneshot::Sender<()>>,
+        oneshot::Sender<Result<()>>,
+    ),
 
-    RemoveDeviceNode(Ulid),
-    RemoveFilterNode(Ulid),
-    RemoveDeviceLink(LinkType, LinkType),
+    RemoveDeviceNode(Ulid, oneshot::Sender<Result<()>>),
+    RemoveFilterNode(Ulid, oneshot::Sender<Result<()>>),
+    RemoveDeviceLink(LinkType, LinkType, oneshot::Sender<Result<()>>),
 
-    SetFilterValue(Ulid, u32, FilterValue),
+    SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<()>>),
 
     Quit,
 }
@@ -97,7 +102,9 @@ impl PipewireRunner {
     }
 
     pub fn send_message(&self, message: PipewireMessage) -> Result<()> {
-        self.message_sender.send(message).map_err(|e| anyhow!("Unable to Send Message: {}", e))
+        self.message_sender
+            .send(message)
+            .map_err(|e| anyhow!("Unable to Send Message: {}", e))
     }
 }
 
@@ -140,7 +147,6 @@ fn run_message_loop(receiver: Receiver, sender: PWSender) {
         }
     }
 }
-
 
 pub struct NodeProperties {
     pub node_id: Ulid,
@@ -196,7 +202,6 @@ pub enum LinkType {
     Filter(Ulid),
     UnmanagedNode(u32),
 }
-
 
 pub type FilterCallback = dyn FnMut(Vec<&mut [f32]>, Vec<&mut [f32]>) + Send;
 pub trait FilterHandler: Send + 'static {
