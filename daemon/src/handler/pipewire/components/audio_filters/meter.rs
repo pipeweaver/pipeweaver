@@ -2,11 +2,18 @@ use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
 use tokio::sync::mpsc;
 use ulid::Ulid;
 
-// This is created as such by the lib
+// This is how we should be setup
 const SAMPLE_RATE: u32 = 48000;
-const MILLISECONDS: u32 = 50;
-const CHUNK_SIZE: usize = (SAMPLE_RATE * MILLISECONDS / 1000) as usize;
-const DB_FLOOR: f32 = 60.0;
+const CHANNELS: u32 = 2;
+
+// The frequency we should send events upstream
+const MILLISECONDS: u32 = 100;
+
+// The number of samples which should represent a MILLISECONDS time period 
+const CHUNK_SIZE: usize = ((SAMPLE_RATE * CHANNELS * MILLISECONDS) / 1000) as usize;
+
+// The 0% floor for audio in decibels
+const DB_FLOOR: f32 = -60.0;
 
 pub struct MeterFilter {
     node_id: Ulid,
@@ -53,7 +60,8 @@ impl FilterHandler for MeterFilter {
 
             // Use 1e-9 as a minimum to prevent a 0.log10()
             let db = 20.0 * peak.max(1e-9).log10();
-            let meter = (((db + DB_FLOOR) / DB_FLOOR) * 100.0).clamp(0.0, 100.0) as u8;
+            let meter = (((db - DB_FLOOR) / -DB_FLOOR) * 100.0).clamp(0.0, 100.0) as u8;
+
             let _ = self.callback.blocking_send((self.node_id, meter));
         }
     }
