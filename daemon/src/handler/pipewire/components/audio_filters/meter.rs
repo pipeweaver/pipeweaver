@@ -6,6 +6,7 @@ use ulid::Ulid;
 const SAMPLE_RATE: u32 = 48000;
 const MILLISECONDS: u32 = 50;
 const CHUNK_SIZE: usize = (SAMPLE_RATE * MILLISECONDS / 1000) as usize;
+const DB_FLOOR: f32 = 60.0;
 
 pub struct MeterFilter {
     node_id: Ulid,
@@ -49,12 +50,12 @@ impl FilterHandler for MeterFilter {
         if let Some(values) = self.buffer.push(&samples) {
             // Find the peak sample
             let peak = values.iter().copied().map(f32::abs).fold(0.0, f32::max);
-            let meter = (peak * 100.0).clamp(0.0, 100.0) as u8;
 
+            // Use 1e-9 as a minimum to prevent a 0.log10()
+            let db = 20.0 * peak.max(1e-9).log10();
+            let meter = (((db + DB_FLOOR) / DB_FLOOR) * 100.0).clamp(0.0, 100.0) as u8;
             let _ = self.callback.blocking_send((self.node_id, meter));
         }
-
-        // We can meter as u8 here to get a 'percentage'
     }
 }
 
