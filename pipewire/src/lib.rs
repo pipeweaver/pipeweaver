@@ -13,8 +13,7 @@ use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
 use ulid::Ulid;
 
-type PWSender = pipewire::channel::Sender<PipewireMessage>;
-type PWInternalSender = pipewire::channel::Sender<PipewireInternalMessage>;
+type PWSender = pipewire::channel::Sender<PipewireInternalMessage>;
 type PWReceiver = pipewire::channel::Receiver<PipewireInternalMessage>;
 
 type Sender = mpsc::Sender<PipewireInternalMessage>;
@@ -180,7 +179,7 @@ impl Drop for PipewireRunner {
 }
 
 // Maps messages from an mpsc::channel to a pipewire::channel
-fn run_message_loop(receiver: Receiver, sender: PWInternalSender) {
+fn run_message_loop(receiver: Receiver, sender: PWSender) {
     loop {
         match receiver.recv() {
             Ok(PipewireInternalMessage::Quit(incoming_tx)) => {
