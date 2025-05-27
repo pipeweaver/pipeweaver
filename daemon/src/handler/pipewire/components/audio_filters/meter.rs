@@ -4,13 +4,12 @@ use ulid::Ulid;
 
 // This is how we should be setup
 const SAMPLE_RATE: u32 = 48000;
-const CHANNELS: u32 = 2;
 
 // The frequency we should send events upstream
 const MILLISECONDS: u32 = 100;
 
-// The number of samples which should represent a MILLISECONDS time period 
-const CHUNK_SIZE: usize = ((SAMPLE_RATE * CHANNELS * MILLISECONDS) / 1000) as usize;
+// The number of samples which should represent a MILLISECONDS time period
+const CHUNK_SIZE: usize = ((SAMPLE_RATE / 1000) * MILLISECONDS) as usize;
 
 // The 0% floor for audio in decibels
 const DB_FLOOR: f32 = -60.0;
