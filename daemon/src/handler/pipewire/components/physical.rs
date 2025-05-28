@@ -6,7 +6,7 @@ use crate::handler::primary_worker::WorkerMessage;
 use anyhow::{anyhow, bail, Result};
 use log::debug;
 use pipeweaver_ipc::commands::PhysicalDevice;
-use pipeweaver_pipewire::PipewireNode;
+use pipeweaver_pipewire::DeviceNode;
 use pipeweaver_profile::{PhysicalDeviceDescriptor, PhysicalSourceDevice};
 use pipeweaver_shared::{DeviceType, NodeType};
 use tokio::sync::mpsc::Sender;
@@ -240,7 +240,7 @@ impl PhysicalDevices for PipewireManager {
         let pw_error = anyhow!("Unable to locate Pipewire Node: {}", node_id);
 
         // Find the Pipewire Node
-        let node = self.physical_nodes.get(&node_id).ok_or(pw_error)?.clone();
+        let node = self.device_nodes.get(&node_id).ok_or(pw_error)?.clone();
         match node_type {
             NodeType::PhysicalSource => {
                 let device = self.get_physical_source_mut(id).ok_or(error)?;
@@ -309,20 +309,20 @@ impl PhysicalDevices for PipewireManager {
 }
 
 trait PhysicalDevicesLocal {
-    fn locate_node(&self, descriptor: PhysicalDeviceDescriptor) -> Option<&PipewireNode>;
+    fn locate_node(&self, descriptor: PhysicalDeviceDescriptor) -> Option<&DeviceNode>;
 }
 
 impl PhysicalDevicesLocal for PipewireManager {
-    fn locate_node(&self, descriptor: PhysicalDeviceDescriptor) -> Option<&PipewireNode> {
+    fn locate_node(&self, descriptor: PhysicalDeviceDescriptor) -> Option<&DeviceNode> {
         if let Some(name) = descriptor.name {
-            let node = self.physical_nodes.values().find(|node| node.name.as_ref() == Some(&name));
+            let node = self.device_nodes.values().find(|node| node.name.as_ref() == Some(&name));
             if let Some(node) = node {
                 return Some(node);
             }
         }
 
         if let Some(desc) = descriptor.description {
-            return self.physical_nodes.values().find(|node| node.description.as_ref() == Some(&desc));
+            return self.device_nodes.values().find(|node| node.description.as_ref() == Some(&desc));
         }
 
         None

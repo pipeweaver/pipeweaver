@@ -1,6 +1,9 @@
 use crate::manager::FilterData;
-use crate::registry::{Direction, RegistryClient, RegistryClientNode, RegistryDevice, RegistryDeviceNode, RegistryFactory, RegistryLink};
-use crate::{FilterValue, LinkType, MediaClass, PipewireNode, PipewireReceiver};
+use crate::registry::{
+    Direction, RegistryClient, RegistryClientNode, RegistryDevice, RegistryDeviceNode,
+    RegistryFactory, RegistryLink,
+};
+use crate::{ApplicationNode, DeviceNode, FilterValue, LinkType, MediaClass, PipewireReceiver};
 use anyhow::bail;
 use enum_map::{Enum, EnumMap};
 use log::{debug, error};
@@ -272,11 +275,6 @@ impl Store {
     }
 
     pub fn unmanaged_device_remove(&mut self, id: u32) {
-        // Need to flag upstream if the device has gone away
-        if self.usable_device_nodes.contains(&id) {
-            let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
-            self.usable_device_nodes.retain(|v| v != &id);
-        }
         self.unmanaged_devices.remove(&id);
     }
 
@@ -294,6 +292,12 @@ impl Store {
     }
 
     pub fn unmanaged_device_node_remove(&mut self, id: u32) {
+        // Need to flag upstream if the node has gone away
+        if self.usable_device_nodes.contains(&id) {
+            let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
+            self.usable_device_nodes.retain(|v| v != &id);
+        }
+
         self.unmanaged_device_nodes.remove(&id);
         for client in self.unmanaged_devices.values_mut() {
             client.nodes.retain(|n| n != &id);
@@ -306,7 +310,7 @@ impl Store {
             if let Some(media_type) = is_usable {
                 if !self.usable_device_nodes.contains(&id) {
                     self.usable_device_nodes.push(id);
-                    let node = PipewireNode {
+                    let node = DeviceNode {
                         node_id: id,
                         node_class: media_type,
                         name: node.name.clone(),
@@ -346,15 +350,7 @@ impl Store {
             }
 
             // Return the Specific MediaClass based on Channel Count
-            if (1..=2).contains(&in_count) && (out_count == 0) {
-                return Some(MediaClass::Sink);
-            } else if (1..=2).contains(&out_count) && in_count == 0 {
-                return Some(MediaClass::Source);
-            } else if (1..=2).contains(&in_count) && in_count == out_count {
-                // This is a bit of an assumption really, but we have non-monitor ports on the
-                // tail end, so a reasonable assumption.
-                return Some(MediaClass::Duplex);
-            }
+            return self.get_media_class(in_count, out_count);
         }
         None
     }
@@ -383,6 +379,14 @@ impl Store {
     }
 
     pub fn unmanaged_client_node_remove(&mut self, id: u32) {
+        // Need to flag upstream if the node has gone away
+        if self.usable_client_nodes.contains(&id) {
+            let _ = self
+                .callback_tx
+                .send(PipewireReceiver::ApplicationRemoved(id));
+            self.usable_client_nodes.retain(|v| v != &id);
+        }
+
         self.unmanaged_client_nodes.remove(&id);
         for client in self.unmanaged_clients.values_mut() {
             client.nodes.retain(|n| n != &id);
@@ -395,24 +399,68 @@ impl Store {
             return;
         }
 
-        // Unlike Device nodes, we need to specifically check whether the default links have
-        // been set up for this node before shouting back that we're ready, so lets find out!
         if let Some(node) = self.unmanaged_client_nodes.get(&id) {
-            for (direction, ports) in &node.ports {
-                for port in ports.values() {
-                    if !self.unmanaged_links.values().any(|link| {
-                        match direction {
-                            Direction::Out => link.output_port == port.global_id,
-                            Direction::In => link.input_port == port.global_id,
-                        }
-                    }) {
-                        return;
-                    }
+            let is_usable = self.is_usable_unmanaged_client_node(id);
+            if let Some(media_type) = is_usable {
+                if !self.usable_client_nodes.contains(&id) {
+                    self.usable_client_nodes.push(id);
+                    let node = ApplicationNode {
+                        node_id: id,
+                        node_class: media_type,
+                        name: node.application_name.clone(),
+                    };
+
+                    let _ = self
+                        .callback_tx
+                        .send(PipewireReceiver::ApplicationAdded(node));
                 }
             }
-            self.usable_client_nodes.push(id);
-            debug!("Client Node Ready: {:?}", node);
         }
+    }
+
+    pub fn is_usable_unmanaged_client_node(&self, id: u32) -> Option<MediaClass> {
+        // There are several checks we need to do here first
+        if let Some(node) = self.unmanaged_client_nodes.get(&id) {
+            // If we don't have a name or description, we can't use this node
+            if node.application_name.is_empty() || node.node_name.is_empty() {
+                return None;
+            }
+
+            // Our Managed nodes turn up as client nodes, so avoid sending them back
+            if self
+                .managed_nodes
+                .iter()
+                .any(|(_, node)| node.pw_id == Some(id))
+            {
+                return None;
+            }
+
+            let mut in_count = 0;
+            let mut out_count = 0;
+
+            for (direction, ports) in &node.ports {
+                for port in ports.values() {
+                    // Make sure we have active default links
+                    if !self.unmanaged_links.values().any(|link| match direction {
+                        Direction::Out => link.output_port == port.global_id,
+                        Direction::In => link.input_port == port.global_id,
+                    }) {
+                        // We're not linked up yet, so not ready.
+                        return None;
+                    }
+                }
+
+                let count = ports.values().filter(|port| !port.is_monitor).count();
+                match direction {
+                    Direction::In => in_count += count,
+                    Direction::Out => out_count += count,
+                }
+            }
+
+            return self.get_media_class(in_count, out_count);
+        }
+
+        None
     }
 
     // ----- UNMANAGED LINKS -----
@@ -424,11 +472,11 @@ impl Store {
     }
 
     pub fn unmanaged_link_remove(&mut self, id: u32) {
-        let link = self.unmanaged_links.remove(&id).unwrap();
-        debug!(
-            "Removing {}:{} to {}:{}",
-            link.output_node, link.output_port, link.input_node, link.input_port
-        );
+        self.unmanaged_links.remove(&id);
+    }
+
+    pub fn get_unmanaged_links(&self) -> &HashMap<u32, RegistryLink> {
+        &self.unmanaged_links
     }
 
     // ----- REMOVE HANDLER -----
@@ -465,6 +513,21 @@ impl Store {
                 ));
             }
         }
+    }
+
+    // ----- UTILITY FUNCTIONS -----
+    fn get_media_class(&self, in_count: usize, out_count: usize) -> Option<MediaClass> {
+        // Return the Specific MediaClass based on Channel Count
+        if (1..=2).contains(&in_count) && (out_count == 0) {
+            return Some(MediaClass::Sink);
+        } else if (1..=2).contains(&out_count) && in_count == 0 {
+            return Some(MediaClass::Source);
+        } else if (1..=2).contains(&in_count) && in_count == out_count {
+            // This is a bit of an assumption really, but we have non-monitor ports on the
+            // tail end, so a reasonable assumption.
+            return Some(MediaClass::Duplex);
+        }
+        None
     }
 }
 

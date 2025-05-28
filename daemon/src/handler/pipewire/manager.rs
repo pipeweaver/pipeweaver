@@ -7,9 +7,7 @@ use crate::servers::http_server::MeterEvent;
 use enum_map::EnumMap;
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{APICommandResponse, AudioConfiguration, PhysicalDevice};
-use pipeweaver_pipewire::{
-    MediaClass, PipewireMessage, PipewireNode, PipewireReceiver, PipewireRunner,
-};
+use pipeweaver_pipewire::{ApplicationNode, DeviceNode, MediaClass, PipewireMessage, PipewireReceiver, PipewireRunner};
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::{DeviceType, Mix};
 use std::collections::HashMap;
@@ -48,7 +46,10 @@ pub(crate) struct PipewireManager {
 
     // A list of physical nodes
     pub(crate) node_list: EnumMap<DeviceType, Vec<PhysicalDevice>>,
-    pub(crate) physical_nodes: HashMap<u32, PipewireNode>,
+    pub(crate) device_nodes: HashMap<u32, DeviceNode>,
+
+    // A list of application nodes
+    pub(crate) application_nodes: HashMap<u32, ApplicationNode>,
 }
 
 impl PipewireManager {
@@ -76,7 +77,9 @@ impl PipewireManager {
             meter_broadcast: config.meter_sender,
 
             node_list: Default::default(),
-            physical_nodes: Default::default(),
+            device_nodes: Default::default(),
+
+            application_nodes: Default::default(),
         }
     }
 
@@ -124,7 +127,7 @@ impl PipewireManager {
         let (device_ready_tx, mut device_ready_rx) = mpsc::channel(256);
 
         // A simple list of devices which have been discovered, but not flagged 'Ready'
-        let mut discovered_devices: HashMap<u32, PipewireNode> = HashMap::new();
+        let mut discovered_devices: HashMap<u32, DeviceNode> = HashMap::new();
 
         // Let the primary worker know we're ready
         let _ = self
@@ -184,7 +187,7 @@ impl PipewireManager {
                                 handle.abort();
                             } else {
                                 debug!("Natural Device Removal: {}", id);
-                                if let Some(node) = self.physical_nodes.remove(&id) {
+                                if let Some(node) = self.device_nodes.remove(&id) {
                                     match node.node_class {
                                         MediaClass::Source => {
                                             let _ = self.source_device_removed(id).await;
@@ -205,6 +208,15 @@ impl PipewireManager {
                             warn!("Managed Link Removed: {:?} {:?}, reestablishing", source, target);
                             if let Err(e) = self.link_create_type_to_type(source, target).await {
                                 warn!("Unable to reestablish link: {}", e);
+                            }
+                        }
+                        PipewireReceiver::ApplicationAdded(node) => {
+                            info!("Application Node Appeared: {}, {}", node.node_id, node.name);
+                            self.application_nodes.insert(node.node_id, node);
+                        }
+                        PipewireReceiver::ApplicationRemoved(id) => {
+                            if let Some(node) = self.application_nodes.remove(&id) {
+                                info!("Application Node Removed: {}, {}", node.node_id, node.name);
                             }
                         }
                         _ => {}
@@ -239,7 +251,7 @@ impl PipewireManager {
                         }
 
                         // Add node to our definitive list
-                        self.physical_nodes.insert(device.node_id, device);
+                        self.device_nodes.insert(device.node_id, device);
                         let _ = self.worker_sender.send(WorkerMessage::DevicesChanged).await;
                     } else {
                         panic!("Got a Timer Ready for non-existent Node");

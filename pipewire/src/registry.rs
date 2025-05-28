@@ -182,6 +182,10 @@ impl PipewireRegistry {
             })
             .register()
     }
+
+    pub fn destroy_global(&self, id: u32) {
+        self.registry.destroy_global(id);
+    }
 }
 
 #[derive(Debug)]
@@ -355,10 +359,10 @@ impl TryFrom<&DictRef> for RegistryClient {
 
 #[derive(Debug)]
 pub(crate) struct RegistryClientNode {
-    parent_id: u32,
+    pub(crate) parent_id: u32,
 
-    application_name: String,
-    node_name: String,
+    pub(crate) application_name: String,
+    pub(crate) node_name: String,
 
     pub ports: EnumMap<Direction, HashMap<u32, RegistryPort>>,
 }

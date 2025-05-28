@@ -30,6 +30,8 @@ pub enum PipewireMessage {
 
     SetFilterValue(Ulid, u32, FilterValue),
 
+    DestroyUnmanagedLinks(u32),
+
     Quit,
 }
 
@@ -52,6 +54,8 @@ pub enum PipewireInternalMessage {
     ),
 
     SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<()>>),
+
+    DestroyUnmanagedLinks(u32, oneshot::Sender<Result<()>>),
     Quit(oneshot::Sender<Result<()>>),
 }
 
@@ -59,8 +63,11 @@ pub enum PipewireInternalMessage {
 pub enum PipewireReceiver {
     Quit,
 
-    DeviceAdded(PipewireNode),
+    DeviceAdded(DeviceNode),
     DeviceRemoved(u32),
+
+    ApplicationAdded(ApplicationNode),
+    ApplicationRemoved(u32),
 
     ManagedLinkDropped(LinkType, LinkType),
 }
@@ -139,6 +146,9 @@ impl PipewireRunner {
             }
             PipewireMessage::RemoveDeviceLink(lt, lt2) => {
                 PipewireInternalMessage::RemoveDeviceLink(lt, lt2, tx)
+            }
+            PipewireMessage::DestroyUnmanagedLinks(id) => {
+                PipewireInternalMessage::DestroyUnmanagedLinks(id, tx)
             }
             PipewireMessage::SetFilterValue(id, prop, value) => {
                 PipewireInternalMessage::SetFilterValue(id, prop, value, tx)
@@ -285,11 +295,19 @@ pub struct FilterProperty {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PipewireNode {
+pub struct DeviceNode {
     pub node_id: u32,
     pub node_class: MediaClass,
 
     pub name: Option<String>,
     pub nickname: Option<String>,
     pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ApplicationNode {
+    pub node_id: u32,
+    pub node_class: MediaClass,
+
+    pub name: String,
 }

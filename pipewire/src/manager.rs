@@ -35,6 +35,7 @@ use std::cell::RefCell;
 use enum_map::{enum_map, EnumMap};
 use oneshot::Sender;
 use parking_lot::RwLock;
+use pipewire::sys::pw_impl_link_destroy;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::mpsc;
@@ -505,6 +506,16 @@ impl PipewireManager {
         Ok(())
     }
 
+    pub fn remove_all_unmanaged_links(&mut self, node: u32) -> Result<()> {
+        for (&id, link) in self.store.borrow().get_unmanaged_links() {
+            if link.input_node == node || link.output_node == node {
+                self.registry.destroy_global(id);
+            }
+        }
+
+        Ok(())
+    }
+
     fn get_port(
         &mut self,
         link: LinkType,
@@ -685,6 +696,11 @@ pub fn run_pw_main_loop(
             PipewireInternalMessage::RemoveFilterNode(ulid, result) => {
                 let _ = result.send(manager.borrow_mut().remove_filter(ulid));
             }
+
+            PipewireInternalMessage::DestroyUnmanagedLinks(id, result) => {
+                let _ = result.send(manager.borrow_mut().remove_all_unmanaged_links(id));
+            }
+
             PipewireInternalMessage::SetFilterValue(id, key, value, result) => {
                 let _ = result.send(manager.borrow_mut().set_filter_value(id, key, value));
             }
