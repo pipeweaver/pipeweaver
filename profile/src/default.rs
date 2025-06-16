@@ -4,7 +4,7 @@ use crate::{
     VirtualSourceDevice, VirtualTargetDevice, Volumes,
 };
 use enum_map::enum_map;
-use pipeweaver_shared::{Colour, MuteTarget};
+use pipeweaver_shared::{Colour, MuteTarget, OrderGroup};
 use std::collections::HashSet;
 use ulid::Ulid;
 
@@ -211,15 +211,18 @@ impl Profile {
                             },
                         },
                     ],
-                    device_order: vec![
-                        system_id,
-                        chat_id,
-                        browser_id,
-                        game_id,
-                        music_id,
-                        mic_id,
-                        pc_line_in_id,
-                    ],
+                    device_order: enum_map! {
+                        OrderGroup::Default => vec![
+                            system_id,
+                            chat_id,
+                            browser_id,
+                            game_id,
+                            music_id,
+                            pc_line_in_id,
+                        ],
+                        OrderGroup::Hidden => vec![],
+                        OrderGroup::Pinned => vec![mic_id],
+                    },
                 },
                 targets: TargetDevices {
                     physical_devices: vec![PhysicalTargetDevice {
@@ -290,7 +293,17 @@ impl Profile {
                             mix: Mix::A,
                         },
                     ],
-                    device_order: vec![headphones_id, chat_mic_id, stream_mix_id, vod_mix_id],
+
+                    device_order: enum_map! {
+                    OrderGroup::Default => vec![
+                            headphones_id,
+                            chat_mic_id,
+                            stream_mix_id,
+                            vod_mix_id
+                        ],
+                        OrderGroup::Hidden => vec![],
+                        OrderGroup::Pinned => vec![mic_id],
+                    },
                 },
             },
             routes: vec![
@@ -318,8 +331,8 @@ impl Profile {
                 ),
                 (system_id, [headphones_id].into_iter().collect()),
             ]
-            .into_iter()
-            .collect(),
+                .into_iter()
+                .collect(),
         }
     }
 }

@@ -1,7 +1,7 @@
 <script>
 import ColourSettings from '@/components/channels/ColourSettings.vue'
 import ChannelColumnVolume from '@/components/channels/ChannelColumnVolume.vue'
-import {DeviceType, get_device_by_id, is_physical, is_source} from "@/app/util.js";
+import {DeviceOrderType, DeviceType, get_device_by_id, is_physical, is_source} from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
 import {FontAwesomeIcon} from "@fortawesome/vue-fontawesome";
 import PopupBox from "@/components/inputs/PopupBox.vue";
@@ -20,6 +20,7 @@ export default {
   },
   props: {
     type: DeviceType,
+    order_group: DeviceOrderType,
     id: String,
   },
 
@@ -316,7 +317,7 @@ export default {
       </div>
       <div class="name">{{ getChannelName() }}</div>
       <div class="end">
-        <DevicePopup id="select_device" :device_id="id" :type='type'/>
+        <DevicePopup id="select_device" :device_id="id" :order_group="order_group" :type='type'/>
       </div>
     </div>
     <div class="top" @click="colour_clicked"></div>

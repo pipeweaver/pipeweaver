@@ -7,16 +7,18 @@ use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME};
 use anyhow::{anyhow, bail, Result};
-use enum_map::enum_map;
+use enum_map::{enum_map, EnumMap};
 use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{MediaClass, NodeProperties, PipewireMessage};
 use pipeweaver_profile::{
     DeviceDescription, PhysicalSourceDevice, PhysicalTargetDevice, VirtualSourceDevice,
     VirtualTargetDevice,
 };
-use pipeweaver_shared::{Colour, Mix, NodeType};
+use pipeweaver_shared::{Colour, Mix, NodeType, OrderGroup};
 use strum::IntoEnumIterator;
 use ulid::Ulid;
+
+type GroupList = EnumMap<OrderGroup, Vec<Ulid>>;
 
 /// This crate contains everything needed to create a Pipewire node
 pub(crate) trait NodeManagement {
@@ -33,6 +35,7 @@ pub(crate) trait NodeManagement {
     async fn node_rename(&mut self, id: Ulid, name: String) -> Result<()>;
     async fn node_remove(&mut self, id: Ulid) -> Result<()>;
 
+    async fn node_set_group(&mut self, id: Ulid, group: OrderGroup) -> Result<()>;
     async fn node_set_position(&mut self, id: Ulid, position: u8) -> Result<()>;
 
     async fn node_set_colour(&mut self, id: Ulid, colour: Colour) -> Result<()>;
@@ -114,7 +117,7 @@ impl NodeManagement for PipewireManager {
                         ..Default::default()
                     });
                 self.profile.routes.insert(id, Default::default());
-                self.profile.devices.sources.device_order.push(id);
+                self.profile.devices.sources.device_order[OrderGroup::default()].push(id);
             }
             NodeType::VirtualSource => {
                 self.profile
@@ -126,7 +129,7 @@ impl NodeManagement for PipewireManager {
                         ..Default::default()
                     });
                 self.profile.routes.insert(id, Default::default());
-                self.profile.devices.sources.device_order.push(id);
+                self.profile.devices.sources.device_order[OrderGroup::default()].push(id);
             }
             NodeType::PhysicalTarget => {
                 self.profile
@@ -137,7 +140,7 @@ impl NodeManagement for PipewireManager {
                         description: description.clone(),
                         ..Default::default()
                     });
-                self.profile.devices.targets.device_order.push(id);
+                self.profile.devices.targets.device_order[OrderGroup::default()].push(id);
             }
             NodeType::VirtualTarget => {
                 self.profile
@@ -148,7 +151,7 @@ impl NodeManagement for PipewireManager {
                         description: description.clone(),
                         ..Default::default()
                     });
-                self.profile.devices.targets.device_order.push(id);
+                self.profile.devices.targets.device_order[OrderGroup::default()].push(id);
             }
         }
 
@@ -233,30 +236,89 @@ impl NodeManagement for PipewireManager {
         Ok(())
     }
 
+    async fn node_set_group(&mut self, id: Ulid, group: OrderGroup) -> Result<()> {
+        let device_order = self.get_device_order_group(id)?;
+
+        // Remove this node from it's existing group
+        Self::find_order_group_by_id(id, device_order)?.retain(|d| d != &id);
+
+        // Set it to the front of the new group
+        device_order[group].insert(0, id);
+
+        Ok(())
+    }
+
     async fn node_set_position(&mut self, id: Ulid, position: u8) -> Result<()> {
-        if let Some(node_type) = self.get_node_type(id) {
-            let position = position as usize;
+        let device_order = self.get_device_order_group(id)?;
+        let order = Self::find_order_group_by_id(id, device_order)?;
 
-            let device_order = match node_type {
-                NodeType::PhysicalSource | NodeType::VirtualSource => {
-                    &mut self.profile.devices.sources.device_order
-                }
-                NodeType::PhysicalTarget | NodeType::VirtualTarget => {
-                    &mut self.profile.devices.targets.device_order
-                }
-            };
-
-            // Remove it from the existing list
-            device_order.retain(|d| d != &id);
-
-            if position >= device_order.len() {
-                device_order.push(id);
-            } else {
-                device_order.insert(position, id);
-            }
+        // Remove it from the existing list
+        let position = position as usize;
+        order.retain(|d| d != &id);
+        if position >= order.len() {
+            order.push(id);
+        } else {
+            order.insert(position, id);
         }
         Ok(())
     }
+
+    // async fn node_set_pinned(&mut self, id: Ulid, pinned: bool) -> Result<()> {
+    //     // TODO: We should probably sanity check this
+    //     // While we're not going to specifically limit the number of channels that can be
+    //     // pinned, we should make sure we're not both hidden and pinned :D
+    //     if let Some(node_type) = self.get_node_type(id) {
+    //         let pinned_devices = match node_type {
+    //             NodeType::PhysicalSource | NodeType::VirtualSource => {
+    //                 &mut self.profile.devices.sources.pinned_devices
+    //             }
+    //             NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+    //                 &mut self.profile.devices.targets.pinned_devices
+    //             }
+    //         };
+    //         let device_order = match node_type {
+    //             NodeType::PhysicalSource | NodeType::VirtualSource => {
+    //                 &mut self.profile.devices.sources.device_order
+    //             }
+    //             NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+    //                 &mut self.profile.devices.targets.device_order
+    //             }
+    //         };
+    //
+    //         if pinned {
+    //             // Make sure we're not trying to pin an already pinned target
+    //             if pinned_devices.iter().any(|pinned| pinned == &id) {
+    //                 bail!("Device Already Pinned");
+    //             }
+    //             pinned_devices.push(id);
+    //             device_order.retain(|d| d != &id);
+    //         } else {
+    //             // Remove it from pinned, add it back to regular
+    //             pinned_devices.retain(|d| d != &id);
+    //             device_order.push(id);
+    //         }
+    //     }
+    //     Ok(())
+    // }
+    //
+    // async fn node_set_hidden(&mut self, id: Ulid, hidden: bool) -> Result<()> {
+    //     if let Some(node_type) = self.get_node_type(id) {
+    //         let hidden_devices = match node_type {
+    //             NodeType::PhysicalSource | NodeType::VirtualSource => {
+    //                 &mut self.profile.devices.sources.hidden_devices
+    //             }
+    //             NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+    //                 &mut self.profile.devices.targets.hidden_devices
+    //             }
+    //         };
+    //         if hidden {
+    //             hidden_devices.insert(id);
+    //         } else {
+    //             hidden_devices.remove(&id);
+    //         }
+    //     }
+    //     Ok(())
+    // }
 
     async fn node_set_colour(&mut self, id: Ulid, colour: Colour) -> Result<()> {
         if let Some(node_type) = self.get_node_type(id) {
@@ -318,6 +380,8 @@ trait NodeManagementLocal {
     /// Used to set up the parameters needed for a Pipewire Node
     fn create_node_props(&self, class: MediaClass, desc: &DeviceDescription) -> NodeProperties;
 
+    fn get_device_order_group(&mut self, id: Ulid) -> Result<&mut GroupList>;
+    fn find_order_group_by_id(id: Ulid, map: &mut GroupList) -> Result<&mut Vec<Ulid>>;
     fn get_colour(&self, name: String) -> Colour;
 }
 
@@ -474,11 +538,8 @@ impl NodeManagementLocal for PipewireManager {
             // Remove Routing from the Profile Tree
             self.profile.routes.remove(&id);
 
-            self.profile
-                .devices
-                .sources
-                .device_order
-                .retain(|node_id| node_id != &id);
+            let device_order = self.get_device_order_group(id)?;
+            Self::find_order_group_by_id(id, device_order)?.retain(|d| d != &id);
 
             // And finally, remove the Node from the profile tree
             self.profile
@@ -531,11 +592,8 @@ impl NodeManagementLocal for PipewireManager {
                 .virtual_devices
                 .retain(|device| device.description.id != id);
 
-            self.profile
-                .devices
-                .sources
-                .device_order
-                .retain(|node_id| node_id != &id);
+            let device_order = self.get_device_order_group(id)?;
+            Self::find_order_group_by_id(id, device_order)?.retain(|d| d != &id);
         }
         Ok(())
     }
@@ -597,11 +655,8 @@ impl NodeManagementLocal for PipewireManager {
                 .physical_devices
                 .retain(|device| device.description.id != id);
 
-            self.profile
-                .devices
-                .targets
-                .device_order
-                .retain(|node_id| node_id != &id);
+            let device_order = self.get_device_order_group(id)?;
+            Self::find_order_group_by_id(id, device_order)?.retain(|d| d != &id);
         }
 
         Ok(())
@@ -650,11 +705,8 @@ impl NodeManagementLocal for PipewireManager {
                 .iter_mut()
                 .for_each(|(_, targets)| targets.retain(|t| *t != id));
 
-            self.profile
-                .devices
-                .targets
-                .device_order
-                .retain(|node_id| node_id != &id);
+            let device_order = self.get_device_order_group(id)?;
+            Self::find_order_group_by_id(id, device_order)?.retain(|d| d != &id);
 
             // Finally remove this node from the profile
             self.profile
@@ -699,6 +751,31 @@ impl NodeManagementLocal for PipewireManager {
             buffer: 512,
             ready_sender: None,
         }
+    }
+
+    fn get_device_order_group(&mut self, id: Ulid) -> Result<&mut GroupList> {
+        if let Some(node_type) = self.get_node_type(id) {
+            let device_order = match node_type {
+                NodeType::PhysicalSource | NodeType::VirtualSource => {
+                    &mut self.profile.devices.sources.device_order
+                }
+                NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                    &mut self.profile.devices.targets.device_order
+                }
+            };
+            return Ok(device_order);
+        }
+        bail!("Node Id {} not found", id)
+    }
+
+
+    fn find_order_group_by_id(id: Ulid, map: &mut GroupList) -> Result<&mut Vec<Ulid>> {
+        for (_, vec) in map.iter_mut() {
+            if vec.contains(&id) {
+                return Ok(vec);
+            }
+        }
+        bail!("Id Not Found in Vec List");
     }
 
     fn get_colour(&self, name: String) -> Colour {

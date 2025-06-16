@@ -3,6 +3,7 @@
 
 import PopupBox from "@/components/inputs/PopupBox.vue";
 import {
+  DeviceOrderType,
   get_device_by_id,
   getFullTargetList,
   getSourcePhysicalDevices,
@@ -14,11 +15,17 @@ import {websocket} from "@/app/sockets.js";
 
 export default {
   name: "DevicePopup",
+  computed: {
+    DeviceOrderType() {
+      return DeviceOrderType
+    }
+  },
   components: {PopupBox},
 
   props: {
     type: {type: String, required: true},
     device_id: {type: String, required: true},
+    order_group: {type: DeviceOrderType, required: true},
     id: {type: String, required: true},
   },
 
@@ -177,7 +184,23 @@ export default {
         websocket.send_command(command)
         this.$refs.popup.hideDialog();
       }
+    },
 
+    onPinClicked(toggle, e) {
+      //    SetOrderGroup(Ulid, OrderGroup),
+      let command = {
+        "SetOrderGroup": [this.getId(), (toggle) ? DeviceOrderType.Pinned : DeviceOrderType.Default]
+      }
+      websocket.send_command(command);
+      this.$refs.popup.hideDialog();
+    },
+
+    onHideClicked(e) {
+      let command = {
+        "SetOrderGroup": [this.getId(), DeviceOrderType.Hidden]
+      }
+      websocket.send_command(command);
+      this.$refs.popup.hideDialog();
     }
   }
 }
@@ -189,9 +212,19 @@ export default {
   </button>
 
   <PopupBox ref="popup" @closed="">
-    <div class="entry" @click="onRenameClick">
+    <div v-if="order_group !== DeviceOrderType.Pinned" class="entry"
+         @click="e => onPinClicked(true, e)">
       <span class="selected"></span>
-      <span>Rename Channel</span>
+      <span>Pin Channel</span>
+    </div>
+    <div v-if="order_group === DeviceOrderType.Pinned" class="entry"
+         @click="e => onPinClicked(false, e)">
+      <span class="selected"></span>
+      <span>Unpin Channel</span>
+    </div>
+    <div class="entry" @click="e => onHideClicked(false, e)">
+      <span class="selected"></span>
+      <span>Hide Channel</span>
     </div>
     <div v-if="isPhysicalNode()" class="separator"/>
     <div v-for="device of getDevices()" v-if="isPhysicalNode()"
@@ -207,6 +240,10 @@ export default {
       </span>
     </div>
     <div class="separator"/>
+    <div class="entry" @click="onRenameClick">
+      <span class="selected"></span>
+      <span>Rename Channel</span>
+    </div>
     <div class="entry" @click="onRemoveClicked">
       <span class="selected"></span>
       <span>Remove Channel</span>

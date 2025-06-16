@@ -69,7 +69,9 @@ impl IPCHandler for PipewireManager {
             Cmd::RemovePhysicalNode(id, index) => {
                 self.remove_device_from_node(id, index).await.map(|_| Resp::Ok)
             }
-            
+            Cmd::SetOrderGroup(id, group) => {
+                self.node_set_group(id, group).await.map(|_| Resp::Ok)
+            }
             Cmd::SetOrder(id, position) => {
                 self.node_set_position(id, position).await.map(|_| Resp::Ok)
             }

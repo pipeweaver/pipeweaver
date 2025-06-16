@@ -13,13 +13,14 @@ import {
   faBars,
   faCheck,
   faCircleCheck,
+  faEyeSlash,
   faGripVertical,
   faVolumeHigh,
   faVolumeXmark,
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 
-library.add(faVolumeHigh, faVolumeXmark, faAngleDown, faCircleCheck, faXmark, faCheck, faBars, faGripVertical);
+library.add(faVolumeHigh, faVolumeXmark, faAngleDown, faCircleCheck, faXmark, faCheck, faBars, faGripVertical, faEyeSlash);
 
 
 const app = createApp(App);

@@ -1,7 +1,7 @@
 mod default;
 
 use enum_map::{enum_map, EnumMap};
-use pipeweaver_shared::{Colour, Mix, MuteState, MuteTarget};
+use pipeweaver_shared::{Colour, Mix, MuteState, MuteTarget, OrderGroup};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use ulid::Ulid;
@@ -31,8 +31,14 @@ pub struct SourceDevices {
     /// Virtual Source devices
     pub virtual_devices: Vec<VirtualSourceDevice>,
 
-    /// The Ordering of devices
-    pub device_order: Vec<Ulid>,
+    /// Device Orders
+    pub device_order: EnumMap<OrderGroup, Vec<Ulid>>,
+}
+
+pub struct DeviceGroup {
+    pinned: Vec<Ulid>,
+    hidden: Vec<Ulid>,
+    order: Vec<Ulid>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -43,8 +49,8 @@ pub struct TargetDevices {
     /// Virtual Sink Devices
     pub virtual_devices: Vec<VirtualTargetDevice>,
 
-    /// The Ordering of devices
-    pub device_order: Vec<Ulid>,
+    /// Device Orders
+    pub device_order: EnumMap<OrderGroup, Vec<Ulid>>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

@@ -3,19 +3,23 @@ import {store} from "@/app/store.js";
 export const DeviceType = Object.freeze({
   PhysicalSource: 'PhysicalSource',
   VirtualSource: 'VirtualSource',
-
   PhysicalTarget: 'PhysicalTarget',
   VirtualTarget: 'VirtualTarget',
 });
 
-export function get_device_order(is_source) {
+export const DeviceOrderType = Object.freeze({
+  Default: 'Default', Pinned: 'Pinned', Hidden: 'Hidden',
+})
+
+export function get_device_order(order_type, is_source) {
   if (store.getProfile().devices === undefined) {
     return [];
   }
+
   if (is_source) {
-    return store.getProfile().devices.sources.device_order;
+    return store.getProfile().devices.sources.device_order[order_type];
   } else {
-    return store.getProfile().devices.targets.device_order;
+    return store.getProfile().devices.targets.device_order[order_type];
   }
 }
 
@@ -123,8 +127,7 @@ export function getNamesForDevices(devices) {
   let list = [];
   for (let device of devices) {
     list.push({
-      id: device.description.id,
-      name: device.description.name,
+      id: device.description.id, name: device.description.name,
     });
   }
   return list;

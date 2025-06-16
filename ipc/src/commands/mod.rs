@@ -1,7 +1,7 @@
 use enum_map::EnumMap;
 use json_patch::Patch;
 use pipeweaver_profile::Profile;
-use pipeweaver_shared::{Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType};
+use pipeweaver_shared::{Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType, OrderGroup};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
@@ -69,6 +69,7 @@ pub enum APICommand {
     RemovePhysicalNode(Ulid, usize),
 
     // Set the position of a node in the order tree
+    SetOrderGroup(Ulid, OrderGroup),
     SetOrder(Ulid, u8),
 }
 

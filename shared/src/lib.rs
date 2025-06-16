@@ -39,6 +39,14 @@ pub enum MuteTarget {
     TargetB,
 }
 
+#[derive(Default, Debug, Copy, Clone, Hash, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq)]
+pub enum OrderGroup {
+    #[default]
+    Default,
+    Pinned,
+    Hidden,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Colour {
     pub red: u8,

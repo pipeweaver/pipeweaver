@@ -5,7 +5,7 @@ use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::Result;
 use log::{debug, warn};
 use pipeweaver_profile::DeviceDescription;
-use pipeweaver_shared::NodeType;
+use pipeweaver_shared::{NodeType, OrderGroup};
 
 pub(crate) trait LoadProfile {
     async fn load_profile(&mut self) -> Result<()>;
@@ -76,9 +76,10 @@ impl LoadProfileLocal for PipewireManager {
         } else {
             &mut self.profile.devices.targets.device_order
         };
-        if !order_list.contains(&dev.id) {
-            debug!("Device not present in order list, fixing");
-            order_list.push(dev.id);
+
+        if !order_list.iter().any(|(_, v)| v.contains(&dev.id)) {
+            debug!("Device Not Found in Order List, adding to Default List");
+            order_list[OrderGroup::default()].push(dev.id);
         }
 
         Ok(())
@@ -86,40 +87,29 @@ impl LoadProfileLocal for PipewireManager {
 
     fn validate_device_order(&mut self, source: bool) -> Result<()> {
         // We're looking for devices which may be present in the order, but don't exist
-        let mut device_descriptors = vec![];
-        let mut to_remove = vec![];
-
-        if source {
+        let mut known_ids = vec![];
+        let device_order = if source {
             for device in &self.profile.devices.sources.physical_devices {
-                device_descriptors.push(device.description.clone());
+                known_ids.push(device.description.id);
             }
             for device in &self.profile.devices.sources.virtual_devices {
-                device_descriptors.push(device.description.clone());
+                known_ids.push(device.description.id);
             }
-        } else {
-            for device in &self.profile.devices.targets.physical_devices {
-                device_descriptors.push(device.description.clone());
-            }
-            for device in &self.profile.devices.targets.virtual_devices {
-                device_descriptors.push(device.description.clone());
-            }
-        }
-
-        let device_order = if source {
             &mut self.profile.devices.sources.device_order
         } else {
+            for device in &self.profile.devices.targets.physical_devices {
+                known_ids.push(device.description.id);
+            }
+            for device in &self.profile.devices.targets.virtual_devices {
+                known_ids.push(device.description.id);
+            }
             &mut self.profile.devices.targets.device_order
         };
 
-        // Ok, we should be able to check against the 'ordered' devices...
-        for device in &mut *device_order {
-            if !device_descriptors.iter().any(|d| d.id == *device) {
-                // Specified device is not present
-                debug!("Removing not-present device from Device Order: {}", *device);
-                to_remove.push(*device);
-            }
+        // We'll use a .retain on each element of the order to clean up
+        for vec in device_order.values_mut() {
+            vec.retain(|id| known_ids.contains(id));
         }
-        device_order.retain(|d| !to_remove.contains(d));
         Ok(())
     }
 }
