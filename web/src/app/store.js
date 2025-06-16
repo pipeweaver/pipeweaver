@@ -115,6 +115,12 @@ export const store = reactive({
 
       applyOperation(this.status, patch, true, true, false)
     }
+
+    // Trigger a resize event on our next frame, this ensures that things like the routing table
+    // size changes don't mess with the rendering of the sliders.
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
   },
 
   pause() {
