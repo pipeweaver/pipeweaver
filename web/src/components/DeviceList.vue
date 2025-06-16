@@ -1,5 +1,5 @@
 <script>
-import {DeviceOrderType, get_device_order, get_device_type} from "@/app/util.js";
+import {get_device_order, get_device_type} from "@/app/util.js";
 import ChannelColumn from "@/components/channels/ChannelColumn.vue";
 import {Sortable} from "@shopify/draggable";
 import {websocket} from "@/app/sockets.js";
@@ -12,7 +12,7 @@ export default {
 
   props: {
     isSource: {type: Boolean, required: true},
-    orderType: {type: DeviceOrderType, required: true},
+    orderType: {type: String, required: true},
   },
 
   data() {

@@ -74,7 +74,8 @@ export default {
       <span>Mute to All</span>
     </div>
     <div class="separator"/>
-    <div v-for="target of getFullTargetList()" class="entry" @click="toggleMuteToTarget(target.id)">
+    <div v-for="target of getFullTargetList(true)" class="entry"
+         @click="toggleMuteToTarget(target.id)">
         <span class="selected">
           <font-awesome-icon v-if="isMutedTo(target.id)" :icon="['fas', 'check']"/>
         </span>

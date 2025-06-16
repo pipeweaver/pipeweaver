@@ -113,14 +113,43 @@ export function is_physical(type) {
 }
 
 // Some functions useful for getting basic node data
-export function getFullSourceList() {
-  let list = getNamesForDevices(get_devices(DeviceType.PhysicalSource));
-  return list.concat(getNamesForDevices(get_devices(DeviceType.VirtualSource)));
+export function getFullSourceList(include_hidden) {
+  return getOrderedList(true, include_hidden);
 }
 
-export function getFullTargetList() {
-  let list = getNamesForDevices(get_devices(DeviceType.PhysicalTarget));
-  return list.concat(getNamesForDevices(get_devices(DeviceType.VirtualTarget)));
+export function getFullTargetList(include_hidden) {
+  return getOrderedList(false, include_hidden);
+}
+
+function getOrderedList(is_source, include_hidden) {
+  // We should order this based on the general ordering
+  let pinned = get_device_order(DeviceOrderType.Pinned, is_source);
+  let base = get_device_order(DeviceOrderType.Default, is_source);
+
+
+  let list = [];
+  for (const item of pinned) {
+    list.push(getNameForDevice(get_device_by_id(item)));
+  }
+
+  for (const item of base) {
+    list.push(getNameForDevice(get_device_by_id(item)));
+  }
+
+  if (include_hidden) {
+    let hidden = get_device_order(DeviceOrderType.Hidden, is_source);
+    for (const item of hidden) {
+      list.push(getNameForDevice(get_device_by_id(item)));
+    }
+  }
+
+  return list;
+}
+
+export function getNameForDevice(device) {
+  return {
+    id: device.description.id, name: device.description.name,
+  }
 }
 
 export function getNamesForDevices(devices) {

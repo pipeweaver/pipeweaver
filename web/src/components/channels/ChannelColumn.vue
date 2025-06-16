@@ -317,7 +317,7 @@ export default {
       </div>
       <div class="name">{{ getChannelName() }}</div>
       <div class="end">
-        <DevicePopup id="select_device" :device_id="id" :order_group="order_group" :type='type'/>
+        <DevicePopup id="select_device" :device_id="id" :order_group='order_group' :type='type'/>
       </div>
     </div>
     <div class="top" @click="colour_clicked"></div>

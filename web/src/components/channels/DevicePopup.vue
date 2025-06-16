@@ -5,7 +5,6 @@ import PopupBox from "@/components/inputs/PopupBox.vue";
 import {
   DeviceOrderType,
   get_device_by_id,
-  getFullTargetList,
   getSourcePhysicalDevices,
   getTargetPhysicalDevices,
   is_physical,
@@ -25,13 +24,11 @@ export default {
   props: {
     type: {type: String, required: true},
     device_id: {type: String, required: true},
-    order_group: {type: DeviceOrderType, required: true},
+    order_group: {type: String, required: true},
     id: {type: String, required: true},
   },
 
   methods: {
-    getFullTargetList,
-
     show(e) {
       this.$refs.popup.showDialog(e, this.id)
     },

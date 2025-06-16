@@ -88,7 +88,6 @@ export default {
     },
 
     button_width() {
-      console.log("Called?");
       if (this.has_hidden()) {
         return "70px";
       } else {
