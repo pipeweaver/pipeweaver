@@ -2,6 +2,7 @@
 resolver = "2"
 
 members = [
+    "app",
     "client",
     "daemon",
     "ipc",

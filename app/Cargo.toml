@@ -1,0 +1,12 @@
+[package]
+name = "pipeweaver-app"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+[dependencies]
+qmetaobject = { version = "0.2.10", features = ["webengine"] }
+qttypes = "0.2.12"
+
+[build-dependencies]
+semver = "1"
