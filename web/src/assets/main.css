@@ -1,9 +1,8 @@
 body {
     background-color: #252927;
+    margin: 0;
     padding: 0;
-    margin: 10px;
 }
-
 
 #app {
     font-family: sans-serif;
