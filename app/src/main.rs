@@ -1,5 +1,3 @@
-mod app_state;
-
 use qmetaobject::prelude::*;
 use qmetaobject::webengine;
 
