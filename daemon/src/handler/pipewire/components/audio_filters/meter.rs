@@ -4,6 +4,7 @@ use ulid::Ulid;
 
 // Power Factor is inherited from audio_filters/volume.rs
 const POWER_FACTOR: f32 = 3.8;
+const INV_POWER_FACTOR: f32 = 1.0 / POWER_FACTOR; // Precompute inverse
 
 // This is how we should be setup
 const SAMPLE_RATE: u32 = 48000;
@@ -15,6 +16,8 @@ const MILLISECONDS: u32 = 100;
 const CHUNK_SIZE: usize = ((SAMPLE_RATE / 1000) * MILLISECONDS) as usize;
 
 pub struct MeterFilter {
+    enabled: bool,
+
     count: usize,
     peak: f32,
 
@@ -25,6 +28,8 @@ pub struct MeterFilter {
 impl MeterFilter {
     pub(crate) fn new(node_id: Ulid, callback: mpsc::Sender<(Ulid, u8)>) -> Self {
         Self {
+            enabled: true,
+
             count: 0,
             peak: 0.0,
 
@@ -36,57 +41,95 @@ impl MeterFilter {
 
 impl FilterHandler for MeterFilter {
     fn get_properties(&self) -> Vec<FilterProperty> {
-        vec![]
+        vec![FilterProperty {
+            id: 0,
+            name: "Enabled".into(),
+            value: FilterValue::Bool(self.enabled)
+        }]
     }
 
-    fn get_property(&self, _: u32) -> FilterProperty {
-        panic!("Attempted to get non-existent property");
+    fn get_property(&self, id: u32) -> FilterProperty {
+        match id {
+            0 => FilterProperty {
+                id: 0,
+                name: "Volume".into(),
+                value: FilterValue::Bool(self.enabled),
+            },
+            _ => panic!("Attempted to lookup non-existent property!")
+        }
     }
 
-    fn set_property(&mut self, _: u32, _: FilterValue) {
-        panic!("Attempted to set non-existent property");
+    fn set_property(&mut self, id: u32, value: FilterValue) {
+        match id {
+            0 => {
+                if let FilterValue::Bool(value) = value {
+                    self.enabled = value;
+                } else {
+                    panic!("Attempted to Toggle Meter without Bool type");
+                }
+            }
+            _ => panic!("Attempted to set non-existent property!")
+        }
     }
 
     fn process_samples(&mut self, inputs: Vec<&mut [f32]>, mut _outputs: Vec<&mut [f32]>) {
-        // While we're expecting stereo here, we'll support arbitrary channel numbers
-        let peak = self.peak_amplitude(&inputs);
+        if inputs.is_empty() {
+            return;
+        }
 
+        // Fast path: update peak with optimized calculation
+        let peak = self.peak_amplitude(&inputs);
         self.peak = self.peak.max(peak);
         self.count += inputs[0].len();
 
         if self.count >= CHUNK_SIZE {
-            let peak = self.peak;
+            let meter = self.calculate_meter(self.peak);
 
-            // We calculate the gain percent by doing the inverse of what the volume filter does,
-            // meaning that if you reduce a source channels volume by 50%, it's correctly 
-            // represented on the output channels
-            let gain = peak.max(1e-9);
-            let meter = (100.0 * gain.powf(1.0 / POWER_FACTOR)).clamp(0.0, 100.0) as u8;
-
+            // Always send meter updates every 100ms to maintain UI meter decay
             let _ = self.callback.blocking_send((self.node_id, meter));
 
             // Reset our values
             self.peak = 0.0;
-            self.count -= CHUNK_SIZE
+            self.count -= CHUNK_SIZE;
         }
     }
 }
 
 impl MeterFilter {
     fn peak_amplitude(&self, inputs: &[&mut [f32]]) -> f32 {
-        if inputs.is_empty() || inputs[0].is_empty() {
-            return 0.0;
-        }
+        let mut global_peak = 0.0_f32;
 
-        let mut peak = 0.0_f32;
-        for i in 0..inputs[0].len() {
-            let mut frame_peak = 0.0_f32;
-            for channel in inputs {
-                frame_peak = frame_peak.max(channel[i].abs());
+        for channel in inputs {
+            if channel.is_empty() {
+                continue;
             }
-            peak = peak.max(frame_peak);
+
+            let mut channel_peak = 0.0_f32;
+            for &sample in channel.iter() {
+                channel_peak = channel_peak.max(sample.abs());
+            }
+
+            global_peak = global_peak.max(channel_peak);
         }
 
-        peak
+        global_peak
+    }
+
+    fn calculate_meter(&self, peak: f32) -> u8 {
+        if peak <= 1e-9 {
+            return 0;
+        }
+
+        // Use the precomputed inverse power factor
+        let meter = 100.0 * peak.powf(INV_POWER_FACTOR);
+
+        // Clamp is often optimized by the compiler, but we can be explicit
+        if meter >= 100.0 {
+            100
+        } else if meter <= 0.0 {
+            0
+        } else {
+            meter as u8
+        }
     }
 }
