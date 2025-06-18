@@ -115,6 +115,7 @@ impl MeterFilter {
         global_peak
     }
 
+    #[inline]
     fn calculate_meter(&self, peak: f32) -> u8 {
         if peak <= 1e-9 {
             return 0;
