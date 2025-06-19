@@ -735,6 +735,8 @@ impl NodeManagementLocal for PipewireManager {
     }
 
     fn create_node_props(&self, class: MediaClass, desc: &DeviceDescription) -> NodeProperties {
+        let volume = self.get_node_volume(desc.id, Mix::A).unwrap();
+
         let identifier = format!("{} {}", APP_NAME, desc.name)
             .to_lowercase()
             .replace(" ", "_");
@@ -744,6 +746,7 @@ impl NodeManagementLocal for PipewireManager {
             node_name: identifier.clone(),
             node_nick: identifier,
             node_description: format!("{} {}", APP_NAME, desc.name),
+            initial_volume: volume,
             app_id: APP_ID.to_string(),
             app_name: APP_NAME.to_lowercase(),
             linger: false,

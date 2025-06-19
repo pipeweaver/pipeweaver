@@ -30,6 +30,8 @@ pub enum PipewireMessage {
 
     SetFilterValue(Ulid, u32, FilterValue),
 
+    SetNodeVolume(Ulid, u8),
+
     DestroyUnmanagedLinks(u32),
 
     Quit,
@@ -54,6 +56,7 @@ pub enum PipewireInternalMessage {
     ),
 
     SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<()>>),
+    SetNodeVolume(Ulid, u8, oneshot::Sender<Result<()>>),
 
     DestroyUnmanagedLinks(u32, oneshot::Sender<Result<()>>),
     Quit(oneshot::Sender<Result<()>>),
@@ -68,6 +71,8 @@ pub enum PipewireReceiver {
 
     ApplicationAdded(ApplicationNode),
     ApplicationRemoved(u32),
+
+    NodeVolumeChanged(Ulid, u8),
 
     ManagedLinkDropped(LinkType, LinkType),
 }
@@ -153,6 +158,9 @@ impl PipewireRunner {
             PipewireMessage::SetFilterValue(id, prop, value) => {
                 PipewireInternalMessage::SetFilterValue(id, prop, value, tx)
             }
+            PipewireMessage::SetNodeVolume(id, volume) => {
+                PipewireInternalMessage::SetNodeVolume(id, volume, tx)
+            }
             PipewireMessage::Quit => PipewireInternalMessage::Quit(tx),
         };
 
@@ -221,6 +229,9 @@ pub struct NodeProperties {
     pub node_nick: String,
     pub node_description: String,
 
+    // Setup
+    pub initial_volume: u8,
+
     // App specific variables..
     pub app_id: String,
     pub app_name: String,
@@ -286,6 +297,7 @@ pub enum FilterValue {
     UInt8(u8),
     UInt32(u32),
     String(String),
+    Bool(bool),
 }
 
 pub struct FilterProperty {

@@ -4,7 +4,8 @@ use crate::registry::{
     RegistryFactory, RegistryLink,
 };
 use crate::{ApplicationNode, DeviceNode, FilterValue, LinkType, MediaClass, PipewireReceiver};
-use anyhow::bail;
+use anyhow::Result;
+use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
 use log::{debug, error};
 use oneshot::Sender;
@@ -12,12 +13,17 @@ use parking_lot::RwLock;
 use pipewire::filter::{Filter, FilterListener, FilterPort};
 use pipewire::link::{Link, LinkListener};
 use pipewire::node::{Node, NodeListener};
-use pipewire::properties::Properties;
+use pipewire::properties::{properties, Properties};
 use pipewire::proxy::ProxyListener;
 use pipewire::spa::param::ParamType;
+use pipewire::spa::pod::serialize::PodSerializer;
+use pipewire::spa::pod::{object, Pod, Property, Value, ValueArray};
+use pipewire::spa::sys::SPA_PROP_channelVolumes;
+use pipewire::spa::utils;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::io::Cursor;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::mpsc;
@@ -158,6 +164,33 @@ impl Store {
                 }
             }
         }
+    }
+
+    // ----- NODE VOLUMES -----
+    pub fn set_volume(&mut self, id: Ulid, volume: u8) -> Result<()> {
+        let node = self.managed_nodes.get(&id).ok_or(anyhow!("Failed to find node"))?;
+
+        let volume = (volume as f32 / 100.0).powi(3);
+        debug!("Volume: {}", volume);
+        let pod = Value::Object(object! {
+                    utils::SpaTypes::ObjectParamProps,
+                    ParamType::Props,
+                    Property::new(SPA_PROP_channelVolumes, Value::ValueArray(ValueArray::Float(vec![volume, volume]))),
+                });
+
+        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod).unwrap();
+        let bytes = cursor.into_inner();
+        if let Some(bytes) = Pod::from_bytes(&bytes) {
+            debug!("[{} ]Setting: to {}", id, volume);
+            node.proxy.set_param(ParamType::Props, 0, bytes);
+        }
+        Ok(())
+    }
+
+    pub fn on_volume_change(&mut self, id: Ulid, volume: u8) {
+        debug!("Sending Volume Change, {}, {}", id, volume);
+        let _ = self.callback_tx.send(PipewireReceiver::NodeVolumeChanged(id, volume));
+        debug!("Message Sent: {}, {}", id, volume);
     }
 
     // ----- MANAGED FILTERS -----

@@ -1,13 +1,16 @@
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
+use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::ipc::IPCHandler;
 use crate::handler::primary_worker::{ManagerMessage, WorkerMessage};
 use crate::servers::http_server::MeterEvent;
 use enum_map::EnumMap;
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{APICommandResponse, AudioConfiguration, PhysicalDevice};
-use pipeweaver_pipewire::{ApplicationNode, DeviceNode, MediaClass, PipewireMessage, PipewireReceiver, PipewireRunner};
+use pipeweaver_pipewire::{
+    ApplicationNode, DeviceNode, MediaClass, PipewireMessage, PipewireReceiver, PipewireRunner,
+};
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::{DeviceType, Mix};
 use std::collections::HashMap;
@@ -102,11 +105,10 @@ impl PipewireManager {
         let (send, recv) = std::sync::mpsc::channel();
         let send_sync = send.clone();
 
-        // We need a largish buffer here because it's impossible to know how many devices pipewire
-        // is going to throw at us at any given time, and they're all processed sequentially.
-        // They'll also be sent while we're blocked loading the profile, so this needs to be
-        // large enough to accommodate them until the profile has finished loading.
-        let (send_async, mut recv_async) = mpsc::channel(256);
+        // We need a largish buffer here because it's impossible to know how much data pipewire is
+        // going to throw at us at any given point in time, especially seeing as devices and volume
+        // changes are going to flood in, especially on load.
+        let (send_async, mut recv_async) = mpsc::channel(2048);
 
         // Spawn up the Sync -> Async task loop
         let receiver = thread::spawn(|| run_receiver_wrapper(recv, send_async));
@@ -118,6 +120,10 @@ impl PipewireManager {
         if let Err(e) = self.load_profile().await {
             error!("Error Loading Profile: {}", e);
         }
+
+        // Wait 1 second to process volume inputs from Pipewire
+        let mut volumes_ready = false;
+        let mut volumes_ready_timer = Box::pin(sleep(Duration::from_secs(1)));
 
         // So these are small timers which are set up when a new device is sent to us. Rather than
         // immediately processing, we wait half a second to make sure the device doesn't disappear
@@ -219,8 +225,23 @@ impl PipewireManager {
                                 info!("Application Node Removed: {}, {}", node.node_id, node.name);
                             }
                         }
+                        PipewireReceiver::NodeVolumeChanged(id, volume) => {
+                            if volumes_ready {
+                                if let Err(e) = self.sync_node_volume(id, volume).await {
+                                    warn!("Error Setting Volume: {}", e);
+                                }
+                                if self.worker_sender.capacity() > 0 {
+                                    let _ = self.worker_sender.send(WorkerMessage::ProfileChanged).await;
+                                }
+                            }
+                        }
                         _ => {}
                     }
+                }
+                _ = Pin::as_mut(&mut volumes_ready_timer), if !volumes_ready => {
+                    debug!("Activating Pipewire Volume Manager");
+                    self.sync_all_pipewire_volumes().await;
+                    volumes_ready = true;
                 }
                 Some(node_id) = device_ready_rx.recv() => {
                     // A device has been sat here for 500ms without being removed

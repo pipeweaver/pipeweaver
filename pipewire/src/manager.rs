@@ -1,19 +1,16 @@
 use crate::registry::PipewireRegistry;
 use crate::store::{FilterStore, LinkStore, LinkStoreMap, NodeStore, PortLocation, Store};
-use crate::{registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties, PipewireInternalMessage, PipewireReceiver};
+use crate::{
+    registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties,
+    PipewireInternalMessage, PipewireReceiver,
+};
 use crate::{MediaClass, PWReceiver, PipewireMessage};
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use log::{debug, error, info};
 use pipewire::core::Core;
 use pipewire::filter::{Filter, FilterFlags, FilterState, PortFlags};
-use pipewire::keys::{
-    APP_ICON_NAME, APP_ID, APP_NAME, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME,
-    FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT,
-    MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION,
-    NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME,
-    NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME,
-};
+use pipewire::keys::{APP_ICON_NAME, APP_ID, APP_NAME, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_ID, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME};
 use pipewire::link::{Link, LinkListener, LinkState};
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
@@ -21,21 +18,24 @@ use pipewire::proxy::ProxyT;
 use pipewire::registry::Registry;
 use pipewire::spa::pod::builder::Builder;
 use pipewire::spa::pod::deserialize::PodDeserializer;
-use pipewire::spa::pod::{Pod, Value, ValueArray};
+use pipewire::spa::pod::{object, Pod, Property, PropertyFlags, Value, ValueArray};
 use pipewire::spa::sys::{
     spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position,
-    SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_TYPE_OBJECT_ParamProcessLatency,
-    SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR,
+    SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_PARAM_Props, SPA_PROP_channelVolumes,
+    SPA_TYPE_OBJECT_ParamProcessLatency, SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR,
 };
 use pipewire::spa::utils::Direction;
-
-use pipewire::{context, main_loop};
-use std::cell::RefCell;
 
 use enum_map::{enum_map, EnumMap};
 use oneshot::Sender;
 use parking_lot::RwLock;
+use pipewire::spa::param::ParamType;
+use pipewire::spa::pod::serialize::{PodSerialize, PodSerializer};
+use pipewire::spa::utils;
 use pipewire::sys::pw_impl_link_destroy;
+use pipewire::{context, main_loop};
+use std::cell::RefCell;
+use std::io::Cursor;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::mpsc;
@@ -87,7 +87,7 @@ impl PipewireManager {
             *MEDIA_ICON_NAME => &*properties.app_id,
             *DEVICE_ICON_NAME => &*properties.app_id,
 
-            *APP_NAME => properties.app_name,
+            //*APP_NAME => properties.app_name,
             *OBJECT_LINGER => match properties.linger {
                 true => "true",
                 false => "false"
@@ -101,7 +101,6 @@ impl PipewireManager {
             *AUDIO_CHANNELS => "2",
             *NODE_LATENCY => format!("{}/{}", properties.buffer, SAMPLE_RATE),
             *NODE_MAX_LATENCY => format!("{}/{}", properties.buffer, SAMPLE_RATE),
-
 
             // Force the QUANTUM and the RATE to ensure that we're not internally adjusted when
             // latency occurs following a link
@@ -129,7 +128,7 @@ impl PipewireManager {
             "monitor.channel-volumes" => "false",
 
             // Keep the monitor as close to 'real-time' as possible
-            "monitor.passthrough" => "false",
+            "monitor.passthrough" => "true",
         };
 
         debug!(
@@ -142,6 +141,20 @@ impl PipewireManager {
             .core
             .create_object::<pipewire::node::Node>("adapter", node_properties)
             .map_err(|e| anyhow!("Unable to Create Node {}", e))?;
+
+        // Set the Initial volume
+        let volume = (properties.initial_volume as f32 / 100.0).powi(3);
+        let pod = Value::Object(object! {
+            utils::SpaTypes::ObjectParamProps,
+            ParamType::Props,
+            Property::new(SPA_PROP_channelVolumes, Value::ValueArray(ValueArray::Float(vec![volume, volume]))),
+        });
+
+        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod)?;
+        let bytes = cursor.into_inner();
+        if let Some(bytes) = Pod::from_bytes(&bytes) {
+            proxy.set_param(ParamType::Props, 0, bytes);
+        }
 
         debug!("[{}] Registering Proxy Listener", properties.node_id);
         let proxy_id = properties.node_id;
@@ -167,11 +180,11 @@ impl PipewireManager {
         let listener = proxy
             .add_listener_local()
             .info(move |info| {
-                // Check whether this is a PORT related message..
+                // Check whether this is a PORT related message
                 if info.change_mask().contains(NodeChangeMask::INPUT_PORTS)
                     || info.change_mask().contains(NodeChangeMask::OUTPUT_PORTS)
                 {
-                    // Now check whether our port count matches what's expected..
+                    // Now check whether our port count matches what's expected
                     if info.n_input_ports() == 2 && info.n_output_ports() == 2 {
                         debug!(
                             "[{}] Ports have appeared, requesting configuration",
@@ -184,10 +197,8 @@ impl PipewireManager {
                 }
             })
             .param(move |_seq, _type, _index, _next, _param| {
-                //debug!("Seq: {}, ID: {:?}, Index: {}, Next: {}", _seq, _type, _index, _next);
                 if let Some(pod) = _param {
                     let pod = PodDeserializer::deserialize_any_from(pod.as_bytes()).map(|(_, v)| v);
-
                     if let Ok(Value::Object(object)) = pod {
                         if object.id == SPA_PARAM_PortConfig {
                             debug!("[{}] Port configuration Received", listener_id);
@@ -228,17 +239,36 @@ impl PipewireManager {
                                                     );
                                                 }
                                             }
-                                            return;
                                         }
                                     }
                                 }
                             }
-                        }
+                        } else if object.id == SPA_PARAM_Props {
+                            let prop = object
+                                .properties
+                                .iter()
+                                .find(|p| p.key == SPA_PROP_channelVolumes);
 
-                        error!("Parameter Parse Error, Message was not of expected type");
-                        debug!("Object Id: {}", object.id);
-                        for property in object.properties {
-                            debug!("Key: {}, Value: {:?}", property.key, property.value);
+                            // Get the Left / Right value
+                            if let Some(prop) = prop {
+                                if let Value::ValueArray(ValueArray::Float(value)) = &prop.value {
+                                    // OK, so KDE and pwvucontrol use the highest value for their reference
+                                    let max = value
+                                        .iter()
+                                        .copied()
+                                        .max_by(|a, b| a.partial_cmp(b).unwrap())
+                                        .unwrap();
+
+                                    let volume = (max.cbrt() * 100.0).round() as u8;
+                                    listener_param_store.borrow_mut().on_volume_change(listener_id, volume);
+                                }
+                            }
+                        } else {
+                            error!("Parameter Parse Error, Message was not of expected type");
+                            debug!("Object Id: {}", object.id);
+                            for property in object.properties {
+                                debug!("Key: {}, Value: {:?}", property.key, property.value);
+                            }
                         }
                     } else {
                         error!("Unexpected Value Type");
@@ -246,6 +276,7 @@ impl PipewireManager {
                 }
             })
             .register();
+        proxy.subscribe_params(&[ParamType::Props]);
 
         let store = NodeStore {
             pw_id: None,
@@ -616,6 +647,10 @@ impl PipewireManager {
 
         Ok((link, link_listener))
     }
+
+    fn set_node_volume(&mut self, id: Ulid, volume: u8) -> Result<()> {
+        self.store.borrow_mut().set_volume(id, volume)
+    }
 }
 
 pub fn run_pw_main_loop(
@@ -703,6 +738,10 @@ pub fn run_pw_main_loop(
 
             PipewireInternalMessage::SetFilterValue(id, key, value, result) => {
                 let _ = result.send(manager.borrow_mut().set_filter_value(id, key, value));
+            }
+
+            PipewireInternalMessage::SetNodeVolume(id, volume, result) => {
+                let _ = result.send(manager.borrow_mut().set_node_volume(id, volume));
             }
         }
     });

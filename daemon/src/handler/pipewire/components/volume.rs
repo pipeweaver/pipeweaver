@@ -5,6 +5,7 @@ use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{anyhow, bail, Result};
 use log::debug;
+use pipeweaver_pipewire::PipewireMessage;
 use pipeweaver_profile::Volumes;
 use pipeweaver_shared::{Mix, MuteState, NodeType};
 use ulid::Ulid;
@@ -13,10 +14,13 @@ pub(crate) trait VolumeManager {
     async fn volumes_load(&self) -> Result<()>;
     async fn load_initial_volume(&self, id: Ulid) -> Result<()>;
 
-    async fn set_source_node_volume(&mut self, id: Ulid, mix: Mix, volume: u8) -> Result<()>;
+    async fn sync_all_pipewire_volumes(&mut self);
+    async fn sync_node_volume(&mut self, id: Ulid, volume: u8) -> Result<()>;
+
+    async fn set_source_volume(&mut self, id: Ulid, mix: Mix, volume: u8, api: bool) -> Result<()>;
     async fn set_source_volume_linked(&mut self, id: Ulid, linked: bool) -> Result<()>;
 
-    async fn set_target_node_volume(&mut self, id: Ulid, volume: u8) -> Result<()>;
+    async fn set_target_volume(&mut self, id: Ulid, volume: u8, from_api: bool) -> Result<()>;
     fn get_node_volume(&self, id: Ulid, mix: Mix) -> Result<u8>;
 }
 
@@ -62,8 +66,38 @@ impl VolumeManager for PipewireManager {
         Ok(())
     }
 
+    async fn sync_all_pipewire_volumes(&mut self) {
+        for &id in self.source_map.keys() {
+            if let Ok(volume) = self.get_node_volume(id, Mix::A) {
+                let message = PipewireMessage::SetNodeVolume(id, volume);
+                let _ = self.pipewire().send_message(message);
+            }
+        }
 
-    async fn set_source_node_volume(&mut self, id: Ulid, mix: Mix, volume: u8) -> Result<()> {
+        for &id in self.target_map.keys() {
+            if let Ok(volume) = self.get_node_volume(id, Mix::A) {
+                let message = PipewireMessage::SetNodeVolume(id, volume);
+                let _ = self.pipewire().send_message(message);
+            }
+        }
+    }
+
+    async fn sync_node_volume(&mut self, id: Ulid, volume: u8) -> Result<()> {
+        let node_type = self.get_node_type(id).ok_or(anyhow!("Node Not Found"))?;
+        match node_type {
+            NodeType::PhysicalSource | NodeType::VirtualSource => {
+                debug!("Setting Volume: {}", volume);
+                self.set_source_volume(id, Mix::A, volume, false).await?;
+            }
+            NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                self.set_target_volume(id, volume, false).await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn set_source_volume(&mut self, id: Ulid, mix: Mix, volume: u8, api: bool) -> Result<()> {
         if !(0..=100).contains(&volume) {
             bail!("Volume Must be between 0 and 100");
         }
@@ -90,8 +124,20 @@ impl VolumeManager for PipewireManager {
 
         self.volume_set_source(id, mix, volume).await?;
 
+        // If this is coming from the API for Mix A, update the pipewire node volume
+        if mix == Mix::A && api {
+            let message = PipewireMessage::SetNodeVolume(id, volume);
+            let _ = self.pipewire().send_message(message);
+        }
+
         // If we're linked, update the other Mix as well
         if let Some(volume) = update_other {
+            // If the original request was for B, but we're changing A, tell pipewire
+            if mix == Mix::B && api {
+                let message = PipewireMessage::SetNodeVolume(id, volume);
+                let _ = self.pipewire().send_message(message);
+            }
+
             self.volume_set_source(id, other_mix, volume).await?;
         }
 
@@ -123,7 +169,7 @@ impl VolumeManager for PipewireManager {
         Ok(())
     }
 
-    async fn set_target_node_volume(&mut self, id: Ulid, volume: u8) -> Result<()> {
+    async fn set_target_volume(&mut self, id: Ulid, volume: u8, api: bool) -> Result<()> {
         if !(0..=100).contains(&volume) {
             bail!("Volume Must be between 0 and 100");
         }
@@ -143,7 +189,6 @@ impl VolumeManager for PipewireManager {
         Ok(())
     }
 
-
     fn get_node_volume(&self, id: Ulid, mix: Mix) -> Result<u8> {
         let err = anyhow!("Node not Found: {}", id);
         let node_type = self.get_node_type(id).ok_or(err)?;
@@ -156,12 +201,8 @@ impl VolumeManager for PipewireManager {
             NodeType::VirtualSource => {
                 Ok(self.get_virtual_source(id).ok_or(err)?.volumes.volume[mix])
             }
-            NodeType::PhysicalTarget => {
-                Ok(self.get_physical_target(id).ok_or(err)?.volume)
-            }
-            NodeType::VirtualTarget => {
-                Ok(self.get_virtual_target(id).ok_or(err)?.volume)
-            }
+            NodeType::PhysicalTarget => Ok(self.get_physical_target(id).ok_or(err)?.volume),
+            NodeType::VirtualTarget => Ok(self.get_virtual_target(id).ok_or(err)?.volume),
         }
     }
 }
@@ -207,7 +248,6 @@ impl VolumeManagerLocal for PipewireManager {
             Ok(&mut self.get_virtual_source_mut(id).ok_or(anyhow!("Node not Found"))?.volumes)
         }
     }
-
 
     async fn volume_source_load_with_mute(&self, id: Ulid) -> Result<()> {
         let err = anyhow!("Unable to Locate Node");
