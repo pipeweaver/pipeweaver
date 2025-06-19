@@ -1,4 +1,3 @@
-use log::debug;
 use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
 use tokio::sync::mpsc;
 use ulid::Ulid;
@@ -64,7 +63,6 @@ impl FilterHandler for MeterFilter {
         match id {
             0 => {
                 if let FilterValue::Bool(value) = value {
-                    debug!("Changing Enabled State: {}", value);
                     self.enabled = value;
                 } else {
                     panic!("Attempted to Toggle Meter without Bool type");

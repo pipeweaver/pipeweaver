@@ -171,7 +171,6 @@ impl Store {
         let node = self.managed_nodes.get(&id).ok_or(anyhow!("Failed to find node"))?;
 
         let volume = (volume as f32 / 100.0).powi(3);
-        debug!("Volume: {}", volume);
         let pod = Value::Object(object! {
                     utils::SpaTypes::ObjectParamProps,
                     ParamType::Props,
@@ -181,16 +180,13 @@ impl Store {
         let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod).unwrap();
         let bytes = cursor.into_inner();
         if let Some(bytes) = Pod::from_bytes(&bytes) {
-            debug!("[{} ]Setting: to {}", id, volume);
             node.proxy.set_param(ParamType::Props, 0, bytes);
         }
         Ok(())
     }
 
     pub fn on_volume_change(&mut self, id: Ulid, volume: u8) {
-        debug!("Sending Volume Change, {}, {}", id, volume);
         let _ = self.callback_tx.send(PipewireReceiver::NodeVolumeChanged(id, volume));
-        debug!("Message Sent: {}, {}", id, volume);
     }
 
     // ----- MANAGED FILTERS -----
