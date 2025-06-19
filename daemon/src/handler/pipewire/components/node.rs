@@ -395,7 +395,9 @@ impl NodeManagementLocal for PipewireManager {
         // Create and attach a meter
         let filter_name = format!("{}-meter", desc.name);
         let meter = self.filter_meter_create(desc.id, filter_name).await?;
-        self.link_create_filter_to_filter(desc.id, meter).await?;
+        if self.meter_enabled {
+            self.link_create_filter_to_filter(desc.id, meter).await?;
+        }
         self.meter_map.insert(desc.id, meter);
 
         let (mix_a, mix_b) = self.node_create_a_b_volumes(desc).await?;
@@ -422,7 +424,9 @@ impl NodeManagementLocal for PipewireManager {
         let meter = self.filter_meter_create(desc.id, filter_name).await?;
 
         // Attach this to the original source
-        self.link_create_node_to_filter(desc.id, meter).await?;
+        if self.meter_enabled {
+            self.link_create_node_to_filter(desc.id, meter).await?;
+        }
         self.meter_map.insert(desc.id, meter);
 
         // Generate the A/B Mixes
@@ -447,7 +451,9 @@ impl NodeManagementLocal for PipewireManager {
 
         let filter_name = format!("{}-meter", desc.name);
         let meter = self.filter_meter_create(desc.id, filter_name).await?;
-        self.link_create_filter_to_filter(desc.id, meter).await?;
+        if self.meter_enabled {
+            self.link_create_filter_to_filter(desc.id, meter).await?;
+        }
         self.meter_map.insert(desc.id, meter);
 
         Ok(())
@@ -465,7 +471,9 @@ impl NodeManagementLocal for PipewireManager {
         // Create a meter and attach it to the volume
         let filter_name = format!("{}-meter", desc.name);
         let meter = self.filter_meter_create(desc.id, filter_name).await?;
-        self.link_create_filter_to_filter(volume, meter).await?;
+        if self.meter_enabled {
+            self.link_create_filter_to_filter(volume, meter).await?;
+        }
         self.meter_map.insert(desc.id, meter);
 
         // Map this Node to this Volume
@@ -507,7 +515,9 @@ impl NodeManagementLocal for PipewireManager {
 
         // Detach and destroy the Meter
         if let Some(&meter) = self.meter_map.get(&id) {
-            self.link_remove_filter_to_filter(id, meter).await?;
+            if self.meter_enabled {
+                self.link_remove_filter_to_filter(id, meter).await?;
+            }
             self.filter_remove(meter).await?;
         }
 
@@ -571,7 +581,9 @@ impl NodeManagementLocal for PipewireManager {
 
         // Detach and destroy the Meter
         if let Some(&meter) = self.meter_map.get(&id) {
-            self.link_remove_node_to_filter(id, meter).await?;
+            if self.meter_enabled {
+                self.link_remove_node_to_filter(id, meter).await?;
+            }
             self.filter_remove(meter).await?;
         }
 
@@ -612,7 +624,9 @@ impl NodeManagementLocal for PipewireManager {
 
         // Detach and destroy the Meter
         if let Some(&meter) = self.meter_map.get(&id) {
-            self.link_remove_filter_to_filter(id, meter).await?;
+            if self.meter_enabled {
+                self.link_remove_filter_to_filter(id, meter).await?;
+            }
             self.filter_remove(meter).await?;
         }
 
@@ -668,7 +682,9 @@ impl NodeManagementLocal for PipewireManager {
         if let Some(volume) = self.target_map.clone().get(&id) {
             // Detach and destroy the Meter
             if let Some(&meter) = self.meter_map.get(&id) {
-                self.link_remove_filter_to_filter(*volume, meter).await?;
+                if self.meter_enabled {
+                    self.link_remove_filter_to_filter(*volume, meter).await?;
+                }
                 self.filter_remove(meter).await?;
             }
 

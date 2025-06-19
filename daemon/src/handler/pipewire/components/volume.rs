@@ -1,9 +1,10 @@
 use crate::handler::pipewire::components::filters::FilterManagement;
+use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::mute::MuteManager;
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Error, Result};
 use log::debug;
 use pipeweaver_pipewire::{FilterValue, PipewireMessage};
 use pipeweaver_profile::Volumes;
@@ -192,13 +193,51 @@ impl VolumeManager for PipewireManager {
     }
 
     async fn set_metering(&mut self, enabled: bool) -> Result<()> {
-        for &meter in self.meter_map.values() {
+        if enabled == self.meter_enabled {
+            // Nothing to do, changing to existing state.
+            return Ok(());
+        }
+
+        for (&node, &meter) in &self.meter_map {
             let message = PipewireMessage::SetFilterValue(meter, 0, FilterValue::Bool(enabled));
             self.pipewire().send_message(message)?;
+
+            let node_type = match self.get_node_type(node) {
+                Some(node_type) => node_type,
+                None => {
+                    debug!("Failed to get Node Type for {}", node);
+                    bail!("Unable to obtain node type");
+                }
+            };
+            match node_type {
+                NodeType::PhysicalSource | NodeType::PhysicalTarget => {
+                    if enabled {
+                        self.link_create_filter_to_filter(node, meter).await?;
+                    } else {
+                        self.link_remove_filter_to_filter(node, meter).await?;
+                    }
+                }
+                NodeType::VirtualSource => {
+                    if enabled {
+                        self.link_create_node_to_filter(node, meter).await?;
+                    } else {
+                        self.link_remove_node_to_filter(node, meter).await?;
+                    }
+                }
+                NodeType::VirtualTarget => {
+                    // Virtual Targets need to be attached / detached against the volume
+                    let &volume = self.target_map.get(&node).ok_or(anyhow!("Nope"))?;
+                    if enabled {
+                        self.link_create_filter_to_filter(volume, meter).await?;
+                    } else {
+                        self.link_remove_filter_to_filter(volume, meter).await?;
+                    }
+                }
+            }
         }
+        self.meter_enabled = enabled;
         Ok(())
     }
-
 
     fn get_node_volume(&self, id: Ulid, mix: Mix) -> Result<u8> {
         let err = anyhow!("Node not Found: {}", id);

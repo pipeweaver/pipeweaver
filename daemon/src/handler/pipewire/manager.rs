@@ -41,6 +41,7 @@ pub(crate) struct PipewireManager {
     pub(crate) physical_target: HashMap<Ulid, Vec<u32>>,
 
     // Maps node to a Meter
+    pub(crate) meter_enabled: bool,
     pub(crate) meter_map: HashMap<Ulid, Ulid>,
     pub(crate) meter_callback: Sender<(Ulid, u8)>,
 
@@ -74,6 +75,7 @@ impl PipewireManager {
             physical_source: HashMap::default(),
             physical_target: HashMap::default(),
 
+            meter_enabled: false,
             meter_map: HashMap::default(),
             meter_callback: meter_tx,
             meter_receiver: Some(meter_rx),
