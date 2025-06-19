@@ -58,7 +58,7 @@ pub(crate) struct PipewireManager {
 
 impl PipewireManager {
     pub fn new(config: PipewireManagerConfig) -> Self {
-        let (meter_tx, meter_rx) = mpsc::channel(128);
+        let (meter_tx, meter_rx) = mpsc::channel(32);
 
         Self {
             command_receiver: config.command_receiver,
@@ -146,6 +146,7 @@ impl PipewireManager {
 
         // Pull out the Meter Receiver
         let mut meter_receiver = self.meter_receiver.take().unwrap();
+        let mut meter_buffer: Vec<(Ulid, u8)> = Vec::with_capacity(64);
 
         loop {
             select!(
@@ -283,12 +284,15 @@ impl PipewireManager {
                         panic!("Got a Timer Ready for non-existent Node");
                     }
                 }
-                Some((id, percent)) = meter_receiver.recv() => {
-                    // Broadcast this out to anything listening
-                    let _ = self.meter_broadcast.send(MeterEvent {
-                        id,
-                        percent
-                    });
+                result = meter_receiver.recv_many(&mut meter_buffer, 64) => {
+                    if result > 0 {
+                        for (id, percent) in meter_buffer.drain(..result) {
+                            let _ = self.meter_broadcast.send(MeterEvent {
+                                id,
+                                percent
+                            });
+                        }
+                    }
                 }
             );
         }
