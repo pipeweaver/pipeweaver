@@ -5,7 +5,7 @@ use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{anyhow, bail, Result};
 use log::debug;
-use pipeweaver_pipewire::PipewireMessage;
+use pipeweaver_pipewire::{FilterValue, PipewireMessage};
 use pipeweaver_profile::Volumes;
 use pipeweaver_shared::{Mix, MuteState, NodeType};
 use ulid::Ulid;
@@ -21,6 +21,8 @@ pub(crate) trait VolumeManager {
     async fn set_source_volume_linked(&mut self, id: Ulid, linked: bool) -> Result<()>;
 
     async fn set_target_volume(&mut self, id: Ulid, volume: u8, from_api: bool) -> Result<()>;
+
+    async fn set_metering(&mut self, enabled: bool) -> Result<()>;
     fn get_node_volume(&self, id: Ulid, mix: Mix) -> Result<u8>;
 }
 
@@ -188,6 +190,15 @@ impl VolumeManager for PipewireManager {
 
         Ok(())
     }
+
+    async fn set_metering(&mut self, enabled: bool) -> Result<()> {
+        for &meter in self.meter_map.values() {
+            let message = PipewireMessage::SetFilterValue(meter, 0, FilterValue::Bool(enabled));
+            self.pipewire().send_message(message)?;
+        }
+        Ok(())
+    }
+
 
     fn get_node_volume(&self, id: Ulid, mix: Mix) -> Result<u8> {
         let err = anyhow!("Node not Found: {}", id);

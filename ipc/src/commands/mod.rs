@@ -24,6 +24,7 @@ pub struct WebsocketRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)]
 pub enum DaemonResponse {
     Ok,
     Err(String),
@@ -39,7 +40,9 @@ pub struct WebsocketResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DaemonCommand {}
+pub enum DaemonCommand {
+    SetMetering(bool),
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum APICommand {

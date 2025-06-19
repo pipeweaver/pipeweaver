@@ -1,6 +1,6 @@
 use crate::handler::messaging::DaemonMessage;
 use crate::handler::pipewire::manager::{run_pipewire_manager, PipewireManagerConfig};
-use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfiguration};
+use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfiguration, SetMetering};
 use crate::servers::http_server::{MeterEvent, PatchEvent};
 use crate::stop::Stop;
 use crate::APP_NAME_ID;
@@ -8,9 +8,7 @@ use anyhow::Context;
 use anyhow::Result;
 use json_patch::diff;
 use log::{debug, error, info, warn};
-use pipeweaver_ipc::commands::{
-    APICommand, APICommandResponse, AudioConfiguration, DaemonResponse, DaemonStatus,
-};
+use pipeweaver_ipc::commands::{APICommand, APICommandResponse, AudioConfiguration, DaemonCommand, DaemonResponse, DaemonStatus};
 use pipeweaver_profile::Profile;
 use std::fs;
 use std::fs::{create_dir_all, File};
@@ -132,7 +130,12 @@ impl PrimaryWorker {
             DaemonMessage::GetStatus(tx) => {
                 let _ = tx.send(self.last_status.clone());
             }
-            DaemonMessage::RunDaemon(_command, tx) => {
+            DaemonMessage::RunDaemon(command, tx) => {
+                match command {
+                    DaemonCommand::SetMetering(enabled) => {
+                        let _ = pw_tx.send(SetMetering(enabled)).await;
+                    }
+                }
                 let _ = tx.send(DaemonResponse::Ok);
                 update = true;
             }
@@ -235,6 +238,7 @@ impl PrimaryWorker {
 pub enum ManagerMessage {
     Execute(APICommand, oneshot::Sender<APICommandResponse>),
     GetAudioConfiguration(oneshot::Sender<AudioConfiguration>),
+    SetMetering(bool),
     Quit,
 }
 

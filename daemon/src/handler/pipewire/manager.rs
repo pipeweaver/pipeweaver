@@ -161,6 +161,9 @@ impl PipewireManager {
                         ManagerMessage::GetAudioConfiguration(tx) => {
                             let _ = tx.send(self.get_audio_config().await);
                         }
+                        ManagerMessage::SetMetering(enabled) => {
+                            let _ = self.set_metering(enabled).await;
+                        }
                         ManagerMessage::Quit => {
                             info!("[Manager] Stopping");
                             break;

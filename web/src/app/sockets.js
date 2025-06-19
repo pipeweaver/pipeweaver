@@ -71,6 +71,10 @@ export class Websocket {
     })
   }
 
+  is_connected() {
+    return (this.#websocket.readyState === WebSocket.OPEN);
+  }
+
   on_disconnect(func) {
     this.#disconnect_callback = func
   }
@@ -181,8 +185,18 @@ export class WebsocketMeter {
   }
 }
 
+let window_visible = true;
 export const websocket_meter = new WebsocketMeter()
-
+document.addEventListener("visibilitychange", () => {
+  window_visible = !document.hidden;
+  if (window_visible) {
+    if (websocket.is_connected()) {
+      websocket_meter.connect();
+    }
+  } else {
+    websocket_meter.disconnect();
+  }
+});
 
 export function runWebsocket() {
   console.log('Connecting..')
@@ -192,8 +206,10 @@ export function runWebsocket() {
     .then(() => {
       // We got a connection, try fetching the status...
       websocket.get_status().then((data) => {
-        websocket_meter.connect();
         store.socketConnected(data)
+        if (window_visible) {
+          websocket_meter.connect();
+        }
 
         websocket.on_disconnect(() => {
           websocket_meter.disconnect();

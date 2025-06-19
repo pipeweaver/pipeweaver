@@ -1,5 +1,3 @@
-use std::ops::DerefMut;
-
 use crate::handler::packet::{handle_packet, Messenger};
 use crate::APP_NAME;
 use actix::{
@@ -19,17 +17,22 @@ use include_dir::{include_dir, Dir};
 use json_patch::Patch;
 use log::{debug, error, info, warn};
 use mime_guess::MimeGuess;
+use pipeweaver_ipc::commands::DaemonCommand::SetMetering;
 use pipeweaver_ipc::commands::{
     DaemonRequest, DaemonResponse, DaemonStatus, HttpSettings, WebsocketRequest, WebsocketResponse,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::ops::DerefMut;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::oneshot::Sender;
 use tokio::sync::Mutex;
 use ulid::Ulid;
 
 const WEB_CONTENT: Dir = include_dir!("./daemon/web-content/");
+type ClientCounter = Arc<AtomicUsize>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Message)]
 #[rtype(result = "()")]
@@ -39,6 +42,8 @@ pub struct MeterEvent {
 }
 
 struct MeterWebsocket {
+    messenger: Messenger,
+    client_counter: ClientCounter,
     broadcast_tx: BroadcastSender<MeterEvent>,
 }
 
@@ -60,8 +65,32 @@ impl Actor for MeterWebsocket {
             }
         });
 
+        let count = self.client_counter.fetch_add(1, Ordering::SeqCst);
+        if count == 0 {
+            debug!("Client Connected, starting metering...");
+            let messenger = self.messenger.clone();
+            let future = async move {
+                let request = DaemonRequest::Daemon(SetMetering(true));
+                let _ = handle_packet(request, messenger).await;
+            };
+            future.into_actor(self).spawn(ctx);
+        }
+
         let future = future.into_actor(self);
         ctx.spawn(future);
+    }
+
+    fn stopped(&mut self, ctx: &mut Self::Context) {
+        let count = self.client_counter.fetch_sub(1, Ordering::SeqCst) - 1;
+        if count == 0 {
+            // No clients left connected, terminate metering
+            debug!("Last Client disconnected, stopping metering");
+            let messenger = self.messenger.clone();
+            actix::spawn(async move {
+                let request = DaemonRequest::Daemon(SetMetering(false));
+                let _ = handle_packet(request, messenger).await;
+            });
+        }
     }
 }
 
@@ -78,12 +107,9 @@ impl Handler<MeterEvent> for MeterWebsocket {
 impl StreamHandler<Result<ws::Message, ProtocolError>> for MeterWebsocket {
     fn handle(&mut self, item: Result<ws::Message, ProtocolError>, ctx: &mut Self::Context) {
         // This is an omi-directional stream, all we need to check for is close
-        match item {
-            Ok(ws::Message::Close(reason)) => {
-                ctx.close(reason);
-                ctx.stop();
-            }
-            _ => {}
+        if let Ok(ws::Message::Close(reason)) = item {
+            ctx.close(reason);
+            ctx.stop();
         }
     }
 }
@@ -256,6 +282,7 @@ struct AppData {
     messenger: Messenger,
     broadcast_tx: BroadcastSender<PatchEvent>,
     meter_tx: BroadcastSender<MeterEvent>,
+    client_counter: ClientCounter,
 }
 
 pub async fn spawn_http_server(
@@ -265,6 +292,7 @@ pub async fn spawn_http_server(
     meter_tx: tokio::sync::broadcast::Sender<MeterEvent>,
     settings: HttpSettings,
 ) {
+    let client_counter = Arc::new(AtomicUsize::new(0));
     let server = HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin_fn(|origin, _req_head| {
@@ -280,6 +308,7 @@ pub async fn spawn_http_server(
                 messenger: messenger.clone(),
                 broadcast_tx: broadcast_tx.clone(),
                 meter_tx: meter_tx.clone(),
+                client_counter: client_counter.clone(),
             })))
             .service(execute_command)
             .service(get_devices)
@@ -339,7 +368,9 @@ async fn websocket_meter(
 
     ws::start(
         MeterWebsocket {
+            messenger: data.messenger.clone(),
             broadcast_tx: data.meter_tx.clone(),
+            client_counter: data.client_counter.clone(),
         },
         &req,
         stream,

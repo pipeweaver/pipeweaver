@@ -1,3 +1,4 @@
+use log::debug;
 use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
 use tokio::sync::mpsc;
 use ulid::Ulid;
@@ -28,7 +29,7 @@ pub struct MeterFilter {
 impl MeterFilter {
     pub(crate) fn new(node_id: Ulid, callback: mpsc::Sender<(Ulid, u8)>) -> Self {
         Self {
-            enabled: true,
+            enabled: false,
 
             count: 0,
             peak: 0.0,
@@ -63,6 +64,7 @@ impl FilterHandler for MeterFilter {
         match id {
             0 => {
                 if let FilterValue::Bool(value) = value {
+                    debug!("Changing Enabled State: {}", value);
                     self.enabled = value;
                 } else {
                     panic!("Attempted to Toggle Meter without Bool type");
@@ -73,7 +75,7 @@ impl FilterHandler for MeterFilter {
     }
 
     fn process_samples(&mut self, inputs: Vec<&mut [f32]>, mut _outputs: Vec<&mut [f32]>) {
-        if inputs.is_empty() {
+        if !self.enabled || inputs.is_empty() {
             return;
         }
 
