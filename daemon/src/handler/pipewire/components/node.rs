@@ -599,15 +599,16 @@ impl NodeManagementLocal for PipewireManager {
             // Remove Routing from the Profile Tree
             self.profile.routes.remove(&id);
 
+            // Remove it from the order tree
+            let device_order = self.get_device_order_group(id)?;
+            Self::find_order_group_by_id(id, device_order)?.retain(|d| d != &id);
+
             // And finally, remove the Node from the profile tree
             self.profile
                 .devices
                 .sources
                 .virtual_devices
                 .retain(|device| device.description.id != id);
-
-            let device_order = self.get_device_order_group(id)?;
-            Self::find_order_group_by_id(id, device_order)?.retain(|d| d != &id);
         }
         Ok(())
     }
@@ -665,15 +666,16 @@ impl NodeManagementLocal for PipewireManager {
         self.physical_target.remove(&id);
 
         if profile_remove {
+            // Remove from the Order tree
+            let device_order = self.get_device_order_group(id)?;
+            Self::find_order_group_by_id(id, device_order)?.retain(|d| d != &id);
+
             // And finally, remove the Node from the profile tree
             self.profile
                 .devices
                 .targets
                 .physical_devices
                 .retain(|device| device.description.id != id);
-
-            let device_order = self.get_device_order_group(id)?;
-            Self::find_order_group_by_id(id, device_order)?.retain(|d| d != &id);
         }
 
         Ok(())
