@@ -519,6 +519,7 @@ impl NodeManagementLocal for PipewireManager {
                 self.link_remove_filter_to_filter(id, meter).await?;
             }
             self.filter_remove(meter).await?;
+            self.meter_map.remove(&id);
         }
 
         // Next, we detach the links from the pass through to the A/B mixes
@@ -585,6 +586,7 @@ impl NodeManagementLocal for PipewireManager {
                 self.link_remove_node_to_filter(id, meter).await?;
             }
             self.filter_remove(meter).await?;
+            self.meter_map.remove(&id);
         }
 
         // Remove the Node from the Pipewire tree
@@ -628,6 +630,7 @@ impl NodeManagementLocal for PipewireManager {
                 self.link_remove_filter_to_filter(id, meter).await?;
             }
             self.filter_remove(meter).await?;
+            self.meter_map.remove(&id);
         }
 
         // Next, we need to detach anything that may be routing to us
@@ -686,6 +689,7 @@ impl NodeManagementLocal for PipewireManager {
                     self.link_remove_filter_to_filter(*volume, meter).await?;
                 }
                 self.filter_remove(meter).await?;
+                self.meter_map.remove(&id);
             }
 
             // Detach from the Volume Filter to the Target Node
