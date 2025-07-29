@@ -62,14 +62,12 @@ Implemented:
 Planned:
 
 * Command Line configuration tool
-* Channel Re-ordering
 * Tray Icon and .desktop Files
 * Custom Channel Colours
 * A 'Tablet Mode' interface
 * Multiple Profile Support
 * Latency Tuning
 * Useful Documentation
-* Channel Metering
 
 Possible Future Plans:
 
