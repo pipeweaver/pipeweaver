@@ -7,11 +7,12 @@ use crate::{ApplicationNode, DeviceNode, FilterValue, LinkType, MediaClass, Pipe
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
-use log::{debug, error};
+use log::{debug, error, info, warn};
 use oneshot::Sender;
 use parking_lot::RwLock;
 use pipewire::filter::{Filter, FilterListener, FilterPort};
 use pipewire::link::{Link, LinkListener};
+use pipewire::metadata::Metadata;
 use pipewire::node::{Node, NodeListener};
 use pipewire::properties::{properties, Properties};
 use pipewire::proxy::ProxyListener;
@@ -32,6 +33,9 @@ use strum_macros::EnumIter;
 use ulid::Ulid;
 
 pub struct Store {
+    // The main Session Proxy Metadata
+    session_proxy: Option<Metadata>,
+
     // Pipewire Factories, helps us track types
     factories: HashMap<u32, RegistryFactory>,
 
@@ -61,6 +65,8 @@ pub struct Store {
 impl Store {
     pub fn new(callback_tx: mpsc::Sender<PipewireReceiver>) -> Self {
         Self {
+            session_proxy: None,
+
             factories: HashMap::new(),
 
             managed_nodes: HashMap::new(),
@@ -80,6 +86,16 @@ impl Store {
 
             callback_tx,
         }
+    }
+
+    // Session Handler
+    pub fn set_session_proxy(&mut self, proxy: Metadata) {
+        if self.session_proxy.is_some() {
+            warn!("Attempting to redefine default Session Manager, aborting.");
+            return;
+        }
+        info!("Session Proxy Found");
+        self.session_proxy = Some(proxy);
     }
 
     // ----- FACTORIES -----
@@ -455,47 +471,6 @@ impl Store {
     }
 
     pub fn is_usable_unmanaged_client_node(&self, id: u32) -> Option<MediaClass> {
-        // There are several checks we need to do here first
-        // if let Some(node) = self.unmanaged_client_nodes.get(&id) {
-        //     // If we don't have a name or description, we can't use this node
-        //     if node.application_name.is_empty() || node.node_name.is_empty() {
-        //         return None;
-        //     }
-        //
-        //     // Our Managed nodes turn up as client nodes, so avoid sending them back
-        //     if self
-        //         .managed_nodes
-        //         .iter()
-        //         .any(|(_, node)| node.pw_id == Some(id))
-        //     {
-        //         return None;
-        //     }
-        //
-        //     let mut in_count = 0;
-        //     let mut out_count = 0;
-        //
-        //     for (direction, ports) in &node.ports {
-        //         for port in ports.values() {
-        //             // Make sure we have active default links
-        //             if !self.unmanaged_links.values().any(|link| match direction {
-        //                 Direction::Out => link.output_port == port.global_id,
-        //                 Direction::In => link.input_port == port.global_id,
-        //             }) {
-        //                 // We're not linked up yet, so not ready.
-        //                 return None;
-        //             }
-        //         }
-        //
-        //         let count = ports.values().filter(|port| !port.is_monitor).count();
-        //         match direction {
-        //             Direction::In => in_count += count,
-        //             Direction::Out => out_count += count,
-        //         }
-        //     }
-        //
-        //     return self.get_media_class(in_count, out_count);
-        // }
-
         if let Some(node) = self.unmanaged_client_nodes.get(&id) {
             let mut in_count = 0;
             let mut out_count = 0;
@@ -521,10 +496,8 @@ impl Store {
     }
 
     pub fn unmanaged_node_set_meta(&mut self, id: u32, key: String, type_: Option<String>, value: Option<String>) {
-        if let Some(node) = self.unmanaged_client_nodes.get(&id) {
-            if let Some(meta) = &node.metadata {
-                meta.set_property(id, &key, type_.as_deref(), value.as_deref())
-            }
+        if let Some(proxy) = &self.session_proxy {
+            proxy.set_property(id, &key, type_.as_deref(), value.as_deref())
         }
     }
 
@@ -686,8 +659,8 @@ impl FromStr for PortLocation {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "FL" => Ok(Self::LEFT),
-            "FR" => Ok(Self::RIGHT),
+            "FL" | "AUX_0" => Ok(Self::LEFT),
+            "FR" | "AUX_1" => Ok(Self::RIGHT),
             _ => bail!("Unknown Channel"),
         }
     }

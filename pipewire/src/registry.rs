@@ -1,6 +1,7 @@
 use crate::store::Store;
 use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
+use log::debug;
 use pipewire::keys::{ACCESS, APP_NAME, AUDIO_CHANNEL, CLIENT_ID, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FACTORY_TYPE_NAME, FACTORY_TYPE_VERSION, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MODULE_ID, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, OBJECT_SERIAL, PORT_DIRECTION, PORT_ID, PORT_MONITOR, PORT_NAME, PROTOCOL, SEC_GID, SEC_PID, SEC_UID};
 use pipewire::metadata::Metadata;
 use pipewire::registry::Listener;
@@ -60,10 +61,9 @@ impl PipewireRegistry {
                                         device.add_node(id);
                                         store.unmanaged_device_node_add(id, node);
                                     }
-                                } else if let Ok(mut node) = RegistryClientNode::try_from(props) {
+                                } else if let Ok(node) = RegistryClientNode::try_from(props) {
                                     if let Some(client) = store.unmanaged_client_get(node.parent_id) {
-                                        // We need to assign a proxy to this node
-                                        node.metadata = registry.borrow().bind(global).ok();
+                                        debug!("Parent ID: {}", node.parent_id);
 
                                         client.add_node(id);
                                         store.unmanaged_client_node_add(id, node);
@@ -156,6 +156,18 @@ impl PipewireRegistry {
                                 }
                             }
                         }
+                        ObjectType::Metadata => {
+                            if let Some(props) = global.props {
+                                if let Some(name) = props.get("metadata.name") {
+                                    if name == "default" {
+                                        if let Ok(proxy) = registry.borrow().bind(global) {
+                                            store.set_session_proxy(proxy);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // ObjectType::ClientEndpoint => {}
                         // ObjectType::ClientNode => {}
                         // ObjectType::ClientSession => {}
@@ -163,7 +175,6 @@ impl PipewireRegistry {
                         // ObjectType::Endpoint => {}
                         // ObjectType::EndpointLink => {}
                         // ObjectType::EndpointStream => {}
-                        // ObjectType::Metadata => {}
                         // ObjectType::Module => {}
                         // ObjectType::Profiler => {}
                         // ObjectType::Registry => {}
@@ -328,7 +339,7 @@ impl RegistryPort {
     }
 }
 
-
+#[derive(Debug)]
 pub(crate) struct RegistryClient {
     object_serial: u32,
 
