@@ -18,8 +18,8 @@ use pipewire::proxy::ProxyT;
 use pipewire::registry::Registry;
 use pipewire::spa::pod::builder::Builder;
 use pipewire::spa::pod::deserialize::PodDeserializer;
-use pipewire::spa::pod::{object, Pod, Property, PropertyFlags, Value, ValueArray};
-use pipewire::spa::sys::{spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position, SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_PARAM_Props, SPA_PROP_channelVolumes, SPA_TYPE_OBJECT_ParamProcessLatency, SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR, SPA_PARAM_INFO_SERIAL};
+use pipewire::spa::pod::{object, Object, Pod, Property, PropertyFlags, Value, ValueArray};
+use pipewire::spa::sys::{spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position, SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_PARAM_Props, SPA_PROP_channelVolumes, SPA_TYPE_OBJECT_ParamProcessLatency, SPA_TYPE_OBJECT_Props, SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR, SPA_PARAM_INFO_SERIAL};
 use pipewire::spa::utils::Direction;
 
 use enum_map::{enum_map, EnumMap};
@@ -645,6 +645,18 @@ impl PipewireManager {
         Ok((link, link_listener))
     }
 
+    fn set_application_target(&mut self, app_id: u32, target: Ulid) -> Result<()> {
+        let mut store = self.store.borrow_mut();
+
+        if let Some(target) = store.managed_node_get(target) {
+            if let Some(serial) = target.object_serial {
+                store.unmanaged_node_set_meta(app_id, String::from("target.object"), Some(String::from("Spa:Id")), Some(serial.to_string()));
+            }
+        }
+
+        Ok(())
+    }
+
     fn set_node_volume(&mut self, id: Ulid, volume: u8) -> Result<()> {
         self.store.borrow_mut().set_volume(id, volume)
     }
@@ -739,6 +751,10 @@ pub fn run_pw_main_loop(
 
             PipewireInternalMessage::SetNodeVolume(id, volume, result) => {
                 let _ = result.send(manager.borrow_mut().set_node_volume(id, volume));
+            }
+
+            PipewireInternalMessage::SetApplicationTarget(id, target, result) => {
+                let _ = result.send(manager.borrow_mut().set_application_target(id, target));
             }
         }
     });

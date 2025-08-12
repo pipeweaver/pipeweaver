@@ -2,6 +2,7 @@ use crate::store::Store;
 use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
 use pipewire::keys::{ACCESS, APP_NAME, AUDIO_CHANNEL, CLIENT_ID, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FACTORY_TYPE_NAME, FACTORY_TYPE_VERSION, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MODULE_ID, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, OBJECT_SERIAL, PORT_DIRECTION, PORT_ID, PORT_MONITOR, PORT_NAME, PROTOCOL, SEC_GID, SEC_PID, SEC_UID};
+use pipewire::metadata::Metadata;
 use pipewire::registry::Listener;
 use pipewire::registry::Registry;
 use pipewire::spa::utils::dict::DictRef;
@@ -11,7 +12,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 pub(crate) struct PipewireRegistry {
-    registry: Registry,
+    registry: Rc<RefCell<Registry>>,
     store: Rc<RefCell<Store>>,
 
     // These two need to exist, if the Listeners are dropped they simply stop working.
@@ -22,7 +23,7 @@ pub(crate) struct PipewireRegistry {
 impl PipewireRegistry {
     pub fn new(registry: Registry, store: Rc<RefCell<Store>>) -> Self {
         let mut registry = Self {
-            registry,
+            registry: Rc::new(RefCell::new(registry)),
             store,
             registry_listener: None,
             registry_removal_listener: None,
@@ -36,7 +37,8 @@ impl PipewireRegistry {
 
     pub fn register_listener(&self) -> Listener {
         let store = self.store.clone();
-        self.registry
+        let registry = self.registry.clone();
+        self.registry.borrow()
             .add_listener_local()
             .global(
                 move |global| {
@@ -58,8 +60,11 @@ impl PipewireRegistry {
                                         device.add_node(id);
                                         store.unmanaged_device_node_add(id, node);
                                     }
-                                } else if let Ok(node) = RegistryClientNode::try_from(props) {
+                                } else if let Ok(mut node) = RegistryClientNode::try_from(props) {
                                     if let Some(client) = store.unmanaged_client_get(node.parent_id) {
+                                        // We need to assign a proxy to this node
+                                        node.metadata = registry.borrow().bind(global).ok();
+
                                         client.add_node(id);
                                         store.unmanaged_client_node_add(id, node);
                                     }
@@ -117,12 +122,12 @@ impl PipewireRegistry {
                                     if let Some(port_id) = pid.and_then(|s| s.parse::<u32>().ok()) {
                                         if let Some(node) = store.unmanaged_device_node_get(node_id) {
                                             node.add_port(id, direction, port);
-
                                             store.unmanaged_node_check(node_id);
                                             return;
                                         }
                                         if let Some(node) = store.unmanaged_client_node_get(node_id) {
                                             node.add_port(port_id, direction, port);
+                                            store.unmanaged_client_node_check(node_id);
                                         }
                                     }
                                 }
@@ -133,12 +138,7 @@ impl PipewireRegistry {
                             // We need to track links, to allow callbacks when links are created.
                             if let Some(props) = global.props {
                                 if let Ok(link) = RegistryLink::try_from(props) {
-                                    let input_node = link.input_node;
-                                    let output_node = link.output_node;
-
                                     store.unmanaged_link_add(id, link);
-                                    store.unmanaged_client_node_check(input_node);
-                                    store.unmanaged_client_node_check(output_node);
                                 }
                             }
                         }
@@ -181,7 +181,7 @@ impl PipewireRegistry {
 
     pub fn registry_removal_listener(&self) -> Listener {
         let store = self.store.clone();
-        self.registry
+        self.registry.borrow()
             .add_listener_local()
             .global_remove(move |id| {
                 store.borrow_mut().remove_by_id(id);
@@ -190,7 +190,7 @@ impl PipewireRegistry {
     }
 
     pub fn destroy_global(&self, id: u32) {
-        self.registry.destroy_global(id);
+        self.registry.borrow().destroy_global(id);
     }
 }
 
@@ -382,6 +382,8 @@ pub(crate) struct RegistryClientNode {
     pub(crate) object_serial: u32,
     pub(crate) parent_id: u32,
 
+    pub(crate) metadata: Option<Metadata>,
+
     pub(crate) application_name: String,
     pub(crate) node_name: String,
 
@@ -403,6 +405,7 @@ impl TryFrom<&DictRef> for RegistryClientNode {
             application_name,
             node_name,
 
+            metadata: None,
             ports: Default::default(),
         })
     }

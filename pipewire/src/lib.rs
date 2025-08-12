@@ -31,6 +31,7 @@ pub enum PipewireMessage {
     SetFilterValue(Ulid, u32, FilterValue),
 
     SetNodeVolume(Ulid, u8),
+    SetApplicationTarget(u32, Ulid),
 
     DestroyUnmanagedLinks(u32),
 
@@ -57,6 +58,7 @@ pub enum PipewireInternalMessage {
 
     SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<()>>),
     SetNodeVolume(Ulid, u8, oneshot::Sender<Result<()>>),
+    SetApplicationTarget(u32, Ulid, oneshot::Sender<Result<()>>),
 
     DestroyUnmanagedLinks(u32, oneshot::Sender<Result<()>>),
     Quit(oneshot::Sender<Result<()>>),
@@ -160,6 +162,9 @@ impl PipewireRunner {
             }
             PipewireMessage::SetNodeVolume(id, volume) => {
                 PipewireInternalMessage::SetNodeVolume(id, volume, tx)
+            }
+            PipewireMessage::SetApplicationTarget(app_id, target) => {
+                PipewireInternalMessage::SetApplicationTarget(app_id, target, tx)
             }
             PipewireMessage::Quit => PipewireInternalMessage::Quit(tx),
         };

@@ -456,47 +456,76 @@ impl Store {
 
     pub fn is_usable_unmanaged_client_node(&self, id: u32) -> Option<MediaClass> {
         // There are several checks we need to do here first
+        // if let Some(node) = self.unmanaged_client_nodes.get(&id) {
+        //     // If we don't have a name or description, we can't use this node
+        //     if node.application_name.is_empty() || node.node_name.is_empty() {
+        //         return None;
+        //     }
+        //
+        //     // Our Managed nodes turn up as client nodes, so avoid sending them back
+        //     if self
+        //         .managed_nodes
+        //         .iter()
+        //         .any(|(_, node)| node.pw_id == Some(id))
+        //     {
+        //         return None;
+        //     }
+        //
+        //     let mut in_count = 0;
+        //     let mut out_count = 0;
+        //
+        //     for (direction, ports) in &node.ports {
+        //         for port in ports.values() {
+        //             // Make sure we have active default links
+        //             if !self.unmanaged_links.values().any(|link| match direction {
+        //                 Direction::Out => link.output_port == port.global_id,
+        //                 Direction::In => link.input_port == port.global_id,
+        //             }) {
+        //                 // We're not linked up yet, so not ready.
+        //                 return None;
+        //             }
+        //         }
+        //
+        //         let count = ports.values().filter(|port| !port.is_monitor).count();
+        //         match direction {
+        //             Direction::In => in_count += count,
+        //             Direction::Out => out_count += count,
+        //         }
+        //     }
+        //
+        //     return self.get_media_class(in_count, out_count);
+        // }
+
         if let Some(node) = self.unmanaged_client_nodes.get(&id) {
-            // If we don't have a name or description, we can't use this node
-            if node.application_name.is_empty() || node.node_name.is_empty() {
-                return None;
-            }
-
-            // Our Managed nodes turn up as client nodes, so avoid sending them back
-            if self
-                .managed_nodes
-                .iter()
-                .any(|(_, node)| node.pw_id == Some(id))
-            {
-                return None;
-            }
-
             let mut in_count = 0;
             let mut out_count = 0;
 
-            for (direction, ports) in &node.ports {
-                for port in ports.values() {
-                    // Make sure we have active default links
-                    if !self.unmanaged_links.values().any(|link| match direction {
-                        Direction::Out => link.output_port == port.global_id,
-                        Direction::In => link.input_port == port.global_id,
-                    }) {
-                        // We're not linked up yet, so not ready.
-                        return None;
-                    }
-                }
+            if node.node_name.is_empty() || node.application_name.is_empty() {
+                return None;
+            }
 
+            for (direction, ports) in &node.ports {
                 let count = ports.values().filter(|port| !port.is_monitor).count();
+
                 match direction {
                     Direction::In => in_count += count,
                     Direction::Out => out_count += count,
                 }
             }
 
+            // Return the Specific MediaClass based on Channel Count
             return self.get_media_class(in_count, out_count);
         }
 
         None
+    }
+
+    pub fn unmanaged_node_set_meta(&mut self, id: u32, key: String, type_: Option<String>, value: Option<String>) {
+        if let Some(node) = self.unmanaged_client_nodes.get(&id) {
+            if let Some(meta) = &node.metadata {
+                meta.set_property(id, &key, type_.as_deref(), value.as_deref())
+            }
+        }
     }
 
     // ----- UNMANAGED LINKS -----
