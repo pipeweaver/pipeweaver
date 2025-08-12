@@ -124,6 +124,13 @@ impl Store {
         self.managed_node_check_ready(id);
     }
 
+    pub fn managed_node_set_pw_serial(&mut self, id: u32, serial: u32) {
+        if let Some(owned) = self.managed_nodes.values_mut().find(|v| v.pw_id.is_some_and(|e| e == id)) {
+            debug!("[{}] Pipewire Serial assigned: {}", owned.id, serial);
+            owned.object_serial = Some(serial);
+        }
+    }
+
     pub fn managed_node_request_ports(&self, id: Ulid) {
         let node = self.managed_nodes.get(&id).expect("Broke");
         node.proxy
@@ -562,6 +569,7 @@ impl Store {
 
 pub(crate) struct NodeStore {
     pub(crate) pw_id: Option<u32>,
+    pub(crate) object_serial: Option<u32>,
 
     pub(crate) id: Ulid,
     pub(crate) props: Properties,

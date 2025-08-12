@@ -19,11 +19,7 @@ use pipewire::registry::Registry;
 use pipewire::spa::pod::builder::Builder;
 use pipewire::spa::pod::deserialize::PodDeserializer;
 use pipewire::spa::pod::{object, Pod, Property, PropertyFlags, Value, ValueArray};
-use pipewire::spa::sys::{
-    spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position,
-    SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_PARAM_Props, SPA_PROP_channelVolumes,
-    SPA_TYPE_OBJECT_ParamProcessLatency, SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR,
-};
+use pipewire::spa::sys::{spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position, SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_PARAM_Props, SPA_PROP_channelVolumes, SPA_TYPE_OBJECT_ParamProcessLatency, SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR, SPA_PARAM_INFO_SERIAL};
 use pipewire::spa::utils::Direction;
 
 use enum_map::{enum_map, EnumMap};
@@ -196,8 +192,8 @@ impl PipewireManager {
                     }
                 }
             })
-            .param(move |_seq, _type, _index, _next, _param| {
-                if let Some(pod) = _param {
+            .param(move |_seq, _type, _index, _next, param| {
+                if let Some(pod) = param {
                     let pod = PodDeserializer::deserialize_any_from(pod.as_bytes()).map(|(_, v)| v);
                     if let Ok(Value::Object(object)) = pod {
                         if object.id == SPA_PARAM_PortConfig {
@@ -280,6 +276,7 @@ impl PipewireManager {
 
         let store = NodeStore {
             pw_id: None,
+            object_serial: None,
             id: properties.node_id,
             props: node_properties.clone(),
             proxy,

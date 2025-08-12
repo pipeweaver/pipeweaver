@@ -1,7 +1,7 @@
 use crate::store::Store;
 use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
-use pipewire::keys::{ACCESS, APP_NAME, AUDIO_CHANNEL, CLIENT_ID, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FACTORY_TYPE_NAME, FACTORY_TYPE_VERSION, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MODULE_ID, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, PORT_DIRECTION, PORT_ID, PORT_MONITOR, PORT_NAME, PROTOCOL, SEC_GID, SEC_PID, SEC_UID};
+use pipewire::keys::{ACCESS, APP_NAME, AUDIO_CHANNEL, CLIENT_ID, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FACTORY_TYPE_NAME, FACTORY_TYPE_VERSION, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MODULE_ID, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, OBJECT_SERIAL, PORT_DIRECTION, PORT_ID, PORT_MONITOR, PORT_NAME, PROTOCOL, SEC_GID, SEC_PID, SEC_UID};
 use pipewire::registry::Listener;
 use pipewire::registry::Registry;
 use pipewire::spa::utils::dict::DictRef;
@@ -58,11 +58,16 @@ impl PipewireRegistry {
                                         device.add_node(id);
                                         store.unmanaged_device_node_add(id, node);
                                     }
-                                }
-                                if let Ok(node) = RegistryClientNode::try_from(props) {
+                                } else if let Ok(node) = RegistryClientNode::try_from(props) {
                                     if let Some(client) = store.unmanaged_client_get(node.parent_id) {
                                         client.add_node(id);
                                         store.unmanaged_client_node_add(id, node);
+                                    }
+                                } else {
+                                    // We don't know what type, or props this has, so we'll fire the id and serial to the
+                                    // store, and see if it wants to handle it.
+                                    if let Some(serial) = props.get(*OBJECT_SERIAL).and_then(|s| s.parse::<u32>().ok()) {
+                                        store.managed_node_set_pw_serial(id, serial);
                                     }
                                 }
                             }
@@ -190,6 +195,7 @@ impl PipewireRegistry {
 
 #[derive(Debug)]
 pub(crate) struct RegistryFactory {
+    pub(crate) object_serial: u32,
     pub(crate) module_id: u32,
 
     pub(crate) name: String,
@@ -201,12 +207,14 @@ impl TryFrom<&DictRef> for RegistryFactory {
     type Error = anyhow::Error;
 
     fn try_from(value: &DictRef) -> Result<Self, Self::Error> {
+        let object_serial = value.get(*OBJECT_SERIAL).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("OBJECT_SERIAL"))?;
         let module_id = value.get(*MODULE_ID).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("MODULE_ID"))?;
         let name = value.get(*FACTORY_NAME).map(|s| s.to_string()).ok_or_else(|| anyhow!("FACTORY_NAME"))?;
         let factory_type = value.get(*FACTORY_TYPE_NAME).ok_or_else(|| anyhow!("FACTORY_TYPE_NAME"))?;
         let version = value.get(*FACTORY_TYPE_VERSION).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("FACTORY_VERSION"))?;
 
         Ok(RegistryFactory {
+            object_serial,
             module_id,
             name,
             factory_type: to_object_type(factory_type),
@@ -217,6 +225,8 @@ impl TryFrom<&DictRef> for RegistryFactory {
 
 #[derive(Debug)]
 pub(crate) struct RegistryDevice {
+    object_serial: u32,
+
     nickname: Option<String>,
     description: Option<String>,
     name: Option<String>,
@@ -226,11 +236,13 @@ pub(crate) struct RegistryDevice {
 
 impl From<&DictRef> for RegistryDevice {
     fn from(value: &DictRef) -> Self {
+        let object_serial = value.get(*OBJECT_SERIAL).and_then(|s| s.parse::<u32>().ok()).expect("OBJECT_SERIAL");
         let nickname = value.get(*DEVICE_NICK).map(|s| s.to_string());
         let description = value.get(*DEVICE_DESCRIPTION).map(|s| s.to_string());
         let name = value.get(*DEVICE_NAME).map(|s| s.to_string());
 
         Self {
+            object_serial,
             nickname,
             description,
             name,
@@ -253,6 +265,7 @@ pub(crate) enum Direction {
 
 #[derive(Debug)]
 pub(crate) struct RegistryDeviceNode {
+    pub object_serial: u32,
     pub parent_id: u32,
 
     pub nickname: Option<String>,
@@ -266,6 +279,7 @@ impl TryFrom<&DictRef> for RegistryDeviceNode {
     type Error = anyhow::Error;
 
     fn try_from(value: &DictRef) -> Result<Self, Self::Error> {
+        let object_serial = value.get(*OBJECT_SERIAL).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("OBJECT_SERIAL"))?;
         let device = value.get(*DEVICE_ID);
         let nickname = value.get(*NODE_NICK).map(|s| s.to_string());
         let description = value.get(*NODE_DESCRIPTION).map(|s| s.to_string());
@@ -273,6 +287,7 @@ impl TryFrom<&DictRef> for RegistryDeviceNode {
 
         if let Some(device_id) = device.and_then(|s| s.parse::<u32>().ok()) {
             return Ok(Self {
+                object_serial,
                 parent_id: device_id,
                 nickname,
                 description,
@@ -314,6 +329,8 @@ impl RegistryPort {
 
 
 pub(crate) struct RegistryClient {
+    object_serial: u32,
+
     module_id: u32,
     protocol: String,
     process_id: u32,
@@ -336,6 +353,7 @@ impl TryFrom<&DictRef> for RegistryClient {
 
     fn try_from(value: &DictRef) -> Result<Self, Self::Error> {
         // I currently expect all these fields to be present for general usage
+        let object_serial = value.get(*OBJECT_SERIAL).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("OBJECT_SERIAL"))?;
         let module_id = value.get(*MODULE_ID).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("MODULE_ID"))?;
         let protocol = value.get(*PROTOCOL).map(|s| s.to_string()).ok_or_else(|| anyhow!("PROTOCOL"))?;
         let process_id = value.get(*SEC_PID).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("SEC_PID"))?;
@@ -345,6 +363,7 @@ impl TryFrom<&DictRef> for RegistryClient {
         let application_name = value.get(*APP_NAME).map(|s| s.to_string()).ok_or_else(|| anyhow!("APP_NAME"))?;
 
         Ok(Self {
+            object_serial,
             module_id,
             protocol,
             process_id,
@@ -359,6 +378,7 @@ impl TryFrom<&DictRef> for RegistryClient {
 
 #[derive(Debug)]
 pub(crate) struct RegistryClientNode {
+    pub(crate) object_serial: u32,
     pub(crate) parent_id: u32,
 
     pub(crate) application_name: String,
@@ -371,11 +391,13 @@ impl TryFrom<&DictRef> for RegistryClientNode {
     type Error = anyhow::Error;
 
     fn try_from(value: &DictRef) -> Result<Self, Self::Error> {
+        let object_serial = value.get(*OBJECT_SERIAL).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("OBJECT_SERIAL"))?;
         let parent_id = value.get(*CLIENT_ID).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("CLIENT_ID"))?;
         let node_name = value.get(*NODE_NAME).map(|s| s.to_string()).ok_or_else(|| anyhow!("NODE_NAME"))?;
         let application_name = value.get("application.name").map(|s| s.to_string()).ok_or_else(|| anyhow!("APPLICATION_NAME"))?;
 
         Ok(Self {
+            object_serial,
             parent_id,
             application_name,
             node_name,
@@ -394,6 +416,8 @@ impl RegistryClientNode {
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct RegistryLink {
+    pub(crate) object_serial: u32,
+
     pub input_node: u32,
     pub input_port: u32,
     pub output_node: u32,
@@ -404,12 +428,14 @@ impl TryFrom<&DictRef> for RegistryLink {
     type Error = anyhow::Error;
 
     fn try_from(value: &DictRef) -> Result<Self, Self::Error> {
+        let object_serial = value.get(*OBJECT_SERIAL).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("OBJECT_SERIAL"))?;
         let input_node = value.get(*LINK_INPUT_NODE).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("LINK_INPUT_NODE"))?;
         let input_port = value.get(*LINK_INPUT_PORT).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("LINK_INPUT_PORT"))?;
         let output_node = value.get(*LINK_OUTPUT_NODE).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("LINK_OUTPUT_NODE"))?;
         let output_port = value.get(*LINK_OUTPUT_PORT).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("LINK_OUTPUT_PORT"))?;
 
         Ok(RegistryLink {
+            object_serial,
             input_node,
             input_port,
             output_node,
