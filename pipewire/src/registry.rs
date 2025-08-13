@@ -3,7 +3,8 @@ use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
 use log::debug;
 use pipewire::keys::{ACCESS, APP_NAME, AUDIO_CHANNEL, CLIENT_ID, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FACTORY_TYPE_NAME, FACTORY_TYPE_VERSION, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MODULE_ID, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, OBJECT_SERIAL, PORT_DIRECTION, PORT_ID, PORT_MONITOR, PORT_NAME, PROTOCOL, SEC_GID, SEC_PID, SEC_UID};
-use pipewire::metadata::Metadata;
+use pipewire::metadata::{Metadata, MetadataListener};
+use pipewire::proxy::Proxy;
 use pipewire::registry::Listener;
 use pipewire::registry::Registry;
 use pipewire::spa::utils::dict::DictRef;
@@ -63,8 +64,6 @@ impl PipewireRegistry {
                                     }
                                 } else if let Ok(node) = RegistryClientNode::try_from(props) {
                                     if let Some(client) = store.unmanaged_client_get(node.parent_id) {
-                                        debug!("Parent ID: {}", node.parent_id);
-
                                         client.add_node(id);
                                         store.unmanaged_client_node_add(id, node);
                                     }
@@ -160,8 +159,21 @@ impl PipewireRegistry {
                             if let Some(props) = global.props {
                                 if let Some(name) = props.get("metadata.name") {
                                     if name == "default" {
-                                        if let Ok(proxy) = registry.borrow().bind(global) {
-                                            store.set_session_proxy(proxy);
+                                        let proxy: Option<Metadata> = registry.borrow().bind(global).ok();
+
+                                        if let Some(metadata) = proxy {
+                                            let listener = metadata.add_listener_local().property(|subject, key, type_, value| {
+                                                debug!("Prop: {:?} - {:?} - {:?} - {:?}", subject, key, type_, value);
+
+                                                0
+                                            }).register();
+
+                                            let session = Session {
+                                                metadata,
+                                                listener,
+                                            };
+
+                                            store.set_session_proxy(session);
                                         }
                                     }
                                 }
@@ -203,6 +215,11 @@ impl PipewireRegistry {
     pub fn destroy_global(&self, id: u32) {
         self.registry.borrow().destroy_global(id);
     }
+}
+
+pub(crate) struct Session {
+    pub(crate) metadata: Metadata,
+    pub(crate) listener: MetadataListener,
 }
 
 #[derive(Debug)]
@@ -396,7 +413,8 @@ pub(crate) struct RegistryClientNode {
     pub(crate) metadata: Option<Metadata>,
 
     pub(crate) application_name: String,
-    pub(crate) node_name: String,
+    pub(crate) node_name: Option<String>,
+    pub(crate) node_description: Option<String>,
 
     pub ports: EnumMap<Direction, HashMap<u32, RegistryPort>>,
 }
@@ -407,7 +425,8 @@ impl TryFrom<&DictRef> for RegistryClientNode {
     fn try_from(value: &DictRef) -> Result<Self, Self::Error> {
         let object_serial = value.get(*OBJECT_SERIAL).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("OBJECT_SERIAL"))?;
         let parent_id = value.get(*CLIENT_ID).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("CLIENT_ID"))?;
-        let node_name = value.get(*NODE_NAME).map(|s| s.to_string()).ok_or_else(|| anyhow!("NODE_NAME"))?;
+        let node_name = value.get(*NODE_NAME).map(|s| s.to_string());
+        let node_description = value.get(*NODE_DESCRIPTION).map(|s| s.to_string());
         let application_name = value.get("application.name").map(|s| s.to_string()).ok_or_else(|| anyhow!("APPLICATION_NAME"))?;
 
         Ok(Self {
@@ -415,6 +434,7 @@ impl TryFrom<&DictRef> for RegistryClientNode {
             parent_id,
             application_name,
             node_name,
+            node_description,
 
             metadata: None,
             ports: Default::default(),

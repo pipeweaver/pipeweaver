@@ -646,12 +646,21 @@ impl PipewireManager {
     }
 
     fn set_application_target(&mut self, app_id: u32, target: Ulid) -> Result<()> {
-        let mut store = self.store.borrow_mut();
-
-        if let Some(target) = store.managed_node_get(target) {
-            if let Some(serial) = target.object_serial {
-                store.unmanaged_node_set_meta(app_id, String::from("target.object"), Some(String::from("Spa:Id")), Some(serial.to_string()));
+        let (pw_id, object_serial) = {
+            let store = self.store.borrow();
+            if let Some(target) = store.managed_node_get(target) {
+                (target.pw_id, target.object_serial)
+            } else {
+                bail!("Target Not Found");
             }
+        };
+
+        let mut store = self.store.borrow_mut();
+        if let Some(pw_id) = pw_id {
+            store.unmanaged_node_set_meta(app_id, String::from("target.node"), Some(String::from("Spa:Id")), Some(pw_id.to_string()));
+        }
+        if let Some(serial) = object_serial {
+            store.unmanaged_node_set_meta(app_id, String::from("target.object"), Some(String::from("Spa:Id")), Some(serial.to_string()));
         }
 
         Ok(())

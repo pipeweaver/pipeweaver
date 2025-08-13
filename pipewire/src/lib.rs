@@ -325,6 +325,9 @@ pub struct DeviceNode {
 pub struct ApplicationNode {
     pub node_id: u32,
     pub node_class: MediaClass,
-
+    pub node_description: Option<String>,
+    pub node_name: Option<String>,
+    
     pub name: String,
+
 }

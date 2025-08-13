@@ -1,8 +1,5 @@
 use crate::manager::FilterData;
-use crate::registry::{
-    Direction, RegistryClient, RegistryClientNode, RegistryDevice, RegistryDeviceNode,
-    RegistryFactory, RegistryLink,
-};
+use crate::registry::{Direction, RegistryClient, RegistryClientNode, RegistryDevice, RegistryDeviceNode, RegistryFactory, RegistryLink, Session};
 use crate::{ApplicationNode, DeviceNode, FilterValue, LinkType, MediaClass, PipewireReceiver};
 use anyhow::Result;
 use anyhow::{anyhow, bail};
@@ -34,7 +31,7 @@ use ulid::Ulid;
 
 pub struct Store {
     // The main Session Proxy Metadata
-    session_proxy: Option<Metadata>,
+    session_proxy: Option<Session>,
 
     // Pipewire Factories, helps us track types
     factories: HashMap<u32, RegistryFactory>,
@@ -89,13 +86,13 @@ impl Store {
     }
 
     // Session Handler
-    pub fn set_session_proxy(&mut self, proxy: Metadata) {
+    pub fn set_session_proxy(&mut self, session: Session) {
         if self.session_proxy.is_some() {
             warn!("Attempting to redefine default Session Manager, aborting.");
             return;
         }
         info!("Session Proxy Found");
-        self.session_proxy = Some(proxy);
+        self.session_proxy = Some(session);
     }
 
     // ----- FACTORIES -----
@@ -459,6 +456,9 @@ impl Store {
                     let node = ApplicationNode {
                         node_id: id,
                         node_class: media_type,
+                        node_name: node.node_name.clone(),
+                        node_description: node.node_description.clone(),
+
                         name: node.application_name.clone(),
                     };
 
@@ -475,7 +475,7 @@ impl Store {
             let mut in_count = 0;
             let mut out_count = 0;
 
-            if node.node_name.is_empty() || node.application_name.is_empty() {
+            if node.node_name.is_none() || node.application_name.is_empty() {
                 return None;
             }
 
@@ -496,8 +496,8 @@ impl Store {
     }
 
     pub fn unmanaged_node_set_meta(&mut self, id: u32, key: String, type_: Option<String>, value: Option<String>) {
-        if let Some(proxy) = &self.session_proxy {
-            proxy.set_property(id, &key, type_.as_deref(), value.as_deref())
+        if let Some(session) = &self.session_proxy {
+            session.metadata.set_property(id, &key, type_.as_deref(), value.as_deref())
         }
     }
 
