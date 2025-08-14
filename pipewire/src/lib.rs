@@ -284,6 +284,12 @@ pub enum LinkType {
     UnmanagedNode(u32),
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum RouteTarget {
+    Node(Ulid),
+    UnmanagedNode(u32),
+}
+
 pub type FilterCallback = dyn FnMut(Vec<&mut [f32]>, Vec<&mut [f32]>) + Send;
 pub trait FilterHandler: Send + 'static {
     fn get_properties(&self) -> Vec<FilterProperty>;
@@ -325,9 +331,7 @@ pub struct DeviceNode {
 pub struct ApplicationNode {
     pub node_id: u32,
     pub node_class: MediaClass,
-    pub node_description: Option<String>,
-    pub node_name: Option<String>,
-    
-    pub name: String,
 
+    pub name: String,
+    // pub media: Option<String>,
 }

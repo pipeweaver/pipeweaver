@@ -1,12 +1,16 @@
 use crate::store::Store;
+use crate::RouteTarget;
 use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
-use log::debug;
-use pipewire::keys::{ACCESS, APP_NAME, AUDIO_CHANNEL, CLIENT_ID, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FACTORY_TYPE_NAME, FACTORY_TYPE_VERSION, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MODULE_ID, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, OBJECT_SERIAL, PORT_DIRECTION, PORT_ID, PORT_MONITOR, PORT_NAME, PROTOCOL, SEC_GID, SEC_PID, SEC_UID};
+use pipewire::keys::{ACCESS, APP_NAME, AUDIO_CHANNEL, CLIENT_ID, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FACTORY_TYPE_NAME, FACTORY_TYPE_VERSION, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_NAME, MODULE_ID, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, OBJECT_SERIAL, PORT_DIRECTION, PORT_ID, PORT_MONITOR, PORT_NAME, PROTOCOL, SEC_GID, SEC_PID, SEC_UID};
 use pipewire::metadata::{Metadata, MetadataListener};
-use pipewire::proxy::Proxy;
+use pipewire::node::{Node, NodeChangeMask, NodeListener};
 use pipewire::registry::Listener;
 use pipewire::registry::Registry;
+use pipewire::spa::param::ParamType;
+use pipewire::spa::pod::deserialize::PodDeserializer;
+use pipewire::spa::pod::{Value, ValueArray};
+use pipewire::spa::sys::{SPA_PARAM_Props, SPA_PROP_channelVolumes};
 use pipewire::spa::utils::dict::DictRef;
 use pipewire::types::ObjectType;
 use std::cell::RefCell;
@@ -38,7 +42,8 @@ impl PipewireRegistry {
     }
 
     pub fn register_listener(&self) -> Listener {
-        let store = self.store.clone();
+        let local_store = self.store.clone();
+        let listener_store = self.store.clone();
         let registry = self.registry.clone();
         self.registry.borrow()
             .add_listener_local()
@@ -46,7 +51,7 @@ impl PipewireRegistry {
                 move |global| {
                     let id = global.id;
 
-                    let mut store = store.borrow_mut();
+                    let mut store = local_store.borrow_mut();
                     match global.type_ {
                         ObjectType::Device => {
                             if let Some(props) = global.props {
@@ -62,8 +67,65 @@ impl PipewireRegistry {
                                         device.add_node(id);
                                         store.unmanaged_device_node_add(id, node);
                                     }
-                                } else if let Ok(node) = RegistryClientNode::try_from(props) {
+                                } else if let Ok(mut node) = RegistryClientNode::try_from(props) {
                                     if let Some(client) = store.unmanaged_client_get(node.parent_id) {
+                                        let bound: Option<Node> = registry.borrow().bind(global).ok();
+                                        if let Some(proxy) = bound {
+                                            let param_local = listener_store.clone();
+                                            let info_local = listener_store.clone();
+                                            let listener = proxy.add_listener_local().param(move |_seq, _type, _index, _next, param| {
+                                                if let Some(pod) = param {
+                                                    let pod = PodDeserializer::deserialize_any_from(pod.as_bytes()).map(|(_, v)| v);
+
+                                                    if let Ok(Value::Object(object)) = pod {
+                                                        if object.id == SPA_PARAM_Props {
+                                                            let prop = object
+                                                                .properties
+                                                                .iter()
+                                                                .find(|p| p.key == SPA_PROP_channelVolumes);
+
+                                                            // Get the Left / Right value
+                                                            if let Some(prop) = prop {
+                                                                if let Value::ValueArray(ValueArray::Float(value)) = &prop.value {
+                                                                    let vol = if value.is_empty() {
+                                                                        0_f32
+                                                                    } else if value.len() == 1 {
+                                                                        *value.first().unwrap()
+                                                                    } else {
+                                                                        value
+                                                                            .iter()
+                                                                            .copied()
+                                                                            .max_by(|a, b| a.partial_cmp(b).unwrap())
+                                                                            .unwrap()
+                                                                    };
+
+                                                                    let volume = (vol.cbrt() * 100.0).round() as u8;
+                                                                    param_local.borrow_mut().unmanaged_client_node_set_volume(id, volume);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }).info(move |info| {
+                                                for change in info.change_mask().iter() {
+                                                    if change == NodeChangeMask::PROPS {
+                                                        if let Some(props) = info.props() {
+                                                            if let Some(media) = props.get(*MEDIA_NAME) {
+                                                                info_local.borrow_mut().unmanaged_client_node_set_media(id, String::from(media));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }).register();
+
+                                            proxy.subscribe_params(&[
+                                                ParamType::Props,
+                                            ]);
+                                            proxy.enum_params(0, None, 0, u32::MAX);
+                                            node._proxy = Some(proxy);
+                                            node._listener = Some(listener);
+                                        }
+
                                         client.add_node(id);
                                         store.unmanaged_client_node_add(id, node);
                                     }
@@ -160,10 +222,15 @@ impl PipewireRegistry {
                                 if let Some(name) = props.get("metadata.name") {
                                     if name == "default" {
                                         let proxy: Option<Metadata> = registry.borrow().bind(global).ok();
-
                                         if let Some(metadata) = proxy {
-                                            let listener = metadata.add_listener_local().property(|subject, key, type_, value| {
-                                                debug!("Prop: {:?} - {:?} - {:?} - {:?}", subject, key, type_, value);
+                                            let listen_store = listener_store.clone();
+                                            let listener = metadata.add_listener_local().property(move |subject, key, type_, value| {
+
+                                                // TODO: I've seen 'target.node' floating around in places, but not seen it directly used. Might need to address that.
+                                                if key == Some("target.object") {
+                                                    let target = value.and_then(|s| s.parse::<u32>().ok());
+                                                    listen_store.borrow_mut().unmanaged_client_node_set_target(subject, target);
+                                                }
 
                                                 0
                                             }).register();
@@ -180,8 +247,7 @@ impl PipewireRegistry {
                             }
                         }
 
-                        // ObjectType::ClientEndpoint => {}
-                        // ObjectType::ClientNode => {}
+
                         // ObjectType::ClientSession => {}
                         // ObjectType::Core => {}
                         // ObjectType::Endpoint => {}
@@ -405,7 +471,7 @@ impl TryFrom<&DictRef> for RegistryClient {
     }
 }
 
-#[derive(Debug)]
+
 pub(crate) struct RegistryClientNode {
     pub(crate) object_serial: u32,
     pub(crate) parent_id: u32,
@@ -413,8 +479,15 @@ pub(crate) struct RegistryClientNode {
     pub(crate) metadata: Option<Metadata>,
 
     pub(crate) application_name: String,
-    pub(crate) node_name: Option<String>,
-    pub(crate) node_description: Option<String>,
+    pub(crate) node_name: String,
+
+    pub(crate) volume: u8,
+    pub(crate) media_title: Option<String>,
+
+    pub(crate) media_target: Option<RouteTarget>,
+
+    pub(crate) _proxy: Option<Node>,
+    pub(crate) _listener: Option<NodeListener>,
 
     pub ports: EnumMap<Direction, HashMap<u32, RegistryPort>>,
 }
@@ -425,16 +498,21 @@ impl TryFrom<&DictRef> for RegistryClientNode {
     fn try_from(value: &DictRef) -> Result<Self, Self::Error> {
         let object_serial = value.get(*OBJECT_SERIAL).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("OBJECT_SERIAL"))?;
         let parent_id = value.get(*CLIENT_ID).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| anyhow!("CLIENT_ID"))?;
-        let node_name = value.get(*NODE_NAME).map(|s| s.to_string());
-        let node_description = value.get(*NODE_DESCRIPTION).map(|s| s.to_string());
         let application_name = value.get("application.name").map(|s| s.to_string()).ok_or_else(|| anyhow!("APPLICATION_NAME"))?;
+        let node_name = value.get(*NODE_NAME).map(|s| s.to_string()).ok_or_else(|| anyhow!("NODE_NAME"))?;
 
         Ok(Self {
             object_serial,
             parent_id,
             application_name,
             node_name,
-            node_description,
+
+            volume: 0,
+            media_title: None,
+            media_target: None,
+
+            _proxy: None,
+            _listener: None,
 
             metadata: None,
             ports: Default::default(),

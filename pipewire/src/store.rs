@@ -1,6 +1,6 @@
 use crate::manager::FilterData;
 use crate::registry::{Direction, RegistryClient, RegistryClientNode, RegistryDevice, RegistryDeviceNode, RegistryFactory, RegistryLink, Session};
-use crate::{ApplicationNode, DeviceNode, FilterValue, LinkType, MediaClass, PipewireReceiver};
+use crate::{ApplicationNode, DeviceNode, FilterValue, LinkType, MediaClass, PipewireReceiver, RouteTarget};
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
@@ -427,6 +427,60 @@ impl Store {
         self.unmanaged_client_nodes.get_mut(&id)
     }
 
+    pub fn unmanaged_client_node_set_volume(&mut self, id: u32, volume: u8) {
+        if let Some(node) = self.unmanaged_client_node_get(id) {
+            if node.volume != volume {
+                debug!("Node: {}, Setting Node Volume to {}", id, volume);
+                node.volume = volume;
+            }
+        }
+    }
+
+    pub fn unmanaged_client_node_set_media(&mut self, id: u32, media: String) {
+        if let Some(node) = self.unmanaged_client_node_get(id) {
+            if node.media_title.is_none() && media == "AudioStream" {
+                // TODO: A better job of this :p
+                // Do nothing, already setup?
+            } else if node.media_title.is_some() && media == "AudioStream" {
+                node.media_title = None;
+            } else if node.media_title != Some(media.clone()) {
+                debug!("Node: {}, Setting Media Name to {}", id, media);
+                node.media_title = Some(media);
+            }
+        }
+    }
+
+    pub fn unmanaged_client_node_set_target(&mut self, id: u32, target: Option<u32>) {
+        // So we need to locate the target, which might be tricky as the target is passed as an
+        // object serial, and not a node id, meaning we need to do some digging.
+
+        let mut result: Option<RouteTarget> = None;
+
+        if let Some(target) = target {
+            for (id, node) in &self.managed_nodes {
+                if let Some(serial) = node.object_serial {
+                    if serial == target {
+                        result = Some(RouteTarget::Node(*id));
+                        break;
+                    }
+                }
+            }
+
+            if result.is_none() {
+                for (id, node) in &self.unmanaged_device_nodes {
+                    if target == node.object_serial {
+                        result = Some(RouteTarget::UnmanagedNode(*id));
+                    }
+                }
+            }
+        }
+
+        if let Some(client) = self.unmanaged_client_node_get(id) {
+            debug!("Node {}, Updating Target to {:?}", id, result);
+            client.media_target = result;
+        }
+    }
+
     pub fn unmanaged_client_node_remove(&mut self, id: u32) {
         // Need to flag upstream if the node has gone away
         if self.usable_client_nodes.contains(&id) {
@@ -456,8 +510,6 @@ impl Store {
                     let node = ApplicationNode {
                         node_id: id,
                         node_class: media_type,
-                        node_name: node.node_name.clone(),
-                        node_description: node.node_description.clone(),
 
                         name: node.application_name.clone(),
                     };
@@ -475,7 +527,7 @@ impl Store {
             let mut in_count = 0;
             let mut out_count = 0;
 
-            if node.node_name.is_none() || node.application_name.is_empty() {
+            if node.node_name.is_empty() || node.application_name.is_empty() {
                 return None;
             }
 
@@ -500,6 +552,7 @@ impl Store {
             session.metadata.set_property(id, &key, type_.as_deref(), value.as_deref())
         }
     }
+
 
     // ----- UNMANAGED LINKS -----
     pub fn unmanaged_link_add(&mut self, id: u32, link: RegistryLink) {
