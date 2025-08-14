@@ -116,7 +116,6 @@ impl FilterManagementLocal for PipewireManager {
             linger: false,
             callback: Box::new(PassThroughFilter::new()),
 
-            receive_only: false,
             ready_sender: None,
         }
     }
@@ -136,7 +135,6 @@ impl FilterManagementLocal for PipewireManager {
             linger: false,
             callback: Box::new(VolumeFilter::new(0)),
 
-            receive_only: false,
             ready_sender: None,
         }
     }
@@ -150,13 +148,12 @@ impl FilterManagementLocal for PipewireManager {
             filter_nick: name.to_string(),
             filter_description: format!("{}/{}", APP_NAME_ID, description),
 
-            class: MediaClass::Duplex,
+            class: MediaClass::Source,
             app_id: APP_ID.to_string(),
             app_name: APP_NAME.to_string(),
             linger: false,
             callback: Box::new(MeterFilter::new(node, self.meter_callback.clone())),
 
-            receive_only: true,
             ready_sender: None,
         }
     }

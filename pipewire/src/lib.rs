@@ -266,7 +266,6 @@ pub struct FilterProperties {
     pub linger: bool,
     pub callback: Box<dyn FilterHandler>,
 
-    pub receive_only: bool,
     pub ready_sender: Option<oneshot::Sender<()>>,
 }
 

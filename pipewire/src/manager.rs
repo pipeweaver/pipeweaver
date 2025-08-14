@@ -352,29 +352,29 @@ impl PipewireManager {
         }
 
         #[allow(clippy::collapsible_if)]
-        if !props.receive_only {
-            if props.class == MediaClass::Sink || props.class == MediaClass::Duplex {
-                debug!("[{}] Registering Output Ports", props.filter_id);
+        //if !props.receive_only {
+        if props.class == MediaClass::Sink || props.class == MediaClass::Duplex {
+            debug!("[{}] Registering Output Ports", props.filter_id);
 
-                for (index, port) in PortLocation::iter().enumerate() {
-                    output_ports.borrow_mut().push(
-                        filter
-                            .add_port(
-                                Direction::Output,
-                                PortFlags::MAP_BUFFERS,
-                                properties! {
+            for (index, port) in PortLocation::iter().enumerate() {
+                output_ports.borrow_mut().push(
+                    filter
+                        .add_port(
+                            Direction::Output,
+                            PortFlags::MAP_BUFFERS,
+                            properties! {
                                     *FORMAT_DSP => "32 bit float mono audio",
                                     *PORT_NAME => format!("output_{}", port),
                                     *AUDIO_CHANNEL => format!("{}", port)
                                 },
-                                &mut params,
-                            )
-                            .map_err(|e| anyhow!("Filter Input Creation Failed: {:?}", e))?,
-                    );
-                    output_port_map[port] = index as u32;
-                }
+                            &mut params,
+                        )
+                        .map_err(|e| anyhow!("Filter Input Creation Failed: {:?}", e))?,
+                );
+                output_port_map[port] = index as u32;
             }
         }
+        //}
 
         // Use a RWLock provided by parking-lot here, so we can safely grab the filter to change
         // its settings on-the-fly
