@@ -1,7 +1,7 @@
 <script>
 
 import {DeviceType, get_devices, getFullSourceList, getFullTargetList} from "@/app/util.js";
-import RoutingCell from "@/components/routing/RoutingCell.vue";
+import RoutingCell from "@/views/desktop/routing/RoutingCell.vue";
 import {store} from "@/app/store.js";
 import {websocket} from "@/app/sockets.js";
 
@@ -57,7 +57,7 @@ export default {
         <th v-for="source in getFullSourceList()" :key="source">{{ source.name }}</th>
       </tr>
       </thead>
-      <tr v-for="(target, index) of getFullTargetList()" :key="target">
+      <tr v-for="(target, index) of getFullTargetList(true)" :key="target">
 
         <!-- Draw the 'Targets' Cell down the left on first iteration -->
         <th v-if="index === 0" :rowspan="getTargetCount()" class="rotated">

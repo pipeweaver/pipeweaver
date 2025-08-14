@@ -1,5 +1,5 @@
 <script>
-import PopupBox from "@/components/inputs/PopupBox.vue";
+import PopupBox from "@/views/desktop/inputs/PopupBox.vue";
 import {get_device_by_id, getFullTargetList} from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
 

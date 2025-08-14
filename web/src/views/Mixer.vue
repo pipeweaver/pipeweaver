@@ -1,9 +1,9 @@
 <script>
-import ChannelColumn from "@/components/channels/ChannelColumn.vue";
+import ChannelColumn from "@/views/desktop/channels/ChannelColumn.vue";
 import {DeviceOrderType, DeviceType, get_device_by_id, get_device_order} from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
-import PopupBox from "@/components/inputs/PopupBox.vue";
-import DeviceList from "@/components/DeviceList.vue";
+import PopupBox from "@/views/desktop/inputs/PopupBox.vue";
+import DeviceList from "@/views/desktop/DeviceList.vue";
 
 const INTERNAL_SCALE = 0.8;
 

@@ -1,5 +1,5 @@
 <script>
-import VerticalRange from '@/components/inputs/VerticalRange.vue'
+import VerticalRange from '@/views/desktop/inputs/VerticalRange.vue'
 
 export default {
   name: 'ChannelColumnVolume',

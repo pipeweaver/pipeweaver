@@ -1,6 +1,6 @@
 <script>
 import {get_device_order, get_device_type} from "@/app/util.js";
-import ChannelColumn from "@/components/channels/ChannelColumn.vue";
+import ChannelColumn from "@/views/desktop/channels/ChannelColumn.vue";
 import {Sortable} from "@shopify/draggable";
 import {websocket} from "@/app/sockets.js";
 

@@ -1,14 +1,14 @@
 <script>
-import ColourSettings from '@/components/channels/ColourSettings.vue'
-import ChannelColumnVolume from '@/components/channels/ChannelColumnVolume.vue'
+import ColourSettings from '@/views/desktop/channels/ColourSettings.vue'
+import ChannelColumnVolume from '@/views/desktop/channels/ChannelColumnVolume.vue'
 import {DeviceOrderType, DeviceType, get_device_by_id, is_physical, is_source} from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
 import {FontAwesomeIcon} from "@fortawesome/vue-fontawesome";
-import PopupBox from "@/components/inputs/PopupBox.vue";
-import MuteTargetSelector from "@/components/channels/MuteTargetSelector.vue";
-import MixAssignment from "@/components/channels/MixAssignment.vue";
-import PhysicalDeviceSelector from "@/components/channels/DevicePopup.vue";
-import DevicePopup from "@/components/channels/DevicePopup.vue";
+import PopupBox from "@/views/desktop/inputs/PopupBox.vue";
+import MuteTargetSelector from "@/views/desktop/channels/MuteTargetSelector.vue";
+import MixAssignment from "@/views/desktop/channels/MixAssignment.vue";
+import PhysicalDeviceSelector from "@/views/desktop/channels/DevicePopup.vue";
+import DevicePopup from "@/views/desktop/channels/DevicePopup.vue";
 
 export default {
   name: 'ChannelColumn',

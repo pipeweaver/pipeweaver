@@ -1,7 +1,7 @@
 <script setup>
 
 import {websocket} from "@/app/sockets.js";
-import Router from "@/components/routing/Router.vue";
+import Router from "@/views/desktop/routing/Router.vue";
 import Mixer from "@/views/Mixer.vue";
 
 function addDevice(type, e) {

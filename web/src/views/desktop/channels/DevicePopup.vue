@@ -1,7 +1,7 @@
 <script>
 // A lot of this is copied for MuteTargetSelector, mostly because I'm lazy :D
 
-import PopupBox from "@/components/inputs/PopupBox.vue";
+import PopupBox from "@/views/desktop/inputs/PopupBox.vue";
 import {
   DeviceOrderType,
   get_device_by_id,

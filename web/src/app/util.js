@@ -1,4 +1,5 @@
 import {store} from "@/app/store.js";
+import {onMounted, onUnmounted, ref} from "vue";
 
 export const DeviceType = Object.freeze({
   PhysicalSource: 'PhysicalSource',
@@ -168,4 +169,38 @@ export function getSourcePhysicalDevices() {
 
 export function getTargetPhysicalDevices() {
   return store.getAudio().devices.Target;
+}
+
+
+export function useDeviceType() {
+  const isDesktop = ref(true);
+
+  onMounted(() => {
+    const ua = navigator.userAgent;
+    const isMobileOrTablet = /tablet|ipad|playbook|silk|(android(?!.*mobi))|Mobile|Android|iP(hone|od)|IEMobile|BlackBerry|Kindle|Silk-Accelerated|(hpw|web)OS|Fennec|Opera Mini/i.test(ua);
+    isDesktop.value = !isMobileOrTablet;
+  });
+
+  return {isDesktop};
+}
+
+export function useOrientation() {
+  const isPortrait = ref(window.matchMedia('(orientation: portrait)').matches);
+
+  const update = () => {
+    isPortrait.value = window.matchMedia('(orientation: portrait)').matches;
+  };
+
+  onMounted(() => {
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
+    update();
+  });
+
+  onUnmounted(() => {
+    window.removeEventListener('resize', update);
+    window.removeEventListener('orientationchange', update);
+  });
+
+  return {isPortrait};
 }
