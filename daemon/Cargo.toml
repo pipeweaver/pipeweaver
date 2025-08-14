@@ -31,6 +31,9 @@ strum_macros = { workspace = true }
 ### Project Paths
 directories = "6.0.0"
 
+### Used for hosting LV2 Plugins
+lv2-host-minimal = "0.1.4"
+
 ### Log Writing ###
 simplelog = "0.12.2"
 
@@ -45,3 +48,5 @@ actix-cors = "0.7.0"
 mime_guess = "2.0.5"
 include_dir = "0.7.4"
 
+### Parking Lock for faster Mutexes
+parking_lot = "0.12.3"

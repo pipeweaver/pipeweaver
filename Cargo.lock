@@ -1022,6 +1022,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "hound"
+version = "3.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62adaabb884c94955b19907d60019f4e145d091c75345379e70d1ee696f7854f"
+
+[[package]]
 name = "http"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1435,6 +1441,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lilv-sys"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aee56a6fdb8db62d01819f171d579c65fb0e03bcd077e1ea4509e06b6d58f53c"
+dependencies = [
+ "lv2_raw",
+]
+
+[[package]]
 name = "litemap"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1472,6 +1487,68 @@ name = "log"
 version = "0.4.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "30bde2b3dc3671ae49d8e2e9f044c7c005836e7a023ee57cffa25ab82764bb9e"
+
+[[package]]
+name = "lv2-core"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d50100435f793b25e9fcfe89c227dc1b1ca93bbfae0f3710149263fe4ba049de"
+dependencies = [
+ "lv2-core-derive",
+ "lv2-sys",
+ "urid",
+]
+
+[[package]]
+name = "lv2-core-derive"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7bf98f786ecb49030330834aaa458f84bbaf545d7084cf3dcb2fab2f03a1838b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "lv2-host-minimal"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a20c02cd966df2e6e618728aaafcb5822afbb251bc15e62c25639526f44175eb"
+dependencies = [
+ "hound",
+ "lilv-sys",
+ "lv2-sys",
+ "lv2-urid",
+ "lv2_raw",
+ "urid",
+]
+
+[[package]]
+name = "lv2-sys"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9dd0f9e7de3649dcec348de51cbf611ab88688b97c0ce038f8c07b996b2a8e30"
+
+[[package]]
+name = "lv2-urid"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c0803444d1e66fbdbc345ef8243470979f8bab570cdaf0cada4586fc1624e68"
+dependencies = [
+ "lv2-core",
+ "lv2-sys",
+ "urid",
+]
+
+[[package]]
+name = "lv2_raw"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "573ce7231f64fe795ad80134913f88f2e7f7f550527f6bd54d690a56cabf6a48"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "memchr"
@@ -1684,7 +1761,9 @@ dependencies = [
  "interprocess",
  "json-patch",
  "log",
+ "lv2-host-minimal",
  "mime_guess",
+ "parking_lot",
  "pipeweaver-ipc",
  "pipeweaver-pipewire",
  "pipeweaver-profile",
@@ -2553,6 +2632,26 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
+
+[[package]]
+name = "urid"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6828b5d766e783093935fb2f23f26ffb28b7cb9313921cec67db8ca09f38a6a4"
+dependencies = [
+ "urid-derive",
+]
+
+[[package]]
+name = "urid-derive"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "819eee2ef008e55b0a415ed356db7772d0ad94ae499f0043015111fc34703644"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
 
 [[package]]
 name = "url"
