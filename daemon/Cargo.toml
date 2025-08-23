@@ -31,9 +31,6 @@ strum_macros = { workspace = true }
 ### Project Paths
 directories = "6.0.0"
 
-### Used for hosting LV2 Plugins
-lv2-host-minimal = "0.1.4"
-
 ### Log Writing ###
 simplelog = "0.12.2"
 
