@@ -3,6 +3,11 @@ name = "pipeweaver-profile"
 version = "0.1.0"
 edition = "2021"
 
+authors = ["Craig McLure <craig@mclure.net>"]
+repository = "https://github.com/pipeweaver/pipeweaver"
+license = "MIT"
+
+
 [dependencies]
 pipeweaver-shared = { path = "../shared" }
 

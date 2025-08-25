@@ -3,6 +3,10 @@ name = "pipeweaver-shared"
 version = "0.1.0"
 edition = "2021"
 
+authors = ["Craig McLure <craig@mclure.net>"]
+repository = "https://github.com/pipeweaver/pipeweaver"
+license = "MIT"
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }

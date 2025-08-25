@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 build = "build.rs"
 
+authors = ["Craig McLure <craig@mclure.net>"]
+repository = "https://github.com/pipeweaver/pipeweaver"
+license = "MIT"
+
 [dependencies]
 ### Inherited Dependencies ###
 anyhow = { workspace = true }

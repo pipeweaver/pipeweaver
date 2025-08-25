@@ -3,6 +3,10 @@ name = "pipeweaver-client"
 version = "0.1.0"
 edition = "2021"
 
+authors = ["Craig McLure <craig@mclure.net>"]
+repository = "https://github.com/pipeweaver/pipeweaver"
+license = "MIT"
+
 [dependencies]
 clap = { version = "4.5.31", features = ["derive"] }
 
