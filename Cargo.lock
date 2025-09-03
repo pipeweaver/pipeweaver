@@ -2244,7 +2244,6 @@ dependencies = [
  "anyhow",
  "directories",
  "enum-map",
- "futures",
  "image",
  "include_dir",
  "interprocess",
@@ -2253,7 +2252,6 @@ dependencies = [
  "log",
  "mime_guess",
  "open",
- "parking_lot",
  "pipeweaver-ipc",
  "pipeweaver-pipewire",
  "pipeweaver-profile",
@@ -2262,7 +2260,6 @@ dependencies = [
  "serde_json",
  "simplelog",
  "strum",
- "strum_macros",
  "tokio",
  "ulid",
 ]

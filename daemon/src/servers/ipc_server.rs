@@ -1,21 +1,36 @@
 use crate::handler::packet::{handle_packet, Messenger};
-use anyhow::{bail, Result};
+use crate::{Stop, APP_NAME, APP_NAME_ID};
+use anyhow::{bail, Error, Result};
+use directories::BaseDirs;
 use interprocess::local_socket::tokio::prelude::{LocalSocketListener, LocalSocketStream};
 use interprocess::local_socket::traits::tokio::{Listener, Stream};
-use interprocess::local_socket::{
-    GenericFilePath, ListenerOptions, ToFsName,
-};
+use interprocess::local_socket::{GenericFilePath, ListenerOptions, ToFsName};
 use log::{debug, info, warn};
 use pipeweaver_ipc::clients::ipc::ipc_socket::Socket;
 use pipeweaver_ipc::commands::{DaemonRequest, DaemonResponse};
-use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::{env, fs};
 
-use crate::{Stop, APP_NAME, APP_NAME_ID};
+pub fn get_socket_path() -> Result<PathBuf> {
+    let path = BaseDirs::new()
+        .and_then(|base| base.runtime_dir().map(|p| p.to_path_buf()))
+        .map(Ok::<PathBuf, Error>)
+        .unwrap_or_else(|| {
+            let tmp_dir = env::temp_dir().join(APP_NAME);
+            if !tmp_dir.exists() {
+                fs::create_dir_all(&tmp_dir)?;
+            }
+            Ok(tmp_dir)
+        })?;
+
+    let socket_path = path.join(format!("{}.socket", APP_NAME_ID));
+    Ok(socket_path)
+}
+
 
 async fn ipc_tidy() -> Result<()> {
-    // TODO: Handle this properly through XDG options first
-    let socket_path = format!("/tmp/{}.socket", APP_NAME);
+    let socket_path = get_socket_path()?;
+    debug!("Using IPC Path: {:?}", socket_path);
 
     if !Path::new(&socket_path).exists() {
         return Ok(());
@@ -59,7 +74,7 @@ async fn ipc_tidy() -> Result<()> {
 }
 
 pub async fn bind_socket() -> Result<LocalSocketListener> {
-    let socket_path = format!("/tmp/{}.socket", APP_NAME_ID);
+    let socket_path = get_socket_path()?;
     ipc_tidy().await?;
 
     let name = socket_path.to_fs_name::<GenericFilePath>()?;
@@ -96,10 +111,7 @@ pub async fn spawn_ipc_server(
     }
 }
 
-async fn handle_connection(
-    mut socket: Socket<DaemonRequest, DaemonResponse>,
-    usb_tx: Messenger,
-) {
+async fn handle_connection(mut socket: Socket<DaemonRequest, DaemonResponse>, usb_tx: Messenger) {
     while let Some(msg) = socket.read().await {
         match msg {
             Ok(msg) => match handle_packet(msg, usb_tx.clone()).await {

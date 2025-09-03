@@ -24,13 +24,9 @@ pipeweaver-profile = { path = "../profile" }
 pipeweaver-pipewire = { path = "../pipewire" }
 pipeweaver-shared = { path = "../shared" }
 
-### Used for managing device wakers
-futures = "0.3.31"
-
 ### Enum Handling
 enum-map = { workspace = true }
 strum = { workspace = true }
-strum_macros = { workspace = true }
 
 ### Project Paths
 directories = "6.0.0"
@@ -48,9 +44,6 @@ actix-web-actors = "4.3.0"
 actix-cors = "0.7.0"
 mime_guess = "2.0.5"
 include_dir = "0.7.4"
-
-### Parking Lock for faster Mutexes
-parking_lot = "0.12.3"
 
 ### Tray Handling
 image = "0.25.6"
