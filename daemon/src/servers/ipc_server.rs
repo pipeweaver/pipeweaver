@@ -51,13 +51,15 @@ async fn ipc_tidy() -> Result<()> {
         debug!("Unable to send messages, removing socket..");
         fs::remove_file(socket_path)?;
         return Ok(());
-    } else {
-        debug!("Daemon is active, asking it to open the interface..");
-        socket.send(DaemonRequest::Daemon(DaemonCommand::OpenInterface)).await?;
-        socket.read().await;
     }
 
+    debug!("Daemon is active, asking it to open the interface..");
+    let message = DaemonRequest::Daemon(DaemonCommand::OpenInterface);
+    socket.send(message).await?;
+    socket.read().await;
+
     // If we get here, there's an active Daemon running!
+    // TODO: Bailing here may cause problems with exit codes, currently c'est la vie
     bail!("The {} Daemon is already running.", APP_NAME);
 }
 
