@@ -7,7 +7,7 @@ use interprocess::local_socket::traits::tokio::{Listener, Stream};
 use interprocess::local_socket::{GenericFilePath, ListenerOptions, ToFsName};
 use log::{debug, info, warn};
 use pipeweaver_ipc::clients::ipc::ipc_socket::Socket;
-use pipeweaver_ipc::commands::{DaemonRequest, DaemonResponse};
+use pipeweaver_ipc::commands::{DaemonCommand, DaemonRequest, DaemonResponse};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
@@ -27,7 +27,6 @@ pub fn get_socket_path() -> Result<PathBuf> {
     Ok(socket_path)
 }
 
-
 async fn ipc_tidy() -> Result<()> {
     let socket_path = get_socket_path()?;
     debug!("Using IPC Path: {:?}", socket_path);
@@ -39,15 +38,8 @@ async fn ipc_tidy() -> Result<()> {
     let connection = LocalSocketStream::connect(socket).await;
 
     if connection.is_err() {
-        match cfg!(windows) {
-            true => {
-                debug!("Named Pipe not running, continuing..");
-            }
-            false => {
-                debug!("Connection Failed. Socket File is stale, removing..");
-                fs::remove_file(socket_path)?;
-            }
-        }
+        debug!("Connection Failed. Socket File is stale, removing..");
+        fs::remove_file(socket_path)?;
         return Ok(());
     }
 
@@ -56,17 +48,13 @@ async fn ipc_tidy() -> Result<()> {
 
     let mut socket: Socket<DaemonResponse, DaemonRequest> = Socket::new(connection);
     if let Err(e) = socket.send(DaemonRequest::Ping).await {
-        match cfg!(windows) {
-            true => {
-                debug!("Our named pipe is broken, something is horribly wrong..");
-                bail!("Named Pipe Error: {}", e);
-            }
-            false => {
-                debug!("Unable to send messages, removing socket..");
-                fs::remove_file(socket_path)?;
-            }
-        }
+        debug!("Unable to send messages, removing socket..");
+        fs::remove_file(socket_path)?;
         return Ok(());
+    } else {
+        debug!("Daemon is active, asking it to open the interface..");
+        socket.send(DaemonRequest::Daemon(DaemonCommand::OpenInterface)).await?;
+        socket.read().await;
     }
 
     // If we get here, there's an active Daemon running!
