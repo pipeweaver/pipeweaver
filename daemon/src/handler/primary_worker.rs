@@ -15,6 +15,7 @@ use pipeweaver_profile::Profile;
 use std::fs;
 use std::fs::{create_dir_all, File};
 use std::io::ErrorKind;
+use std::net::Shutdown;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
@@ -51,6 +52,7 @@ impl PrimaryWorker {
         let profile_path = config_path.join(format!("{}-profile.json", APP_NAME_ID));
         let mut first_run = true;
 
+        let local_stop = Stop::new();
 
         'main: loop {
             if !first_run {
@@ -102,6 +104,7 @@ impl PrimaryWorker {
                                 // Restart the Pipewire Manager, so continue on the main loop
                                 info!("[PrimaryWorker] Restarting Pipewire Manager, Saving Profile");
                                 let _ = self.save_profile(&profile_path, &self.last_status.audio.profile);
+                                let _ = command_sender.send(ManagerMessage::Quit).await;
                                 continue 'main;
                             }
                             MessageResult::None => {}
