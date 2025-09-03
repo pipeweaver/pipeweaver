@@ -42,6 +42,7 @@ pub struct WebsocketResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DaemonCommand {
     SetMetering(bool),
+    OpenInterface,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

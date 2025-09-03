@@ -8,7 +8,9 @@ use anyhow::Context;
 use anyhow::Result;
 use json_patch::diff;
 use log::{debug, error, info, warn};
-use pipeweaver_ipc::commands::{APICommand, APICommandResponse, AudioConfiguration, DaemonCommand, DaemonResponse, DaemonStatus};
+use pipeweaver_ipc::commands::{
+    APICommand, APICommandResponse, AudioConfiguration, DaemonCommand, DaemonResponse, DaemonStatus,
+};
 use pipeweaver_profile::Profile;
 use std::fs;
 use std::fs::{create_dir_all, File};
@@ -134,6 +136,14 @@ impl PrimaryWorker {
                 match command {
                     DaemonCommand::SetMetering(enabled) => {
                         let _ = pw_tx.send(SetMetering(enabled)).await;
+                    }
+                    DaemonCommand::OpenInterface => {
+                        // TODO: Need to pull in the HTTP config
+                        // TODO: Attempt 'app' launch before browser
+                        
+                        if let Err(e) = open::that("http://localhost:14565") {
+                            warn!("Unable to open web interface: {}", e);
+                        }
                     }
                 }
                 let _ = tx.send(DaemonResponse::Ok);

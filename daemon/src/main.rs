@@ -1,11 +1,11 @@
-mod stop;
-mod servers;
 mod handler;
 mod platform;
+mod servers;
 mod settings;
+mod stop;
 
 use crate::handler::primary_worker::start_primary_worker;
-use crate::platform::spawn_runtime;
+use crate::platform::{spawn_runtime, spawn_tray};
 use crate::servers::http_server::spawn_http_server;
 use crate::servers::ipc_server::{bind_socket, spawn_ipc_server};
 use crate::stop::Stop;
@@ -24,10 +24,12 @@ const HASH: &str = env!("GIT_HASH");
 const APP_ID: &str = "io.github.pipeweaver";
 const APP_NAME: &str = "PipeWeaver";
 const APP_NAME_ID: &str = "pipeweaver";
+const ICON: &[u8] = include_bytes!("../resources/icons/pipeweaver-large.png");
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let dirs = ProjectDirs::from("io", "github", APP_NAME_ID).ok_or(anyhow!("Unable to locate project directory"))?;
+    let dirs = ProjectDirs::from("io", "github", APP_NAME_ID)
+        .ok_or(anyhow!("Unable to locate project directory"))?;
 
     // We need to ignore a couple of packages log output so create a builder.
     let mut log_config = ConfigBuilder::new();
@@ -40,13 +42,15 @@ async fn main() -> Result<()> {
     log_config.add_filter_ignore_str("actix_server::worker");
     log_config.add_filter_ignore_str("actix_server::server");
     log_config.add_filter_ignore_str("actix_server::builder");
+    log_config.add_filter_ignore_str("zbus");
 
     CombinedLogger::init(vec![TermLogger::new(
         LevelFilter::Debug,
         log_config.build(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
-    )]).context("Could not configure the logger")?;
+    )])
+        .context("Could not configure the logger")?;
 
     info!("Starting {} v{} - {}", APP_NAME, VERSION, HASH);
 
@@ -100,13 +104,20 @@ async fn main() -> Result<()> {
         config_dir,
     ));
 
+    let tray_icon = task::spawn(spawn_tray(shutdown.clone(), manager_send.clone()));
     let runtime = task::spawn(spawn_runtime(shutdown.clone()));
 
     // Wait for a Shutdown Trigger
     let _ = shutdown.clone().recv().await;
 
     // Join on the Threads until they all end
-    let _ = join!(task, communications_handle, runtime, http_server.stop(false));
+    let _ = join!(
+        task,
+        communications_handle,
+        runtime,
+        tray_icon,
+        http_server.stop(false)
+    );
 
     Ok(())
 }

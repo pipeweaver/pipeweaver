@@ -14,6 +14,7 @@ use std::path::Path;
 use crate::{Stop, APP_NAME, APP_NAME_ID};
 
 async fn ipc_tidy() -> Result<()> {
+    // TODO: Handle this properly through XDG options first
     let socket_path = format!("/tmp/{}.socket", APP_NAME);
 
     if !Path::new(&socket_path).exists() {
