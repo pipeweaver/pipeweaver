@@ -16,7 +16,6 @@ use std::fs;
 use std::fs::{create_dir_all, File};
 use std::io::ErrorKind;
 use std::path::PathBuf;
-use std::sync::mpsc::Receiver;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::{mpsc, oneshot};
@@ -56,7 +55,7 @@ impl PrimaryWorker {
         'main: loop {
             if !first_run {
                 // We need to wait a couple of seconds to make sure the teardown is complete
-                info!("[PrimaryWorker] Restarting Pipewire Manager");
+                info!("[PrimaryWorker] Restarting Pipewire Manager in 2 seconds");
                 sleep(Duration::from_secs(2)).await;
             } else {
                 first_run = false;
@@ -101,8 +100,9 @@ impl PrimaryWorker {
                             }
                             MessageResult::Reset => {
                                 // Restart the Pipewire Manager, so continue on the main loop
-                                info!("[PrimaryWorker] Restarting Pipewire Manager");
-                                break;
+                                info!("[PrimaryWorker] Restarting Pipewire Manager, Saving Profile");
+                                let _ = self.save_profile(&profile_path, &self.last_status.audio.profile);
+                                continue 'main;
                             }
                             MessageResult::None => {}
                         }
@@ -141,10 +141,6 @@ impl PrimaryWorker {
                     }
                 }
             }
-
-            // Do a final profile save on shutdown
-            let _ = self.save_profile(&profile_path, &self.last_status.audio.profile);
-            info!("[PrimaryWorker] Stopped");
         }
 
         let _ = self.save_profile(&profile_path, &self.last_status.audio.profile);
