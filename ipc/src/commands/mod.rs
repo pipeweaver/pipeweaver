@@ -43,6 +43,7 @@ pub struct WebsocketResponse {
 pub enum DaemonCommand {
     SetMetering(bool),
     OpenInterface,
+    ResetAudio,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
