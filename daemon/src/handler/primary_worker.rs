@@ -15,7 +15,6 @@ use pipeweaver_profile::Profile;
 use std::fs;
 use std::fs::{create_dir_all, File};
 use std::io::ErrorKind;
-use std::net::Shutdown;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
@@ -152,6 +151,7 @@ impl PrimaryWorker {
 
     async fn handle_message(&mut self, pw_tx: &Manage, message: DaemonMessage) -> MessageResult {
         let mut update = false;
+        let mut reset = false;
 
         match message {
             DaemonMessage::GetStatus(tx) => {
@@ -170,7 +170,9 @@ impl PrimaryWorker {
                             warn!("Unable to open web interface: {}", e);
                         }
                     }
-                    DaemonCommand::ResetAudio => {}
+                    DaemonCommand::ResetAudio => {
+                        reset = true
+                    }
                 }
                 let _ = tx.send(DaemonResponse::Ok);
                 update = true;
@@ -191,6 +193,9 @@ impl PrimaryWorker {
                     }
                 }
             }
+        }
+        if reset {
+            return MessageResult::Reset;
         }
         if update {
             return MessageResult::UpdateState;
