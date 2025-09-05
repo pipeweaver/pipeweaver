@@ -21,6 +21,9 @@ export default {
   methods: {
     change(e) {
       this.localFieldValue = parseInt(e.target.value)
+    },
+    getHeight() {
+      return this.height - 10;
     }
   },
 
@@ -43,20 +46,41 @@ export default {
 </script>
 
 <template>
-  <VerticalRange
-    id="channel"
-    :change="change"
-    :current-value="localFieldValue"
-    :deselected-colour="colour2"
-    :height="height"
-    :max-value="100"
-    :min-value="0"
-    :selected-colour="colour1"
-    aria-description=""
-    aria-label=""
-    aria-value=""
-    @change="change"
-  />
+  <div class="range">
+    <div>
+      <VerticalRange
+        id="channel"
+        :change="change"
+        :current-value="localFieldValue"
+        :deselected-colour="colour2"
+        :height="getHeight()"
+        :max-value="100"
+        :min-value="0"
+        :selected-colour="colour1"
+        aria-description=""
+        aria-label=""
+        aria-value=""
+        @change="change"
+      />
+    </div>
+    <div class="range-label">{{ localFieldValue }}%</div>
+  </div>
+
+
 </template>
 
-<style scoped></style>
+<style scoped>
+.range {
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.range-label {
+  color: #6e7676;
+  padding-top: 2px;
+  width: 32px;
+  text-align: center;
+}
+</style>
