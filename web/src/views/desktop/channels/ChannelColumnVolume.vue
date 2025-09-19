@@ -12,6 +12,7 @@ export default {
   },
 
   props: {
+    id: {type: String, required: true},
     height: {type: Number, required: false, default: 440},
     currentValue: {type: Number, required: true},
     colour1: {type: String, default: '#00ffff'},
@@ -49,7 +50,7 @@ export default {
   <div class="range">
     <div>
       <VerticalRange
-        id="channel"
+        :id="id"
         :change="change"
         :current-value="localFieldValue"
         :deselected-colour="colour2"

@@ -151,6 +151,7 @@ export class WebsocketMeter {
     self.#websocket.addEventListener('message', function (event) {
       let json = JSON.parse(event.data);
       for (const callback of self.#callbacks) {
+        //console.log(callback);
         if (callback.node === json.id) {
           callback.executor(json.percent);
         }
