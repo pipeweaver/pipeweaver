@@ -241,12 +241,23 @@ impl PipewireManager {
                                 }
                             }
                         }
+                        PipewireReceiver::NodeMuteChanged(id, muted) => {
+                            if let Err(e) = self.sync_node_mute(id, muted).await {
+                                warn!("Error Setting Mute State: {}", e);
+                            }
+
+                            // Save the change in the profile
+                            if self.worker_sender.capacity() > 0 {
+                                let _ = self.worker_sender.send(WorkerMessage::ProfileChanged).await;
+                            }
+                        }
                         _ => {}
                     }
                 }
                 _ = Pin::as_mut(&mut volumes_ready_timer), if !volumes_ready => {
                     debug!("Activating Pipewire Volume Manager");
                     self.sync_all_pipewire_volumes().await;
+                    self.sync_all_pipewire_mutes().await;
                     volumes_ready = true;
                 }
                 Some(node_id) = device_ready_rx.recv() => {
