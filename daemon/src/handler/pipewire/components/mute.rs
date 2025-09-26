@@ -7,6 +7,7 @@ use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{anyhow, bail, Result};
 use log::{debug, info, warn};
+use pipeweaver_pipewire::PipewireMessage;
 use pipeweaver_profile::MuteStates;
 use pipeweaver_shared::{Mix, MuteState, MuteTarget, NodeType};
 use std::collections::HashSet;
@@ -129,7 +130,6 @@ impl MuteManager for PipewireManager {
         let has_new_mute_state = !mute_state.mute_state.is_empty();
         let new_mute_targets = Self::get_mute_targets(mute_state);
 
-
         // Handle transitions
         if !has_mute_state && has_new_mute_state {
             debug!("Transition: Unmuted → Muted");
@@ -180,9 +180,6 @@ impl MuteManager for PipewireManager {
             bail!("Provided Target is a Source Node");
         }
 
-        // Fetch the Filter Ulid for this Target
-        let target_filter = &self.get_target_filter_node(id)?;
-
         // Attempt to Grab the 'Unmuted' Volume for this Target
         let err = anyhow!("Unable to Locate Target");
         let profile_volume = if node_type == NodeType::PhysicalTarget {
@@ -209,15 +206,23 @@ impl MuteManager for PipewireManager {
         // Update the profile mute state
         *current_state = state;
 
-        // Attempt to apply the 'Muted' / 'Unmuted' volume to the filter
-        match state {
-            MuteState::Unmuted => self.filter_volume_set(*target_filter, profile_volume).await?,
-            MuteState::Muted => self.filter_volume_set(*target_filter, 0).await?
+        if node_type == NodeType::PhysicalTarget {
+            // Attempt to apply the 'Muted' / 'Unmuted' volume to the filter
+            match state {
+                MuteState::Unmuted => self.filter_volume_set(id, profile_volume).await?,
+                MuteState::Muted => self.filter_volume_set(id, 0).await?,
+            }
+        } else {
+            // Apply mute state to Pipewire
+            let message = PipewireMessage::SetNodeMute(id, match state {
+                MuteState::Unmuted => false,
+                MuteState::Muted => true,
+            });
+            let _ = self.pipewire().send_message(message);
         }
 
         Ok(())
     }
-
 
     async fn is_source_muted_to_some(&self, source: Ulid, target: Ulid) -> Result<bool> {
         let states = self.get_source_mute_states(source)?;
@@ -321,7 +326,6 @@ impl MuteManagerLocal for PipewireManager {
         Ok(states)
     }
 
-
     async fn mute_remove_volume(&mut self, source: Ulid) -> Result<()> {
         let mix_err = anyhow!("Unable to Find Source Mixes");
         let map = self.source_map.get(&source).copied().ok_or(mix_err)?;
@@ -332,7 +336,6 @@ impl MuteManagerLocal for PipewireManager {
 
         Ok(())
     }
-
 
     async fn mute_remove_routes(&mut self, source: Ulid, targets: &HashSet<Ulid>) -> Result<()> {
         for target in targets {
@@ -358,10 +361,13 @@ impl MuteManagerLocal for PipewireManager {
             bail!("Provided Target is a Source Node");
         }
 
-        let target_node = self.get_target_filter_node(target)?;
         let target_mix = self.routing_get_target_mix(&target).await?;
+        if node_type == NodeType::PhysicalTarget {
+            self.link_remove_filter_to_filter(map[target_mix], target).await?;
+        } else {
+            self.link_remove_filter_to_node(map[target_mix], target).await?;
+        }
 
-        self.link_remove_filter_to_filter(map[target_mix], target_node).await?;
         Ok(())
     }
 
@@ -378,7 +384,6 @@ impl MuteManagerLocal for PipewireManager {
 
         Ok(())
     }
-
 
     async fn mute_restore_routes(&mut self, source: Ulid, targets: &HashSet<Ulid>) -> Result<()> {
         for target in targets {
@@ -404,9 +409,12 @@ impl MuteManagerLocal for PipewireManager {
             bail!("Provided Target is a Source Node");
         }
 
-        let target_node = self.get_target_filter_node(target)?;
         let mix = self.routing_get_target_mix(&target).await?;
-        self.link_create_filter_to_filter(map[mix], target_node).await?;
+        if node_type == NodeType::PhysicalTarget {
+            self.link_create_filter_to_filter(map[mix], target).await?;
+        } else {
+            self.link_create_filter_to_node(map[mix], target).await?;
+        }
         Ok(())
     }
 }

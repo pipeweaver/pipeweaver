@@ -38,14 +38,19 @@ impl RoutingManagement for PipewireManager {
         debug!("Loading Routing for Source: {}", source);
         if let Some(targets) = self.profile.routes.get(source) {
             for target in targets {
-                let target_node = self.get_target_filter_node(*target)?;
                 debug!("Source to Target Filter Node: {} {}", source, target);
                 if !self.is_source_muted_to_some(*source, *target).await? {
                     if let Some(map) = self.source_map.get(source).copied() {
                         debug!("Creating Link");
                         // Grab the Mix to Route From
+                        let node = self.get_node_type(*target).ok_or(anyhow!("Unknown Node"))?;
                         let mix = self.routing_get_target_mix(target).await?;
-                        self.link_create_filter_to_filter(map[mix], target_node).await?;
+
+                        if node == NodeType::VirtualTarget {
+                            self.link_create_filter_to_node(map[mix], *target).await?;
+                        } else {
+                            self.link_create_filter_to_filter(map[mix], *target).await?;
+                        }
                     }
                 }
             }
@@ -60,20 +65,25 @@ impl RoutingManagement for PipewireManager {
         for (source, targets) in &self.profile.routes {
             if targets.contains(target) && !self.is_source_muted_to_some(*source, *target).await? {
                 debug!("Need Route");
-                let target_node = self.get_target_filter_node(*target)?;
+                //let target_node = self.get_target_filter_node(*target)?;
 
-                debug!("Routing to {} for {}", target_node, target);
+                //debug!("Routing to {} for {}", target, target);
                 if let Some(map) = self.source_map.get(source) {
                     debug!("Applying Map: {:?}", map);
-
                     let mix = self.routing_get_target_mix(target).await?;
-                    self.link_create_filter_to_filter(map[mix], target_node).await?;
+                    if let Some(target_type) = self.get_node_type(*target) {
+                        if target_type == NodeType::VirtualTarget {
+                            debug!("Target Node Type: {:?}", target_type);
+                            self.link_create_filter_to_filter(map[mix], *target).await?;
+                        } else {
+                            self.link_create_filter_to_node(map[mix], *target).await?;
+                        }
+                    }
                 }
             }
         }
         Ok(())
     }
-
 
     async fn routing_set_route(&mut self, source: Ulid, target: Ulid, enabled: bool) -> Result<()> {
         // This is actually more complicated that it sounds, first lets find some stuff out..
@@ -89,7 +99,7 @@ impl RoutingManagement for PipewireManager {
         }
 
         // This should already be here, but it's not, so create it
-        let target_id = self.get_target_filter_node(target)?;
+        //let target_id = self.get_target_filter_node(target)?;
         self.profile.routes.entry(source).or_insert_with(|| {
             warn!("[Routing] Table Missing for Source {}, Creating", source);
             Default::default()
@@ -109,16 +119,25 @@ impl RoutingManagement for PipewireManager {
                 // Only create the route if it's not currently muted
                 if !self.is_source_muted_to_some(source, target).await? {
                     let mix = self.routing_get_target_mix(&target).await?;
-                    self.link_create_filter_to_filter(map[mix], target_id).await?;
+
+                    if target_type == NodeType::VirtualTarget {
+                        self.link_create_filter_to_node(map[mix], target).await?;
+                    } else {
+                        self.link_create_filter_to_filter(map[mix], target).await?;
+                    }
+                    return Ok(());
                 }
             } else {
                 let mix = self.routing_get_target_mix(&target).await?;
-                self.link_remove_filter_to_filter(map[mix], target_id).await?;
+                if target_type == NodeType::VirtualTarget {
+                    self.link_remove_filter_to_node(map[mix], target).await?;
+                } else {
+                    self.link_remove_filter_to_filter(map[mix], target).await?;
+                }
             }
         } else {
             bail!("Unable to obtain volume map for Source");
         }
-
 
         Ok(())
     }
@@ -172,7 +191,7 @@ impl RoutingManagement for PipewireManager {
             bail!("Provided Target is a Source Node");
         }
 
-        let target_node = self.get_target_filter_node(target)?;
+        //let target_node = self.get_target_filter_node(target)?;
 
         // Next, grab all the routes to this target
         for (source, targets) in &self.profile.routes {
@@ -181,9 +200,13 @@ impl RoutingManagement for PipewireManager {
                 if !self.is_source_muted_to_some(*source, target).await? {
                     // We need to detach the link from this source, and attach it to a new one
                     if let Some(map) = self.source_map.get(source).copied() {
-                        // Switch the Link between the mixes
-                        self.link_remove_filter_to_filter(map[current], target_node).await?;
-                        self.link_create_filter_to_filter(map[mix], target_node).await?;
+                        if node_type == NodeType::PhysicalTarget {
+                            self.link_remove_filter_to_filter(map[current], target).await?;
+                            self.link_create_filter_to_filter(map[mix], target).await?;
+                        } else {
+                            self.link_remove_filter_to_node(map[current], target).await?;
+                            self.link_create_filter_to_node(map[mix], target).await?;
+                        }
                     }
                 }
             }

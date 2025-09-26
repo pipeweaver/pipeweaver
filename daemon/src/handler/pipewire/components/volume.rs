@@ -8,7 +8,7 @@ use anyhow::{anyhow, bail, Error, Result};
 use log::debug;
 use pipeweaver_pipewire::{FilterValue, PipewireMessage};
 use pipeweaver_profile::Volumes;
-use pipeweaver_shared::{Mix, MuteState, NodeType};
+use pipeweaver_shared::{DeviceType, Mix, MuteState, NodeType};
 use ulid::Ulid;
 
 pub(crate) trait VolumeManager {
@@ -16,7 +16,10 @@ pub(crate) trait VolumeManager {
     async fn load_initial_volume(&self, id: Ulid) -> Result<()>;
 
     async fn sync_all_pipewire_volumes(&mut self);
+    async fn sync_all_pipewire_mutes(&mut self);
+
     async fn sync_node_volume(&mut self, id: Ulid, volume: u8) -> Result<()>;
+    async fn sync_node_mute(&mut self, id: Ulid, muted: bool) -> Result<()>;
 
     async fn set_source_volume(&mut self, id: Ulid, mix: Mix, volume: u8, api: bool) -> Result<()>;
     async fn set_source_volume_linked(&mut self, id: Ulid, linked: bool) -> Result<()>;
@@ -77,9 +80,18 @@ impl VolumeManager for PipewireManager {
             }
         }
 
-        for &id in self.target_map.keys() {
-            if let Ok(volume) = self.get_node_volume(id, Mix::A) {
-                let message = PipewireMessage::SetNodeVolume(id, volume);
+        for dev in &self.profile.devices.targets.virtual_devices {
+            if let Ok(volume) = self.get_node_volume(dev.description.id, Mix::A) {
+                let message = PipewireMessage::SetNodeVolume(dev.description.id, volume);
+                let _ = self.pipewire().send_message(message);
+            }
+        }
+    }
+
+    async fn sync_all_pipewire_mutes(&mut self) {
+        for dev in &self.profile.devices.targets.virtual_devices {
+            if let Ok(muted) = self.get_target_mute_state(dev.description.id).await {
+                let message = PipewireMessage::SetNodeMute(dev.description.id, muted == MuteState::Muted);
                 let _ = self.pipewire().send_message(message);
             }
         }
@@ -96,6 +108,24 @@ impl VolumeManager for PipewireManager {
                 self.set_target_volume(id, volume, false).await?;
             }
         }
+
+        Ok(())
+    }
+
+    async fn sync_node_mute(&mut self, id: Ulid, muted: bool) -> Result<()> {
+        let node_type = self.get_node_type(id).ok_or(anyhow!("Node Not Found"))?;
+        if !matches!(node_type, NodeType::VirtualTarget) {
+            // We don't need to sync here
+            return Ok(());
+        }
+
+        let err = anyhow!("Node not Found");
+        let dev = self.get_virtual_target_mut(id).ok_or(err)?;
+
+        dev.mute_state = match muted {
+            true => MuteState::Muted,
+            false => MuteState::Unmuted
+        };
 
         Ok(())
     }
@@ -177,10 +207,16 @@ impl VolumeManager for PipewireManager {
             bail!("Volume Must be between 0 and 100");
         }
         let node_type = self.get_node_type(id).ok_or(anyhow!("Unknown Node"))?;
-        if self.get_target_mute_state(id).await? == MuteState::Unmuted {
-            let filter_target = self.get_target_filter_node(id)?;
-            self.filter_volume_set(filter_target, volume).await?;
+        if node_type == NodeType::VirtualTarget {
+            // We should always change this, regardless of mute state
+            if api {
+                let message = PipewireMessage::SetNodeVolume(id, volume);
+                self.pipewire().send_message(message)?;
+            }
+        } else if self.get_target_mute_state(id).await? == MuteState::Unmuted {
+            self.filter_volume_set(id, volume).await?;
         }
+
 
         // We can safely unwrap here, errors will be thrown by get_target_mute_state if it's wrong
         if node_type == NodeType::PhysicalTarget {
@@ -226,11 +262,10 @@ impl VolumeManager for PipewireManager {
                 }
                 NodeType::VirtualTarget => {
                     // Virtual Targets need to be attached / detached against the volume
-                    let &volume = self.target_map.get(&node).ok_or(anyhow!("Nope"))?;
                     if enabled {
-                        self.link_create_filter_to_filter(volume, meter).await?;
+                        self.link_create_node_to_filter(node, meter).await?;
                     } else {
-                        self.link_remove_filter_to_filter(volume, meter).await?;
+                        self.link_remove_node_to_filter(node, meter).await?;
                     }
                 }
             }
@@ -336,11 +371,20 @@ impl VolumeManagerLocal for PipewireManager {
             bail!("Provided Source is a Source Node");
         }
 
-        let target = self.get_target_filter_node(id)?;
-        if self.get_target_mute_state(id).await? == MuteState::Muted {
-            self.filter_volume_set(target, 0).await
+
+        if node_type == NodeType::PhysicalTarget {
+            // Physical Targets use a Volume filter
+            if self.get_target_mute_state(id).await? == MuteState::Muted {
+                self.filter_volume_set(id, 0).await?;
+            } else {
+                self.filter_volume_set(id, volume).await?;
+            }
         } else {
-            self.filter_volume_set(target, volume).await
+            // Virtual Targets use pipewire
+            let message = PipewireMessage::SetNodeVolume(id, volume);
+            self.pipewire().send_message(message)?;
         }
+
+        Ok(())
     }
 }

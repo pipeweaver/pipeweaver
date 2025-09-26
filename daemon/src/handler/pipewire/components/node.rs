@@ -23,7 +23,6 @@ type GroupList = EnumMap<OrderGroup, Vec<Ulid>>;
 /// This crate contains everything needed to create a Pipewire node
 pub(crate) trait NodeManagement {
     fn get_node_type(&self, id: Ulid) -> Option<NodeType>;
-    fn get_target_filter_node(&self, id: Ulid) -> Result<Ulid>;
 
     async fn node_new(&mut self, node_type: NodeType, name: String) -> Result<Ulid>;
 
@@ -76,24 +75,6 @@ impl NodeManagement for PipewireManager {
             return Some(NodeType::VirtualTarget);
         }
         None
-    }
-
-    fn get_target_filter_node(&self, id: Ulid) -> Result<Ulid> {
-        let err = anyhow!("Target Node not Found");
-        let node_type = self.get_node_type(id).ok_or(err)?;
-        if !matches!(
-            node_type,
-            NodeType::PhysicalTarget | NodeType::VirtualTarget
-        ) {
-            bail!("Provided Target is a Source Node");
-        }
-
-        if node_type == NodeType::PhysicalTarget {
-            Ok(id)
-        } else {
-            let err = anyhow!("Unable to Locate Volume for Target");
-            Ok(*self.target_map.get(&id).ok_or(err)?)
-        }
     }
 
     async fn node_new(&mut self, node_type: NodeType, name: String) -> Result<Ulid> {
@@ -263,63 +244,6 @@ impl NodeManagement for PipewireManager {
         Ok(())
     }
 
-    // async fn node_set_pinned(&mut self, id: Ulid, pinned: bool) -> Result<()> {
-    //     // TODO: We should probably sanity check this
-    //     // While we're not going to specifically limit the number of channels that can be
-    //     // pinned, we should make sure we're not both hidden and pinned :D
-    //     if let Some(node_type) = self.get_node_type(id) {
-    //         let pinned_devices = match node_type {
-    //             NodeType::PhysicalSource | NodeType::VirtualSource => {
-    //                 &mut self.profile.devices.sources.pinned_devices
-    //             }
-    //             NodeType::PhysicalTarget | NodeType::VirtualTarget => {
-    //                 &mut self.profile.devices.targets.pinned_devices
-    //             }
-    //         };
-    //         let device_order = match node_type {
-    //             NodeType::PhysicalSource | NodeType::VirtualSource => {
-    //                 &mut self.profile.devices.sources.device_order
-    //             }
-    //             NodeType::PhysicalTarget | NodeType::VirtualTarget => {
-    //                 &mut self.profile.devices.targets.device_order
-    //             }
-    //         };
-    //
-    //         if pinned {
-    //             // Make sure we're not trying to pin an already pinned target
-    //             if pinned_devices.iter().any(|pinned| pinned == &id) {
-    //                 bail!("Device Already Pinned");
-    //             }
-    //             pinned_devices.push(id);
-    //             device_order.retain(|d| d != &id);
-    //         } else {
-    //             // Remove it from pinned, add it back to regular
-    //             pinned_devices.retain(|d| d != &id);
-    //             device_order.push(id);
-    //         }
-    //     }
-    //     Ok(())
-    // }
-    //
-    // async fn node_set_hidden(&mut self, id: Ulid, hidden: bool) -> Result<()> {
-    //     if let Some(node_type) = self.get_node_type(id) {
-    //         let hidden_devices = match node_type {
-    //             NodeType::PhysicalSource | NodeType::VirtualSource => {
-    //                 &mut self.profile.devices.sources.hidden_devices
-    //             }
-    //             NodeType::PhysicalTarget | NodeType::VirtualTarget => {
-    //                 &mut self.profile.devices.targets.hidden_devices
-    //             }
-    //         };
-    //         if hidden {
-    //             hidden_devices.insert(id);
-    //         } else {
-    //             hidden_devices.remove(&id);
-    //         }
-    //     }
-    //     Ok(())
-    // }
-
     async fn node_set_colour(&mut self, id: Ulid, colour: Colour) -> Result<()> {
         if let Some(node_type) = self.get_node_type(id) {
             let err = anyhow!("Cannot Find Node");
@@ -464,31 +388,20 @@ impl NodeManagementLocal for PipewireManager {
         let properties = self.create_node_props(MediaClass::Source, desc);
         self.node_pw_create(properties).await?;
 
-        // Link the Volume to the Target Node
-        let volume = self.filter_volume_create(desc.name.clone()).await?;
-        self.link_create_filter_to_node(volume, desc.id).await?;
-
         // Create a meter and attach it to the volume
         let filter_name = format!("{}-meter", desc.name);
         let meter = self.filter_meter_create(desc.id, filter_name).await?;
         if self.meter_enabled {
-            self.link_create_filter_to_filter(volume, meter).await?;
+            self.link_create_node_to_filter(desc.id, meter).await?;
         }
         self.meter_map.insert(desc.id, meter);
-
-        // Map this Node to this Volume
-        self.target_map.insert(desc.id, volume);
 
         Ok(())
     }
 
     async fn node_create_a_b_volumes(&mut self, desc: &DeviceDescription) -> Result<(Ulid, Ulid)> {
-        let mix_a = self
-            .filter_volume_create(format!("{} A", desc.name))
-            .await?;
-        let mix_b = self
-            .filter_volume_create(format!("{} B", desc.name))
-            .await?;
+        let mix_a = self.filter_volume_create(format!("{} A", desc.name)).await?;
+        let mix_b = self.filter_volume_create(format!("{} B", desc.name)).await?;
 
         Ok((mix_a, mix_b))
     }
@@ -684,41 +597,30 @@ impl NodeManagementLocal for PipewireManager {
     async fn node_remove_virtual_target(&mut self, id: Ulid, profile_remove: bool) -> Result<()> {
         // Again, similar to physical targets, but we need to check the target map to
         // find our volume filter then un-route and remove it
-        if let Some(volume) = self.target_map.clone().get(&id) {
-            // Detach and destroy the Meter
-            if let Some(&meter) = self.meter_map.get(&id) {
-                if self.meter_enabled {
-                    self.link_remove_filter_to_filter(*volume, meter).await?;
-                }
-                self.filter_remove(meter).await?;
-                self.meter_map.remove(&id);
+
+        // Detach and destroy the Meter
+        if let Some(&meter) = self.meter_map.get(&id) {
+            if self.meter_enabled {
+                self.link_remove_node_to_filter(id, meter).await?;
             }
+            self.filter_remove(meter).await?;
+            self.meter_map.remove(&id);
+        }
 
-            // Detach from the Volume Filter to the Target Node
-            self.link_remove_filter_to_node(*volume, id).await?;
-
-            for (source, targets) in self.profile.routes.clone() {
-                if targets.contains(&id) {
-                    // Grab the A/B Mixes for this source
-                    if let Some(mix_map) = self.source_map.get(&source) {
-                        let mix_map = *mix_map;
-                        for mix in Mix::iter() {
-                            self.link_remove_filter_to_filter(mix_map[mix], *volume)
-                                .await?;
-                        }
+        for (source, targets) in self.profile.routes.clone() {
+            if targets.contains(&id) {
+                // Grab the A/B Mixes for this source
+                if let Some(mix_map) = self.source_map.get(&source) {
+                    let mix_map = *mix_map;
+                    for mix in Mix::iter() {
+                        self.link_remove_filter_to_node(mix_map[mix], id).await?;
                     }
                 }
             }
-
-            // Volume Filter should be clean now, remove it
-            self.filter_remove(*volume).await?;
         }
 
         // Now we can drop the node
         self.node_pw_remove(id).await?;
-
-        // Remove it from the target map
-        self.target_map.remove(&id);
 
         if profile_remove {
             // Remove ourselves as a target from any routes we're active in
@@ -759,6 +661,8 @@ impl NodeManagementLocal for PipewireManager {
     fn create_node_props(&self, class: MediaClass, desc: &DeviceDescription) -> NodeProperties {
         let volume = self.get_node_volume(desc.id, Mix::A).unwrap();
 
+        let managed_volume = matches!(class, MediaClass::Sink);
+
         let identifier = format!("{} {}", APP_NAME, desc.name)
             .to_lowercase()
             .replace(" ", "_");
@@ -773,6 +677,7 @@ impl NodeManagementLocal for PipewireManager {
             app_name: APP_NAME.to_lowercase(),
             linger: false,
             class,
+            managed_volume,
             buffer: 512,
             ready_sender: None,
         }
@@ -792,7 +697,6 @@ impl NodeManagementLocal for PipewireManager {
         }
         bail!("Node Id {} not found", id)
     }
-
 
     fn find_order_group_by_id(id: Ulid, map: &mut GroupList) -> Result<&mut Vec<Ulid>> {
         for (_, vec) in map.iter_mut() {
