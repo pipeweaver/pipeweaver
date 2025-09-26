@@ -31,6 +31,7 @@ pub enum PipewireMessage {
     SetFilterValue(Ulid, u32, FilterValue),
 
     SetNodeVolume(Ulid, u8),
+    SetNodeMute(Ulid, bool),
     SetApplicationTarget(u32, Ulid),
 
     DestroyUnmanagedLinks(u32),
@@ -58,6 +59,7 @@ pub enum PipewireInternalMessage {
 
     SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<()>>),
     SetNodeVolume(Ulid, u8, oneshot::Sender<Result<()>>),
+    SetNodeMute(Ulid, bool, oneshot::Sender<Result<()>>),
     SetApplicationTarget(u32, Ulid, oneshot::Sender<Result<()>>),
 
     DestroyUnmanagedLinks(u32, oneshot::Sender<Result<()>>),
@@ -75,6 +77,7 @@ pub enum PipewireReceiver {
     ApplicationRemoved(u32),
 
     NodeVolumeChanged(Ulid, u8),
+    NodeMuteChanged(Ulid, bool),
 
     ManagedLinkDropped(LinkType, LinkType),
 }
@@ -163,6 +166,9 @@ impl PipewireRunner {
             PipewireMessage::SetNodeVolume(id, volume) => {
                 PipewireInternalMessage::SetNodeVolume(id, volume, tx)
             }
+            PipewireMessage::SetNodeMute(id, muted) => {
+                PipewireInternalMessage::SetNodeMute(id, muted, tx)
+            }
             PipewireMessage::SetApplicationTarget(app_id, target) => {
                 PipewireInternalMessage::SetApplicationTarget(app_id, target, tx)
             }
@@ -244,6 +250,7 @@ pub struct NodeProperties {
     // Node Configuration
     pub linger: bool,
     pub class: MediaClass,
+    pub managed_volume: bool,
 
     // Latency Configuration
     pub buffer: u32,

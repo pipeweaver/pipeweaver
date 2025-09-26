@@ -9,14 +9,13 @@ use oneshot::Sender;
 use parking_lot::RwLock;
 use pipewire::filter::{Filter, FilterListener, FilterPort};
 use pipewire::link::{Link, LinkListener};
-use pipewire::metadata::Metadata;
 use pipewire::node::{Node, NodeListener};
-use pipewire::properties::{properties, Properties};
+use pipewire::properties::Properties;
 use pipewire::proxy::ProxyListener;
 use pipewire::spa::param::ParamType;
 use pipewire::spa::pod::serialize::PodSerializer;
 use pipewire::spa::pod::{object, Pod, Property, Value, ValueArray};
-use pipewire::spa::sys::SPA_PROP_channelVolumes;
+use pipewire::spa::sys::{SPA_PROP_channelVolumes, SPA_PROP_mute};
 use pipewire::spa::utils;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -207,6 +206,26 @@ impl Store {
 
     pub fn on_volume_change(&mut self, id: Ulid, volume: u8) {
         let _ = self.callback_tx.send(PipewireReceiver::NodeVolumeChanged(id, volume));
+    }
+
+    pub fn set_mute(&mut self, id: Ulid, muted: bool) -> Result<()> {
+        let node = self.managed_nodes.get(&id).ok_or(anyhow!("Failed to find node"))?;
+
+        let pod = Value::Object(object! {
+            utils::SpaTypes::ObjectParamProps,
+            ParamType::Props,
+            Property::new(SPA_PROP_mute, Value::Bool(muted)),
+        });
+        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod).unwrap();
+        let bytes = cursor.into_inner();
+        if let Some(bytes) = Pod::from_bytes(&bytes) {
+            node.proxy.set_param(ParamType::Props, 0, bytes);
+        }
+        Ok(())
+    }
+
+    pub fn on_mute_change(&mut self, id: Ulid, muted: bool) {
+        let _ = self.callback_tx.send(PipewireReceiver::NodeMuteChanged(id, muted));
     }
 
     // ----- MANAGED FILTERS -----

@@ -4,13 +4,13 @@ use crate::{
     registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties,
     PipewireInternalMessage, PipewireReceiver,
 };
-use crate::{MediaClass, PWReceiver, PipewireMessage};
+use crate::{MediaClass, PWReceiver};
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use log::{debug, error, info};
 use pipewire::core::Core;
 use pipewire::filter::{Filter, FilterFlags, FilterState, PortFlags};
-use pipewire::keys::{APP_ICON_NAME, APP_ID, APP_NAME, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_ID, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME};
+use pipewire::keys::{APP_ICON_NAME, APP_ID, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME};
 use pipewire::link::{Link, LinkListener, LinkState};
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
@@ -18,17 +18,17 @@ use pipewire::proxy::ProxyT;
 use pipewire::registry::Registry;
 use pipewire::spa::pod::builder::Builder;
 use pipewire::spa::pod::deserialize::PodDeserializer;
-use pipewire::spa::pod::{object, Object, Pod, Property, PropertyFlags, Value, ValueArray};
-use pipewire::spa::sys::{spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position, SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_PARAM_Props, SPA_PROP_channelVolumes, SPA_TYPE_OBJECT_ParamProcessLatency, SPA_TYPE_OBJECT_Props, SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR, SPA_PARAM_INFO_SERIAL};
+use pipewire::spa::pod::{object, Pod, Property, Value, ValueArray};
+use pipewire::spa::sys::{spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position, SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_PARAM_Props, SPA_PROP_channelVolumes, SPA_PROP_mute, SPA_TYPE_OBJECT_ParamProcessLatency, SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR, SPA_PARAM_INFO_SERIAL};
 use pipewire::spa::utils::Direction;
 
 use enum_map::{enum_map, EnumMap};
 use oneshot::Sender;
 use parking_lot::RwLock;
 use pipewire::spa::param::ParamType;
-use pipewire::spa::pod::serialize::{PodSerialize, PodSerializer};
+use pipewire::spa::pod::serialize::PodSerializer;
 use pipewire::spa::utils;
-use pipewire::sys::pw_impl_link_destroy;
+
 use pipewire::{context, main_loop};
 use std::cell::RefCell;
 use std::io::Cursor;
@@ -118,13 +118,14 @@ impl PipewireManager {
             // https://gitlab.freedesktop.org/pipewire/pipewire/-/wikis/Virtual-Devices
             "audio.position" => "FL,FR",
 
-            // In the case of this app, we're handling the volumes ourselves via audio_filters, so
-            // we're going to simply ignore what pipewire says the volume is and monitor at 100%.
-            // This should prevent weirdness if the volumes are directly adjusted.
-            "monitor.channel-volumes" => "false",
+            // If upstream is managing the volumes via a filter, we don't want Pipewire interfering
+            "monitor.channel-volumes" => match properties.managed_volume {
+                true => "false",
+                false => "true"
+            },
 
             // Keep the monitor as close to 'real-time' as possible
-            "monitor.passthrough" => "true",
+            //"monitor.passthrough" => "true",
         };
 
         debug!(
@@ -245,6 +246,7 @@ impl PipewireManager {
                                 .iter()
                                 .find(|p| p.key == SPA_PROP_channelVolumes);
 
+
                             // Get the Left / Right value
                             if let Some(prop) = prop {
                                 if let Value::ValueArray(ValueArray::Float(value)) = &prop.value {
@@ -257,6 +259,17 @@ impl PipewireManager {
 
                                     let volume = (max.cbrt() * 100.0).round() as u8;
                                     listener_param_store.borrow_mut().on_volume_change(listener_id, volume);
+                                }
+                            }
+
+                            let prop = object
+                                .properties
+                                .iter()
+                                .find(|p| p.key == SPA_PROP_mute);
+
+                            if let Some(prop) = prop {
+                                if let Value::Bool(enabled) = &prop.value {
+                                    listener_param_store.borrow_mut().on_mute_change(listener_id, *enabled);
                                 }
                             }
                         } else {
@@ -669,6 +682,10 @@ impl PipewireManager {
     fn set_node_volume(&mut self, id: Ulid, volume: u8) -> Result<()> {
         self.store.borrow_mut().set_volume(id, volume)
     }
+
+    fn set_node_mute(&mut self, id: Ulid, mute: bool) -> Result<()> {
+        self.store.borrow_mut().set_mute(id, mute)
+    }
 }
 
 pub fn run_pw_main_loop(
@@ -760,6 +777,10 @@ pub fn run_pw_main_loop(
 
             PipewireInternalMessage::SetNodeVolume(id, volume, result) => {
                 let _ = result.send(manager.borrow_mut().set_node_volume(id, volume));
+            }
+
+            PipewireInternalMessage::SetNodeMute(id, mute, result) => {
+                let _ = result.send(manager.borrow_mut().set_node_mute(id, mute));
             }
 
             PipewireInternalMessage::SetApplicationTarget(id, target, result) => {
