@@ -19,7 +19,7 @@ use pipewire::registry::Registry;
 use pipewire::spa::pod::builder::Builder;
 use pipewire::spa::pod::deserialize::PodDeserializer;
 use pipewire::spa::pod::{object, Pod, Property, Value, ValueArray};
-use pipewire::spa::sys::{spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position, SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_PARAM_Props, SPA_PROP_channelVolumes, SPA_PROP_mute, SPA_TYPE_OBJECT_ParamProcessLatency, SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR, SPA_PARAM_INFO_SERIAL};
+use pipewire::spa::sys::{spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position, SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_PARAM_Props, SPA_PROP_channelVolumes, SPA_PROP_mute, SPA_TYPE_OBJECT_ParamProcessLatency, SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR};
 use pipewire::spa::utils::Direction;
 
 use enum_map::{enum_map, EnumMap};
@@ -49,7 +49,6 @@ struct PipewireManager {
     registry: PipewireRegistry,
 
     store: Rc<RefCell<Store>>,
-    callback_tx: mpsc::Sender<PipewireReceiver>,
 }
 
 impl PipewireManager {
@@ -65,7 +64,6 @@ impl PipewireManager {
             core,
             registry,
             store,
-            callback_tx,
         }
     }
 
@@ -224,14 +222,14 @@ impl PipewireManager {
                                                 if value.0 == SPA_AUDIO_CHANNEL_FL {
                                                     store.managed_node_add_port(
                                                         listener_id,
-                                                        PortLocation::LEFT,
+                                                        PortLocation::Left,
                                                         index,
                                                     );
                                                 }
                                                 if value.0 == SPA_AUDIO_CHANNEL_FR {
                                                     store.managed_node_add_port(
                                                         listener_id,
-                                                        PortLocation::RIGHT,
+                                                        PortLocation::Right,
                                                         index,
                                                     );
                                                 }

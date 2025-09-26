@@ -713,15 +713,15 @@ pub struct LinkStoreMap {
 
 #[derive(Debug, Enum, EnumIter, Copy, Clone, PartialEq)]
 pub(crate) enum PortLocation {
-    LEFT,
-    RIGHT,
+    Left,
+    Right,
 }
 
 impl Display for PortLocation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            PortLocation::LEFT => write!(f, "FL"),
-            PortLocation::RIGHT => write!(f, "FR"),
+            PortLocation::Left => write!(f, "FL"),
+            PortLocation::Right => write!(f, "FR"),
         }
     }
 }
@@ -731,8 +731,8 @@ impl FromStr for PortLocation {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "FL" | "AUX_0" => Ok(Self::LEFT),
-            "FR" | "AUX_1" => Ok(Self::RIGHT),
+            "FL" | "AUX_0" => Ok(Self::Left),
+            "FR" | "AUX_1" => Ok(Self::Right),
             _ => bail!("Unknown Channel"),
         }
     }

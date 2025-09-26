@@ -3,7 +3,7 @@ use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::Result;
-use log::{debug, warn};
+use log::debug;
 use pipeweaver_profile::DeviceDescription;
 use pipeweaver_shared::{NodeType, OrderGroup};
 

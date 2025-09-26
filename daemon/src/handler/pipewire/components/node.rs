@@ -361,8 +361,7 @@ impl NodeManagementLocal for PipewireManager {
         self.link_create_node_to_filter(desc.id, mix_b).await?;
 
         // Create a map for this ID to the mixes
-        self.source_map
-            .insert(desc.id, enum_map! { Mix::A => mix_a, Mix::B => mix_b });
+        self.source_map.insert(desc.id, enum_map! { Mix::A => mix_a, Mix::B => mix_b });
 
         // And we're done :)
         Ok(())

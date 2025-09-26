@@ -48,7 +48,7 @@ async fn ipc_tidy() -> Result<()> {
 
     let mut socket: Socket<DaemonResponse, DaemonRequest> = Socket::new(connection);
     if let Err(e) = socket.send(DaemonRequest::Ping).await {
-        debug!("Unable to send messages, removing socket..");
+        debug!("Unable to send messages: {}, removing socket..", e);
         fs::remove_file(socket_path)?;
         return Ok(());
     }

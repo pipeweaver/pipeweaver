@@ -224,7 +224,7 @@ impl PipewireRegistry {
                                         let proxy: Option<Metadata> = registry.borrow().bind(global).ok();
                                         if let Some(metadata) = proxy {
                                             let listen_store = listener_store.clone();
-                                            let listener = metadata.add_listener_local().property(move |subject, key, type_, value| {
+                                            let listener = metadata.add_listener_local().property(move |subject, key, _type, value| {
 
                                                 // TODO: I've seen 'target.node' floating around in places, but not seen it directly used. Might need to address that.
                                                 if key == Some("target.object") {

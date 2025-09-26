@@ -4,11 +4,11 @@ use crate::handler::pipewire::components::mute::MuteManager;
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
-use anyhow::{anyhow, bail, Error, Result};
+use anyhow::{anyhow, bail, Result};
 use log::debug;
 use pipeweaver_pipewire::{FilterValue, PipewireMessage};
 use pipeweaver_profile::Volumes;
-use pipeweaver_shared::{DeviceType, Mix, MuteState, NodeType};
+use pipeweaver_shared::{Mix, MuteState, NodeType};
 use ulid::Ulid;
 
 pub(crate) trait VolumeManager {
@@ -101,10 +101,11 @@ impl VolumeManager for PipewireManager {
         let node_type = self.get_node_type(id).ok_or(anyhow!("Node Not Found"))?;
         match node_type {
             NodeType::PhysicalSource | NodeType::VirtualSource => {
-                debug!("Setting Volume: {}", volume);
+                debug!("Syncing Volume: {} - {}", id, volume);
                 self.set_source_volume(id, Mix::A, volume, false).await?;
             }
             NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                debug!("Syncing Volume: {} - {}", id, volume);
                 self.set_target_volume(id, volume, false).await?;
             }
         }

@@ -35,12 +35,6 @@ pub struct SourceDevices {
     pub device_order: EnumMap<OrderGroup, Vec<Ulid>>,
 }
 
-pub struct DeviceGroup {
-    pinned: Vec<Ulid>,
-    hidden: Vec<Ulid>,
-    order: Vec<Ulid>,
-}
-
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct TargetDevices {
     /// Source Devices attached to Pipewire

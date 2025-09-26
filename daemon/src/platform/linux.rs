@@ -1,6 +1,6 @@
 use crate::stop::Stop;
 use anyhow::Result;
-use log::{debug, info};
+use log::info;
 use tokio::select;
 use tokio::signal::ctrl_c;
 use tokio::signal::unix::{signal, SignalKind};

@@ -80,7 +80,7 @@ impl Actor for MeterWebsocket {
         ctx.spawn(future);
     }
 
-    fn stopped(&mut self, ctx: &mut Self::Context) {
+    fn stopped(&mut self, _ctx: &mut Self::Context) {
         let count = self.client_counter.fetch_sub(1, Ordering::SeqCst) - 1;
         if count == 0 {
             // No clients left connected, terminate metering

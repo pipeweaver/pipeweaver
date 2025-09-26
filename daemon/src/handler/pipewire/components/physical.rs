@@ -58,7 +58,7 @@ impl PhysicalDevices for PipewireManager {
         // description checks, the node Names should be valid.
         match node_type {
             NodeType::PhysicalSource => {
-                'start: for device in &self.node_list[DeviceType::Source] {
+                for device in &self.node_list[DeviceType::Source] {
                     // Try and match this against our node, check by Name first
                     for paired in &devices {
                         // Check by Name First
@@ -69,7 +69,7 @@ impl PhysicalDevices for PipewireManager {
                 }
             }
             NodeType::PhysicalTarget => {
-                'start: for device in &self.node_list[DeviceType::Target] {
+                for device in &self.node_list[DeviceType::Target] {
                     // Try and match this against our node, check by Name first
                     for paired in &devices {
                         // Check by Name First

@@ -5,7 +5,7 @@ mod store;
 
 use crate::manager::run_pw_main_loop;
 use anyhow::{anyhow, bail, Result};
-use log::{debug, info, warn};
+use log::{info, warn};
 use oneshot::TryRecvError;
 use std::sync::mpsc;
 use std::thread;

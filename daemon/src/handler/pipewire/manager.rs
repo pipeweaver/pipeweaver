@@ -34,7 +34,6 @@ pub(crate) struct PipewireManager {
 
     pub(crate) profile: Profile,
     pub(crate) source_map: HashMap<Ulid, EnumMap<Mix, Ulid>>,
-    pub(crate) target_map: HashMap<Ulid, Ulid>,
 
     // Maps the connection of a PassThrough filter to a Physical Source id
     pub(crate) physical_source: HashMap<Ulid, Vec<u32>>,
@@ -70,7 +69,6 @@ impl PipewireManager {
             profile: config.profile,
 
             source_map: HashMap::default(),
-            target_map: HashMap::default(),
 
             physical_source: HashMap::default(),
             physical_target: HashMap::default(),
