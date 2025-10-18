@@ -38,8 +38,6 @@ use std::sync::mpsc;
 use strum::IntoEnumIterator;
 use ulid::Ulid;
 
-static SAMPLE_RATE: i32 = 48000;
-
 pub(crate) struct FilterData {
     pub callback: Box<dyn FilterHandler>,
 }
@@ -93,13 +91,13 @@ impl PipewireManager {
             },
 
             *AUDIO_CHANNELS => "2",
-            *NODE_LATENCY => format!("{}/{}", properties.buffer, SAMPLE_RATE),
-            *NODE_MAX_LATENCY => format!("{}/{}", properties.buffer, SAMPLE_RATE),
+            *NODE_LATENCY => format!("{}/{}", properties.buffer, properties.rate),
+            *NODE_MAX_LATENCY => format!("{}/{}", properties.buffer, properties.rate),
 
             // Force the QUANTUM and the RATE to ensure that we're not internally adjusted when
             // latency occurs following a link
             *NODE_FORCE_QUANTUM => properties.buffer.to_string(),
-            *NODE_FORCE_RATE => SAMPLE_RATE.to_string(),
+            *NODE_FORCE_RATE => properties.rate.to_string(),
 
             // We don't want to set a driver here. If creating a large number of nodes each of them
             // will pick a different device while finding a clock source, resulting in the nodes

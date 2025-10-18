@@ -31,6 +31,7 @@ pub(crate) struct PipewireManager {
     ready_sender: Option<oneshot::Sender<()>>,
 
     pub(crate) pipewire: Option<PipewireRunner>,
+    pub(crate) clock_rate: Option<u32>,
 
     pub(crate) profile: Profile,
     pub(crate) source_map: HashMap<Ulid, EnumMap<Mix, Ulid>>,
@@ -65,6 +66,7 @@ impl PipewireManager {
             ready_sender: config.ready_sender,
 
             pipewire: None,
+            clock_rate: None,
 
             profile: config.profile,
 
@@ -116,10 +118,10 @@ impl PipewireManager {
         // Run up the Pipewire Handler
         self.pipewire = Some(PipewireRunner::new(send.clone()).unwrap());
 
-        debug!("Loading Profile");
-        if let Err(e) = self.load_profile().await {
-            error!("Error Loading Profile: {}", e);
-        }
+        // Hold until we receive a clock value..
+
+
+        let mut loaded_profile = false;
 
         // Wait 1 second to process volume inputs from Pipewire
         let mut volumes_ready = false;
@@ -173,6 +175,22 @@ impl PipewireManager {
                 }
                 Some(msg) = recv_async.recv() => {
                     match msg {
+                        PipewireReceiver::AnnouncedClock(clock) => {
+                            if let Some(clock) = clock {
+                                self.clock_rate = Some(clock);
+                            } else {
+                                self.clock_rate = Some(48000);
+                            }
+
+                            if !loaded_profile {
+                                debug!("Loading Profile, Clock Rate: {:?}", self.clock_rate);
+                                if let Err(e) = self.load_profile().await {
+                                    error!("Error Loading Profile: {}", e);
+                                }
+                                loaded_profile = true;
+                            }
+                        }
+
                         PipewireReceiver::DeviceAdded(node) => {
                             // Only do this if we don't already have a timer
                             if device_timers.contains_key(&node.node_id) {

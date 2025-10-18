@@ -678,6 +678,7 @@ impl NodeManagementLocal for PipewireManager {
             class,
             managed_volume,
             buffer: 512,
+            rate: self.clock_rate.unwrap_or(48000),
             ready_sender: None,
         }
     }

@@ -70,6 +70,8 @@ pub enum PipewireInternalMessage {
 pub enum PipewireReceiver {
     Quit,
 
+    AnnouncedClock(Option<u32>),
+
     DeviceAdded(DeviceNode),
     DeviceRemoved(u32),
 
@@ -254,6 +256,7 @@ pub struct NodeProperties {
 
     // Latency Configuration
     pub buffer: u32,
+    pub rate: u32,
 
     // Ready Sender
     pub ready_sender: Option<oneshot::Sender<()>>,

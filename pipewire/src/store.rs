@@ -1,5 +1,5 @@
 use crate::manager::FilterData;
-use crate::registry::{Direction, RegistryClient, RegistryClientNode, RegistryDevice, RegistryDeviceNode, RegistryFactory, RegistryLink, Session};
+use crate::registry::{Direction, MetadataStore, RegistryClient, RegistryClientNode, RegistryDevice, RegistryDeviceNode, RegistryFactory, RegistryLink};
 use crate::{ApplicationNode, DeviceNode, FilterValue, LinkType, MediaClass, PipewireReceiver, RouteTarget};
 use anyhow::Result;
 use anyhow::{anyhow, bail};
@@ -30,7 +30,8 @@ use ulid::Ulid;
 
 pub struct Store {
     // The main Session Proxy Metadata
-    session_proxy: Option<Session>,
+    session_proxy: Option<MetadataStore>,
+    settings_proxy: Option<MetadataStore>,
 
     // Pipewire Factories, helps us track types
     factories: HashMap<u32, RegistryFactory>,
@@ -62,6 +63,7 @@ impl Store {
     pub fn new(callback_tx: mpsc::Sender<PipewireReceiver>) -> Self {
         Self {
             session_proxy: None,
+            settings_proxy: None,
 
             factories: HashMap::new(),
 
@@ -85,13 +87,26 @@ impl Store {
     }
 
     // Session Handler
-    pub fn set_session_proxy(&mut self, session: Session) {
+    pub fn set_session_proxy(&mut self, session: MetadataStore) {
         if self.session_proxy.is_some() {
             warn!("Attempting to redefine default Session Manager, aborting.");
             return;
         }
         info!("Session Proxy Found");
         self.session_proxy = Some(session);
+    }
+
+    pub fn set_settings_proxy(&mut self, settings: MetadataStore) {
+        if self.settings_proxy.is_some() {
+            warn!("Attempting to redefine default Settings Manager, aborting.");
+            return;
+        }
+        info!("Settings Proxy Found");
+        self.settings_proxy = Some(settings);
+    }
+
+    pub fn announce_clock_rate(&self, rate: Option<u32>) {
+        let _ = self.callback_tx.send(PipewireReceiver::AnnouncedClock(rate));
     }
 
     // ----- FACTORIES -----

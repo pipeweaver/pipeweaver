@@ -50,7 +50,6 @@ impl PipewireRegistry {
             .global(
                 move |global| {
                     let id = global.id;
-
                     let mut store = local_store.borrow_mut();
                     match global.type_ {
                         ObjectType::Device => {
@@ -235,12 +234,30 @@ impl PipewireRegistry {
                                                 0
                                             }).register();
 
-                                            let session = Session {
+                                            let session = MetadataStore {
                                                 metadata,
                                                 listener,
                                             };
 
                                             store.set_session_proxy(session);
+                                        }
+                                    } else if name == "settings" {
+                                        let proxy: Option<Metadata> = registry.borrow().bind(global).ok();
+                                        if let Some(metadata) = proxy {
+                                            let listen_store = listener_store.clone();
+                                            let listener = metadata.add_listener_local().property(move |subject, key, _type, value| {
+                                                if key == Some("clock.rate") {
+                                                    let clock = value.and_then(|s| s.parse::<u32>().ok());
+                                                    listen_store.borrow_mut().announce_clock_rate(clock)
+                                                }
+                                                0
+                                            }).register();
+
+                                            let settings = MetadataStore {
+                                                metadata,
+                                                listener,
+                                            };
+                                            store.set_settings_proxy(settings);
                                         }
                                     }
                                 }
@@ -283,7 +300,7 @@ impl PipewireRegistry {
     }
 }
 
-pub(crate) struct Session {
+pub(crate) struct MetadataStore {
     pub(crate) metadata: Metadata,
     pub(crate) listener: MetadataListener,
 }
