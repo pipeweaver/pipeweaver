@@ -4,7 +4,9 @@
 import PopupBox from "@/views/desktop/inputs/PopupBox.vue";
 import {
   DeviceOrderType,
+  DeviceType,
   get_device_by_id,
+  get_device_type,
   getSourcePhysicalDevices,
   getTargetPhysicalDevices,
   is_physical,
@@ -44,6 +46,10 @@ export default {
 
     isPhysicalNode: function () {
       return is_physical(this.type);
+    },
+
+    isTargetNode: function () {
+      return get_device_type(this.getId()) === DeviceType.VirtualTarget;
     },
 
     getDevices: function () {
@@ -223,8 +229,8 @@ export default {
       <span class="selected"></span>
       <span>Hide Channel</span>
     </div>
-    <div v-if="isPhysicalNode()" class="separator"/>
-    <div v-for="device of getDevices()" v-if="isPhysicalNode()"
+    <div v-if="isPhysicalNode() || isTargetNode()" class="separator"/>
+    <div v-for="device of getDevices()" v-if="isPhysicalNode() || isTargetNode()"
          :class="{error: !isDevicePresent(device)}"
          class="entry"
          @click="e => onClick(device)">

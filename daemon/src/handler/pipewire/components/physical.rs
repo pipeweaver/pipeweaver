@@ -12,6 +12,7 @@ use pipeweaver_shared::{DeviceType, NodeType};
 use tokio::sync::mpsc::Sender;
 use ulid::Ulid;
 
+// TODO: This file *REALLY* needs some work :D
 pub(crate) trait PhysicalDevices {
     async fn connect_for_node(&mut self, id: Ulid) -> Result<()>;
 
@@ -150,9 +151,6 @@ impl PhysicalDevices for PipewireManager {
                             self.profile.devices.sources.physical_devices[dev_i] = device;
                             let _ = sender.send(WorkerMessage::ProfileChanged).await;
 
-                            // Let the Primary Worker know we've changed the config
-                            let _ = sender.send(WorkerMessage::ProfileChanged).await;
-
                             break 'start;
                         }
                     }
@@ -221,6 +219,60 @@ impl PhysicalDevices for PipewireManager {
             }
         }
 
+        let devices = self.profile.devices.targets.virtual_devices.clone();
+        'start: for (dev_i, device) in devices.iter().enumerate()
+        {
+            if let Some(node_name) = &node.name {
+                for (name_i, dev) in device.attached_devices.iter().enumerate() {
+                    if let Some(name) = &dev.name {
+                        if name == node_name {
+                            debug!("Attaching Node {} to {}", node.node_id, device.description.id);
+
+                            // Got a hit, attach to our filter, and bring it into the tree
+                            self.link_create_node_to_unmanaged(device.description.id, node.node_id).await?;
+
+                            let mut descriptor = dev.clone();
+                            descriptor.description = node.description.clone();
+
+                            let mut device = device.clone();
+                            device.attached_devices[name_i] = descriptor;
+                            self.profile.devices.targets.virtual_devices[dev_i] = device;
+
+                            // Let the Primary Worker know we've changed the config
+                            let _ = sender.send(WorkerMessage::ProfileChanged).await;
+
+                            break 'start;
+                        }
+                    }
+                }
+            }
+
+            if let Some(node_desc) = &node.description {
+                for (desc_i, dev) in device.attached_devices.iter().enumerate() {
+                    if let Some(desc) = &dev.description {
+                        if desc == node_desc {
+                            // Firstly, attach the Node
+                            debug!("Attaching Node {} to {}", device.description.id, node.node_id);
+                            self.link_create_node_to_unmanaged(device.description.id, node.node_id).await?;
+
+                            debug!("Updating Profile Node to Name: {:?}", node.name);
+                            let mut descriptor = dev.clone();
+                            descriptor.name = node.name.clone();
+
+                            let mut device = device.clone();
+                            device.attached_devices[desc_i] = descriptor;
+                            self.profile.devices.targets.virtual_devices[dev_i] = device;
+
+                            // Let the Primary Worker know we've changed the config
+                            let _ = sender.send(WorkerMessage::ProfileChanged).await;
+
+                            break 'start;
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -270,6 +322,20 @@ impl PhysicalDevices for PipewireManager {
                     self.link_create_filter_to_unmanaged(id, node.node_id).await?;
                 }
             }
+            NodeType::VirtualTarget => {
+                let device = self.get_virtual_target_mut(id).ok_or(error)?;
+
+                let new_node = PhysicalDeviceDescriptor {
+                    name: node.name.clone(),
+                    description: node.description.clone(),
+                };
+
+                device.attached_devices.push(new_node.clone());
+                let pw_node = self.locate_node(new_node);
+                if let Some(node) = pw_node {
+                    self.link_create_node_to_unmanaged(id, node.node_id).await?;
+                }
+            }
             _ => bail!("Node is not a Physical Node"),
         }
 
@@ -299,6 +365,17 @@ impl PhysicalDevices for PipewireManager {
                 let pw_node = self.locate_node(descriptor);
                 if let Some(node) = pw_node {
                     self.link_remove_filter_to_unmanaged(id, node.node_id).await?;
+                }
+            }
+            NodeType::VirtualTarget => {
+                debug!("Removing From Virtual Target?");
+                let device = self.get_virtual_target_mut(id).ok_or(error)?;
+                let descriptor = device.attached_devices.remove(vec_index);
+
+                // Attempt to locate this node in our list
+                let pw_node = self.locate_node(descriptor);
+                if let Some(node) = pw_node {
+                    self.link_remove_node_to_unmanaged(id, node.node_id).await?;
                 }
             }
             _ => bail!("Node is not a Physical Node")

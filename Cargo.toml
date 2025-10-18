@@ -27,7 +27,7 @@ strum_macros = "0.27.0"
 enum-map = { version = "2.7.3", features = ["serde"] }
 
 ### JSON Patching ###
-json-patch = "4.0.0"
+json-patch = "4.1.0"
 
 ### IPC Communication ###
 interprocess = { version = "2.2.1", features = ["tokio"] }

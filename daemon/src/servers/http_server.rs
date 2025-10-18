@@ -23,12 +23,11 @@ use pipeweaver_ipc::commands::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::ops::DerefMut;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::oneshot::Sender;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use ulid::Ulid;
 
 const WEB_CONTENT: Dir = include_dir!("./daemon/web-content/");
@@ -304,7 +303,7 @@ pub async fn spawn_http_server(
             .max_age(300);
         App::new()
             .wrap(Condition::new(settings.cors_enabled, cors))
-            .app_data(Data::new(Mutex::new(AppData {
+            .app_data(Data::new(RwLock::new(AppData {
                 messenger: messenger.clone(),
                 broadcast_tx: broadcast_tx.clone(),
                 meter_tx: meter_tx.clone(),
@@ -342,11 +341,12 @@ pub async fn spawn_http_server(
 
 #[get("/api/websocket")]
 async fn websocket(
-    usb_mutex: Data<Mutex<AppData>>,
+    app_data: Data<RwLock<AppData>>,
     req: HttpRequest,
     stream: web::Payload,
 ) -> Result<HttpResponse, actix_web::Error> {
-    let data = usb_mutex.lock().await;
+    debug!("Websocket Started..");
+    let data = app_data.read().await;
 
     ws::start(
         Websocket {
@@ -360,11 +360,11 @@ async fn websocket(
 
 #[get("/api/websocket/meter")]
 async fn websocket_meter(
-    usb_mutex: Data<Mutex<AppData>>,
+    app_data: Data<RwLock<AppData>>,
     req: HttpRequest,
     stream: web::Payload,
 ) -> Result<HttpResponse, actix_web::Error> {
-    let data = usb_mutex.lock().await;
+    let data = app_data.read().await;
 
     ws::start(
         MeterWebsocket {
@@ -382,20 +382,19 @@ async fn websocket_meter(
 #[post("/api/command")]
 async fn execute_command(
     request: web::Json<DaemonRequest>,
-    app_data: Data<Mutex<AppData>>,
+    app_data: Data<RwLock<AppData>>,
 ) -> HttpResponse {
-    let mut guard = app_data.lock().await;
-    let sender = guard.deref_mut();
+    let data = app_data.read().await;
 
     // Errors propagate weirdly in the javascript world, so send all as OK, and handle there.
-    match handle_packet(request.0, sender.messenger.clone()).await {
+    match handle_packet(request.0, data.messenger.clone()).await {
         Ok(result) => HttpResponse::Ok().json(result),
         Err(error) => HttpResponse::Ok().json(DaemonResponse::Err(error.to_string())),
     }
 }
 
 #[get("/api/get-devices")]
-async fn get_devices(app_data: Data<Mutex<AppData>>) -> HttpResponse {
+async fn get_devices(app_data: Data<RwLock<AppData>>) -> HttpResponse {
     if let Ok(response) = get_status(app_data).await {
         return HttpResponse::Ok().json(&response);
     }
@@ -420,13 +419,11 @@ async fn default(req: HttpRequest) -> HttpResponse {
     }
 }
 
-async fn get_status(app_data: Data<Mutex<AppData>>) -> Result<DaemonStatus> {
-    let mut guard = app_data.lock().await;
-    let sender = guard.deref_mut();
-
+async fn get_status(app_data: Data<RwLock<AppData>>) -> Result<DaemonStatus> {
+    let data = app_data.read().await;
     let request = DaemonRequest::GetStatus;
 
-    let result = handle_packet(request, sender.messenger.clone()).await?;
+    let result = handle_packet(request, data.messenger.clone()).await?;
     match result {
         DaemonResponse::Status(status) => Ok(status),
         _ => Err(anyhow!("Unexpected Daemon Status Result: {:?}", result)),

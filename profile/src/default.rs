@@ -263,6 +263,8 @@ impl Profile {
                             mute_state: MuteState::Unmuted,
                             volume: 99,
                             mix: Mix::B,
+
+                            attached_devices: Default::default(),
                         },
                         VirtualTargetDevice {
                             description: DeviceDescription {
@@ -277,6 +279,8 @@ impl Profile {
                             mute_state: MuteState::Unmuted,
                             volume: 99,
                             mix: Mix::B,
+
+                            attached_devices: Default::default(),
                         },
                         VirtualTargetDevice {
                             description: DeviceDescription {
@@ -291,6 +295,8 @@ impl Profile {
                             mute_state: MuteState::Unmuted,
                             volume: 99,
                             mix: Mix::A,
+
+                            attached_devices: Default::default(),
                         },
                     ],
 

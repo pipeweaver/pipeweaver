@@ -90,6 +90,8 @@ pub struct VirtualTargetDevice {
     pub mute_state: MuteState,
     pub volume: u8,
     pub mix: Mix,
+
+    pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,6 +127,8 @@ impl Default for VirtualTargetDevice {
 
             mute_state: Default::default(),
             mix: Default::default(),
+            
+            attached_devices: Default::default(),
         }
     }
 }
