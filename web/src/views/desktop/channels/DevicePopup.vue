@@ -204,6 +204,36 @@ export default {
       }
       websocket.send_command(command);
       this.$refs.popup.hideDialog();
+    },
+
+    onColourClicked(e) {
+      const rgb = this.getDevice().description.colour;
+      const toHex = (c) => {
+        const hex = c.toString(16);
+        return hex.length === 1 ? "0" + hex : hex;
+      };
+      const hexColour = `#${toHex(rgb.red)}${toHex(rgb.green)}${toHex(rgb.blue)}`;
+
+      this.$refs.colour_picker.value = hexColour;
+      this.$refs.colour_picker.click();
+
+      this.$refs.popup.hideDialog();
+    },
+
+    onColourChanged(e) {
+      const hex = e.target.value.replace('#', '');
+
+      const red = parseInt(hex.substr(0, 2), 16);
+      const green = parseInt(hex.substr(2, 2), 16);
+      const blue = parseInt(hex.substr(4, 2), 16);
+      
+      const colorStruct =  { red, green, blue };
+
+      // SetNodeColour(Ulid, Colour),
+      let command = {
+        "SetNodeColour": [this.getId(), colorStruct]
+      }
+      websocket.send_command(command);
     }
   }
 }
@@ -242,6 +272,7 @@ export default {
         <span>{{ getDeviceName(device) }}</span>
       </span>
     </div>
+
     <div class="separator"/>
     <div class="entry" @click="onRenameClick">
       <span class="selected"></span>
@@ -252,7 +283,14 @@ export default {
       <span>Remove Channel</span>
     </div>
 
+    <div class="separator"/>
+    <div class="entry" @click="onColourClicked">
+      <span class="color_icon"></span>
+      <span>Change Colour</span>
+    </div>
   </PopupBox>
+
+  <input ref="colour_picker" type="color" class="colour_picker" @input="onColourChanged">
 </template>
 
 <style scoped>
@@ -264,7 +302,6 @@ button:hover {
   cursor: pointer;
 }
 
-
 .separator {
   height: 5px;
   background-color: #3b413f;
@@ -274,6 +311,15 @@ button:hover {
   display: inline-block;
   width: 20px;
   padding: 0;
+}
+
+.color_icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 5px;
+  border-radius: 50%;
+  background-color: v-bind('getDevice().description.colour ? `rgb(${getDevice().description.colour.red}, ${getDevice().description.colour.green}, ${getDevice().description.colour.blue})` : "#000000"');
 }
 
 .error {
@@ -295,6 +341,8 @@ button:hover {
   white-space: nowrap;
   padding: 6px 25px 6px 6px;
   text-align: left;
+  display: flex;
+  align-items: center;
 }
 
 .entry:hover {
@@ -315,4 +363,8 @@ span {
   text-align: left;
 }
 
+.colour_picker {
+  position: absolute;
+  visibility: hidden;
+}
 </style>
