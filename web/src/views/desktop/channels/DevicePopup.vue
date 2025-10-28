@@ -317,7 +317,7 @@ button:hover {
   display: inline-block;
   width: 1em;
   height: 1em;
-  margin-right: 5px;
+  margin-right: calc(20px - 1em);
   border-radius: 50%;
   background-color: v-bind('getDevice().description.colour ? `rgb(${getDevice().description.colour.red}, ${getDevice().description.colour.green}, ${getDevice().description.colour.blue})` : "#000000"');
 }
