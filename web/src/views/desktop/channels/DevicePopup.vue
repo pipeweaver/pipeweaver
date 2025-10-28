@@ -245,6 +245,12 @@ export default {
   </button>
 
   <PopupBox ref="popup" @closed="">
+    <div class="entry" @click="onColourClicked">
+      <span class="color_icon"></span>
+      <span>Change Colour</span>
+    </div>
+    <div class="separator"/>
+    
     <div v-if="order_group !== DeviceOrderType.Pinned" class="entry"
          @click="e => onPinClicked(true, e)">
       <span class="selected"></span>
@@ -281,12 +287,6 @@ export default {
     <div class="entry" @click="onRemoveClicked">
       <span class="selected"></span>
       <span>Remove Channel</span>
-    </div>
-
-    <div class="separator"/>
-    <div class="entry" @click="onColourClicked">
-      <span class="color_icon"></span>
-      <span>Change Colour</span>
     </div>
   </PopupBox>
 
