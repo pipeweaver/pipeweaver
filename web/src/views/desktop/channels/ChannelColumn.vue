@@ -233,7 +233,31 @@ export default {
     },
 
     colour_clicked: function (e) {
-      console.log("Colour Clicked: {}", e);
+      const rgb = this.getDevice().description.colour;
+      const toHex = (c) => {
+        const hex = c.toString(16);
+        return hex.length === 1 ? "0" + hex : hex;
+      };
+      const hexColour = `#${toHex(rgb.red)}${toHex(rgb.green)}${toHex(rgb.blue)}`;
+
+      this.$refs.colour_picker.value = hexColour;
+      this.$refs.colour_picker.click();
+    },
+
+    color_changed: function (e) {
+      const hex = e.target.value.replace('#', '');
+
+      const red = parseInt(hex.substr(0, 2), 16);
+      const green = parseInt(hex.substr(2, 2), 16);
+      const blue = parseInt(hex.substr(4, 2), 16);
+      
+      const colorStruct =  { red, green, blue };
+
+      // SetNodeColour(Ulid, Colour),
+      let command = {
+        "SetNodeColour": [this.getId(), colorStruct]
+      }
+      websocket.send_command(command);
     },
 
     output_clicked: function (target, e) {
@@ -317,9 +341,10 @@ export default {
       </div>
       <div class="name">{{ getChannelName() }}</div>
       <div class="end">
-        <DevicePopup id="select_device" :device_id="id" :order_group='order_group' :type='type'/>
+        <DevicePopup id="select_device" :device_id="id" :order_group='order_group' :type='type' :colour_callback="colour_clicked"/>
       </div>
     </div>
+    <input ref="colour_picker" type="color" class="colour_picker" @input="color_changed">
     <div class="top" @click="colour_clicked"></div>
     <div ref="fader_container" class="faders">
       <div class="fader_child">
@@ -440,10 +465,19 @@ export default {
   cursor: pointer;
 }
 
+.colour_picker {
+  position: absolute;
+  visibility: hidden;
+}
 
 .top {
   background-color: v-bind(colour);
   height: v-bind(topHeight);
+}
+
+.top:hover {
+  cursor: pointer;
+  filter: brightness(1.2);
 }
 
 .faders {

@@ -28,6 +28,7 @@ export default {
     device_id: {type: String, required: true},
     order_group: {type: String, required: true},
     id: {type: String, required: true},
+    colour_callback: {type: Function, required: true}
   },
 
   methods: {
@@ -207,33 +208,8 @@ export default {
     },
 
     onColourClicked(e) {
-      const rgb = this.getDevice().description.colour;
-      const toHex = (c) => {
-        const hex = c.toString(16);
-        return hex.length === 1 ? "0" + hex : hex;
-      };
-      const hexColour = `#${toHex(rgb.red)}${toHex(rgb.green)}${toHex(rgb.blue)}`;
-
-      this.$refs.colour_picker.value = hexColour;
-      this.$refs.colour_picker.click();
-
+      this.colour_callback(e);
       this.$refs.popup.hideDialog();
-    },
-
-    onColourChanged(e) {
-      const hex = e.target.value.replace('#', '');
-
-      const red = parseInt(hex.substr(0, 2), 16);
-      const green = parseInt(hex.substr(2, 2), 16);
-      const blue = parseInt(hex.substr(4, 2), 16);
-      
-      const colorStruct =  { red, green, blue };
-
-      // SetNodeColour(Ulid, Colour),
-      let command = {
-        "SetNodeColour": [this.getId(), colorStruct]
-      }
-      websocket.send_command(command);
     }
   }
 }
@@ -289,8 +265,6 @@ export default {
       <span>Remove Channel</span>
     </div>
   </PopupBox>
-
-  <input ref="colour_picker" type="color" class="colour_picker" @input="onColourChanged">
 </template>
 
 <style scoped>
@@ -361,10 +335,5 @@ button:hover {
 
 span {
   text-align: left;
-}
-
-.colour_picker {
-  position: absolute;
-  visibility: hidden;
 }
 </style>
