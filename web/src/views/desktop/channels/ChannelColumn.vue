@@ -159,6 +159,15 @@ export default {
       return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)
     },
 
+    hexToRGB(hex) {
+      const hexStripped = hex.replace('#', '');
+      return {
+        red: parseInt(hexStripped.substring(0, 2), 16),
+        green: parseInt(hexStripped.substring(2, 4), 16),
+        blue: parseInt(hexStripped.substring(4, 6), 16)
+      };
+    },
+
     isActiveMix: function (mix) {
       return this.getDevice().mix === mix;
     },
@@ -233,7 +242,32 @@ export default {
     },
 
     colour_clicked: function (e) {
-      console.log("Colour Clicked: {}", e);
+      const rgb = this.getColour();
+      
+      const hexColour = this.rgbToHex(rgb.red, rgb.green, rgb.blue);
+
+      this.$refs.colour_picker.value = hexColour;
+      this.$refs.colour_picker.click();
+    },
+
+    color_dragging: function (e) {
+      const hex = e.target.value;
+      
+      const colorStruct =  this.hexToRGB(hex);
+
+      this.getDevice().description.colour = colorStruct;
+    },
+
+    color_drag_end: function (e) {
+      const hex = e.target.value;
+      
+      const colorStruct =  this.hexToRGB(hex);
+
+      // SetNodeColour(Ulid, Colour),
+      let command = {
+        "SetNodeColour": [this.getId(), colorStruct]
+      }
+      websocket.send_command(command);
     },
 
     output_clicked: function (target, e) {
@@ -317,9 +351,10 @@ export default {
       </div>
       <div class="name">{{ getChannelName() }}</div>
       <div class="end">
-        <DevicePopup id="select_device" :device_id="id" :order_group='order_group' :type='type'/>
+        <DevicePopup id="select_device" :device_id="id" :order_group='order_group' :type='type' :colour_callback="colour_clicked"/>
       </div>
     </div>
+    <input ref="colour_picker" type="color" class="colour_picker" @input="color_dragging" @change="color_drag_end"/>
     <div class="top" @click="colour_clicked"></div>
     <div ref="fader_container" class="faders">
       <div class="fader_child">
@@ -440,10 +475,19 @@ export default {
   cursor: pointer;
 }
 
+.colour_picker {
+  position: absolute;
+  visibility: hidden;
+}
 
 .top {
   background-color: v-bind(colour);
   height: v-bind(topHeight);
+}
+
+.top:hover {
+  cursor: pointer;
+  filter: brightness(1.2);
 }
 
 .faders {

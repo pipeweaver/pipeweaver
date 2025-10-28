@@ -28,6 +28,7 @@ export default {
     device_id: {type: String, required: true},
     order_group: {type: String, required: true},
     id: {type: String, required: true},
+    colour_callback: {type: Function, required: true}
   },
 
   methods: {
@@ -204,6 +205,11 @@ export default {
       }
       websocket.send_command(command);
       this.$refs.popup.hideDialog();
+    },
+
+    onColourClicked(e) {
+      this.colour_callback(e);
+      this.$refs.popup.hideDialog();
     }
   }
 }
@@ -215,6 +221,12 @@ export default {
   </button>
 
   <PopupBox ref="popup" @closed="">
+    <div class="entry" @click="onColourClicked">
+      <span class="color_icon"></span>
+      <span>Change Colour</span>
+    </div>
+    <div class="separator"/>
+    
     <div v-if="order_group !== DeviceOrderType.Pinned" class="entry"
          @click="e => onPinClicked(true, e)">
       <span class="selected"></span>
@@ -242,6 +254,7 @@ export default {
         <span>{{ getDeviceName(device) }}</span>
       </span>
     </div>
+
     <div class="separator"/>
     <div class="entry" @click="onRenameClick">
       <span class="selected"></span>
@@ -251,7 +264,6 @@ export default {
       <span class="selected"></span>
       <span>Remove Channel</span>
     </div>
-
   </PopupBox>
 </template>
 
@@ -264,7 +276,6 @@ button:hover {
   cursor: pointer;
 }
 
-
 .separator {
   height: 5px;
   background-color: #3b413f;
@@ -274,6 +285,15 @@ button:hover {
   display: inline-block;
   width: 20px;
   padding: 0;
+}
+
+.color_icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: calc(20px - 1em);
+  border-radius: 50%;
+  background-color: v-bind('getDevice().description.colour ? `rgb(${getDevice().description.colour.red}, ${getDevice().description.colour.green}, ${getDevice().description.colour.blue})` : "#000000"');
 }
 
 .error {
@@ -295,6 +315,8 @@ button:hover {
   white-space: nowrap;
   padding: 6px 25px 6px 6px;
   text-align: left;
+  display: flex;
+  align-items: center;
 }
 
 .entry:hover {
@@ -314,5 +336,4 @@ button:hover {
 span {
   text-align: left;
 }
-
 </style>
