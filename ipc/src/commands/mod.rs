@@ -3,6 +3,7 @@ use json_patch::Patch;
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::{Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType, OrderGroup};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use ulid::Ulid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,6 +96,7 @@ pub struct DaemonStatus {
 pub struct AudioConfiguration {
     pub profile: Profile,
     pub devices: EnumMap<DeviceType, Vec<PhysicalDevice>>,
+    pub applications: HashMap<String, Vec<Application>>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -118,4 +120,14 @@ pub struct PhysicalDevice {
     pub node_id: u32,
     pub name: Option<String>,
     pub description: Option<String>,
+}
+
+/// This will be extended over time, for now we'll just include the node id and the name.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct Application {
+    pub node_id: u32,
+    pub name: String,
+
+    pub volume: u8,
+    pub title: Option<String>,
 }

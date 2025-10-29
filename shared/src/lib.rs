@@ -47,6 +47,12 @@ pub enum OrderGroup {
     Hidden,
 }
 
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
+pub enum Application {
+    Exact(String),
+    Glob(String),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Colour {
     pub red: u8,

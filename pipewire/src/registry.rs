@@ -501,7 +501,7 @@ pub(crate) struct RegistryClientNode {
     pub(crate) volume: u8,
     pub(crate) media_title: Option<String>,
 
-    pub(crate) media_target: Option<RouteTarget>,
+    pub(crate) media_target: Option<Option<RouteTarget>>,
 
     pub(crate) _proxy: Option<Node>,
     pub(crate) _listener: Option<NodeListener>,
