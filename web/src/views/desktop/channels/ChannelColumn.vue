@@ -486,11 +486,15 @@ export default {
 .top {
   background-color: v-bind(colour);
   height: v-bind(topHeight);
+  transform-origin: 0 0;
+  transition: transform 0.2s ease, filter 0.2s ease;
+  will-change: transform, filter;
 }
 
 .top:hover {
   cursor: pointer;
-  filter: brightness(1.2);
+  filter: brightness(1.25);
+  transform: scaleY(1.5);
 }
 
 .faders {
