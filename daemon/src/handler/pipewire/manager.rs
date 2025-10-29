@@ -3,14 +3,13 @@ use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::ipc::IPCHandler;
+use crate::handler::primary_worker::WorkerMessage::TransientChange;
 use crate::handler::primary_worker::{ManagerMessage, WorkerMessage};
 use crate::servers::http_server::MeterEvent;
 use enum_map::EnumMap;
 use log::{debug, error, info, warn};
-use pipeweaver_ipc::commands::{APICommandResponse, AudioConfiguration, PhysicalDevice};
-use pipeweaver_pipewire::{
-    ApplicationNode, DeviceNode, MediaClass, PipewireMessage, PipewireReceiver, PipewireRunner,
-};
+use pipeweaver_ipc::commands::{APICommandResponse, Application, AudioConfiguration, PhysicalDevice};
+use pipeweaver_pipewire::{ApplicationNode, DeviceNode, MediaClass, PipewireMessage, PipewireReceiver, PipewireRunner, RouteTarget};
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::{DeviceType, Mix};
 use std::collections::HashMap;
@@ -99,6 +98,30 @@ impl PipewireManager {
         AudioConfiguration {
             profile: self.profile.clone(),
             devices: self.node_list.clone(),
+            applications: {
+                let mut map: HashMap<String, Vec<Application>> = HashMap::new();
+
+                for (id, application) in &self.application_nodes {
+                    if let Some(node) = map.get_mut(&application.name) {
+                        node.push(Application {
+                            node_id: *id,
+                            name: application.name.clone(),
+
+                            volume: application.volume,
+                            title: application.title.clone(),
+                        });
+                    } else {
+                        map.insert(application.name.clone(), vec![Application {
+                            node_id: *id,
+                            name: application.name.clone(),
+
+                            volume: application.volume,
+                            title: application.title.clone(),
+                        }]);
+                    }
+                }
+                map
+            },
         }
     }
 
@@ -228,7 +251,7 @@ impl PipewireManager {
                                             let _ = self.target_device_removed(id).await;
                                         }
                                     }
-                                    let _ = self.worker_sender.send(WorkerMessage::DevicesChanged).await;
+                                    let _ = self.worker_sender.send(WorkerMessage::TransientChange).await;
                                 }
                             }
                         }
@@ -239,12 +262,51 @@ impl PipewireManager {
                             }
                         }
                         PipewireReceiver::ApplicationAdded(node) => {
-                            info!("Application Node Appeared: {}, {}", node.node_id, node.name);
+                            info!("Application Found: {:?}", node);
                             self.application_nodes.insert(node.node_id, node);
+
+                            if self.worker_sender.capacity() > 0 {
+                                let _ = self.worker_sender.send(TransientChange).await;
+                            }
+                        }
+                        PipewireReceiver::ApplicationTargetChanged(id, target) => {
+                            debug!("Application Target Changed: {}, {:?}", id, target);
+                            if let Some(dev) = self.application_nodes.get_mut(&id) {
+                                dev.media_target = target;
+
+                                if self.worker_sender.capacity() > 0 {
+                                    let _ = self.worker_sender.send(TransientChange).await;
+                                }
+                            }
+                        }
+                        PipewireReceiver::ApplicationVolumeChanged(id, volume) => {
+                            debug!("Application Volume Changed: {}, {:?}", id, volume);
+                            if let Some(dev) = self.application_nodes.get_mut(&id) {
+                                dev.volume = volume;
+
+                                if self.worker_sender.capacity() > 0 {
+                                    let _ = self.worker_sender.send(TransientChange).await;
+                                }
+                            }
+
+                        }
+                        PipewireReceiver::ApplicationTitleChanged(id, title) => {
+                            debug!("Application Title Changed: {}, {:?}", id, title);
+                            if let Some(dev) = self.application_nodes.get_mut(&id) {
+                                dev.title = Some(title);
+
+                                if self.worker_sender.capacity() > 0 {
+                                    let _ = self.worker_sender.send(TransientChange).await;
+                                }
+                            }
                         }
                         PipewireReceiver::ApplicationRemoved(id) => {
                             if let Some(node) = self.application_nodes.remove(&id) {
                                 info!("Application Node Removed: {}, {}", node.node_id, node.name);
+
+                                if self.worker_sender.capacity() > 0 {
+                                    let _ = self.worker_sender.send(TransientChange).await;
+                                }
                             }
                         }
                         PipewireReceiver::NodeVolumeChanged(id, volume) => {
@@ -267,7 +329,9 @@ impl PipewireManager {
                                 let _ = self.worker_sender.send(WorkerMessage::ProfileChanged).await;
                             }
                         }
-                        _ => {}
+                        PipewireReceiver::Quit => {
+                            break;
+                        }
                     }
                 }
                 _ = Pin::as_mut(&mut volumes_ready_timer), if !volumes_ready => {
@@ -306,7 +370,7 @@ impl PipewireManager {
 
                         // Add node to our definitive list
                         self.device_nodes.insert(device.node_id, device);
-                        let _ = self.worker_sender.send(WorkerMessage::DevicesChanged).await;
+                        let _ = self.worker_sender.send(WorkerMessage::TransientChange).await;
                     } else {
                         panic!("Got a Timer Ready for non-existent Node");
                     }

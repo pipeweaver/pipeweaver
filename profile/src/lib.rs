@@ -1,7 +1,7 @@
 mod default;
 
 use enum_map::{enum_map, EnumMap};
-use pipeweaver_shared::{Colour, Mix, MuteState, MuteTarget, OrderGroup};
+use pipeweaver_shared::{Application, Colour, Mix, MuteState, MuteTarget, OrderGroup};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use ulid::Ulid;
@@ -12,6 +12,9 @@ pub struct Profile {
     /// A list of devices currently configured in this profile
     pub devices: Devices,
     pub routes: HashMap<Ulid, HashSet<Ulid>>,
+
+    #[serde(default)]
+    pub application_mapping: HashMap<Application, Ulid>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -127,7 +130,7 @@ impl Default for VirtualTargetDevice {
 
             mute_state: Default::default(),
             mix: Default::default(),
-            
+
             attached_devices: Default::default(),
         }
     }

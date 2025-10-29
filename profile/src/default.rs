@@ -339,6 +339,8 @@ impl Profile {
             ]
                 .into_iter()
                 .collect(),
+
+            application_mapping: Default::default(),
         }
     }
 }

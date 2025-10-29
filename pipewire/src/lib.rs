@@ -32,6 +32,7 @@ pub enum PipewireMessage {
 
     SetNodeVolume(Ulid, u8),
     SetNodeMute(Ulid, bool),
+
     SetApplicationTarget(u32, Ulid),
 
     DestroyUnmanagedLinks(u32),
@@ -60,6 +61,7 @@ pub enum PipewireInternalMessage {
     SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<()>>),
     SetNodeVolume(Ulid, u8, oneshot::Sender<Result<()>>),
     SetNodeMute(Ulid, bool, oneshot::Sender<Result<()>>),
+
     SetApplicationTarget(u32, Ulid, oneshot::Sender<Result<()>>),
 
     DestroyUnmanagedLinks(u32, oneshot::Sender<Result<()>>),
@@ -76,6 +78,9 @@ pub enum PipewireReceiver {
     DeviceRemoved(u32),
 
     ApplicationAdded(ApplicationNode),
+    ApplicationTargetChanged(u32, Option<RouteTarget>),
+    ApplicationTitleChanged(u32, String),
+    ApplicationVolumeChanged(u32, u8),
     ApplicationRemoved(u32),
 
     NodeVolumeChanged(Ulid, u8),
@@ -340,7 +345,10 @@ pub struct DeviceNode {
 pub struct ApplicationNode {
     pub node_id: u32,
     pub node_class: MediaClass,
+    pub media_target: Option<RouteTarget>,
+
+    pub volume: u8,
+    pub title: Option<String>,
 
     pub name: String,
-    // pub media: Option<String>,
 }

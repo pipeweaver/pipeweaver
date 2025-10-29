@@ -466,6 +466,8 @@ impl Store {
             if node.volume != volume {
                 debug!("Node: {}, Setting Node Volume to {}", id, volume);
                 node.volume = volume;
+
+                let _ = self.callback_tx.send(PipewireReceiver::ApplicationVolumeChanged(id, volume));
             }
         }
     }
@@ -479,7 +481,8 @@ impl Store {
                 node.media_title = None;
             } else if node.media_title != Some(media.clone()) {
                 debug!("Node: {}, Setting Media Name to {}", id, media);
-                node.media_title = Some(media);
+                node.media_title = Some(media.clone());
+                let _ = self.callback_tx.send(PipewireReceiver::ApplicationTitleChanged(id, media));
             }
         }
     }
@@ -511,7 +514,15 @@ impl Store {
 
         if let Some(client) = self.unmanaged_client_node_get(id) {
             debug!("Node {}, Updating Target to {:?}", id, result);
-            client.media_target = result;
+            client.media_target = Some(result);
+
+            if self.usable_client_nodes.contains(&id) {
+                // We're already defined, send the node update
+                let _ = self.callback_tx.send(PipewireReceiver::ApplicationTargetChanged(id, result));
+            } else {
+                // Check whether we're ready to send
+                self.unmanaged_client_node_check(id);
+            }
         }
     }
 
@@ -544,7 +555,10 @@ impl Store {
                     let node = ApplicationNode {
                         node_id: id,
                         node_class: media_type,
+                        media_target: node.media_target.unwrap(),
 
+                        volume: node.volume,
+                        title: node.media_title.clone(),
                         name: node.application_name.clone(),
                     };
 
@@ -558,6 +572,8 @@ impl Store {
 
     pub fn is_usable_unmanaged_client_node(&self, id: u32) -> Option<MediaClass> {
         if let Some(node) = self.unmanaged_client_nodes.get(&id) {
+            node.media_target?;
+
             let mut in_count = 0;
             let mut out_count = 0;
 

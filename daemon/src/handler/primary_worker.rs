@@ -112,7 +112,7 @@ impl PrimaryWorker {
 
                     Some(message) = worker_receiver.recv() => {
                         match message {
-                            WorkerMessage::DevicesChanged => {
+                            WorkerMessage::TransientChange => {
                                 // A physical device has changed, we need to update the main
                                 // status to include it.
                                 self.update_status(&command_sender).await;
@@ -293,7 +293,7 @@ pub enum ManagerMessage {
 }
 
 pub enum WorkerMessage {
-    DevicesChanged,
+    TransientChange,
     ProfileChanged,
 }
 
