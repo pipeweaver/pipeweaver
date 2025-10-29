@@ -32,6 +32,8 @@ export default {
       update_locked: false,
 
       slider_height: 100,
+
+      color_timeout: null,
     }
   },
 
@@ -256,18 +258,19 @@ export default {
       const colorStruct =  this.hexToRGB(hex);
 
       this.getDevice().description.colour = colorStruct;
-    },
 
-    color_drag_end: function (e) {
-      const hex = e.target.value;
-      
-      const colorStruct =  this.hexToRGB(hex);
-
-      // SetNodeColour(Ulid, Colour),
-      let command = {
-        "SetNodeColour": [this.getId(), colorStruct]
+      if (this.color_timeout !== null) {
+        clearTimeout(this.color_timeout);
       }
-      websocket.send_command(command);
+
+      this.color_timeout = setTimeout(() => {
+        // SetNodeColour(Ulid, Colour),
+        let command = {
+          "SetNodeColour": [this.getId(), colorStruct]
+        }
+        websocket.send_command(command);
+        this.color_timeout = null;
+      }, 250);
     },
 
     output_clicked: function (target, e) {
@@ -354,7 +357,7 @@ export default {
         <DevicePopup id="select_device" :device_id="id" :order_group='order_group' :type='type' :colour_callback="colour_clicked"/>
       </div>
     </div>
-    <input ref="colour_picker" type="color" class="colour_picker" @input="color_dragging" @change="color_drag_end"/>
+    <input ref="colour_picker" type="color" class="colour_picker" @input="color_dragging"/>
     <div class="top" @click="colour_clicked"></div>
     <div ref="fader_container" class="faders">
       <div class="fader_child">
@@ -483,11 +486,15 @@ export default {
 .top {
   background-color: v-bind(colour);
   height: v-bind(topHeight);
+  transform-origin: 0 0;
+  transition: transform 0.2s ease, filter 0.2s ease;
+  will-change: transform, filter;
 }
 
 .top:hover {
   cursor: pointer;
-  filter: brightness(1.2);
+  filter: brightness(1.25);
+  transform: scaleY(1.5);
 }
 
 .faders {
