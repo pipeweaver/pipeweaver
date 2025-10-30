@@ -26,6 +26,7 @@ type Manage = mpsc::Sender<ManagerMessage>;
 
 pub struct PrimaryWorker {
     last_status: DaemonStatus,
+
     patch_broadcast: Sender<PatchEvent>,
     meter_broadcast: Sender<MeterEvent>,
 

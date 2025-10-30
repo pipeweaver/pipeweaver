@@ -68,7 +68,7 @@ pub enum PipewireInternalMessage {
     Quit(oneshot::Sender<Result<()>>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum PipewireReceiver {
     Quit,
 
@@ -345,7 +345,7 @@ pub struct DeviceNode {
 pub struct ApplicationNode {
     pub node_id: u32,
     pub node_class: MediaClass,
-    pub media_target: Option<RouteTarget>,
+    pub media_target: Option<Option<RouteTarget>>,
 
     pub volume: u8,
     pub title: Option<String>,

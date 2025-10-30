@@ -1,3 +1,4 @@
+use crate::handler::pipewire::components::application::ApplicationManagement;
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
@@ -7,9 +8,10 @@ use crate::handler::primary_worker::WorkerMessage::TransientChange;
 use crate::handler::primary_worker::{ManagerMessage, WorkerMessage};
 use crate::servers::http_server::MeterEvent;
 use enum_map::EnumMap;
+use image::load;
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{APICommandResponse, Application, AudioConfiguration, PhysicalDevice};
-use pipeweaver_pipewire::{ApplicationNode, DeviceNode, MediaClass, PipewireMessage, PipewireReceiver, PipewireRunner, RouteTarget};
+use pipeweaver_pipewire::{ApplicationNode, DeviceNode, MediaClass, PipewireMessage, PipewireReceiver, PipewireRunner};
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::{DeviceType, Mix};
 use std::collections::HashMap;
@@ -53,6 +55,7 @@ pub(crate) struct PipewireManager {
 
     // A list of application nodes
     pub(crate) application_nodes: HashMap<u32, ApplicationNode>,
+    pub(crate) application_target_ignore: Vec<u32>,
 }
 
 impl PipewireManager {
@@ -84,6 +87,7 @@ impl PipewireManager {
             device_nodes: Default::default(),
 
             application_nodes: Default::default(),
+            application_target_ignore: vec![],
         }
     }
 
@@ -134,6 +138,7 @@ impl PipewireManager {
         // going to throw at us at any given point in time, especially seeing as devices and volume
         // changes are going to flood in, especially on load.
         let (send_async, mut recv_async) = mpsc::channel(2048);
+        let send_local_async = send_async.clone();
 
         // Spawn up the Sync -> Async task loop
         let receiver = thread::spawn(|| run_receiver_wrapper(recv, send_async));
@@ -141,14 +146,12 @@ impl PipewireManager {
         // Run up the Pipewire Handler
         self.pipewire = Some(PipewireRunner::new(send.clone()).unwrap());
 
-        // Hold until we receive a clock value..
-
-
+        // Hold until we receive a clock value
         let mut loaded_profile = false;
 
         // Wait 1 second to process volume inputs from Pipewire
-        let mut volumes_ready = false;
-        let mut volumes_ready_timer = Box::pin(sleep(Duration::from_secs(1)));
+        let mut initial_ready = false;
+        let mut initial_ready_timer = Box::pin(sleep(Duration::from_secs(1)));
 
         // So these are small timers which are set up when a new device is sent to us. Rather than
         // immediately processing, we wait half a second to make sure the device doesn't disappear
@@ -166,6 +169,8 @@ impl PipewireManager {
             .take()
             .expect("Ready Sender Missing")
             .send(());
+
+        let mut requeue: Vec<PipewireReceiver> = vec![];
 
         // Pull out the Meter Receiver
         let mut meter_receiver = self.meter_receiver.take().unwrap();
@@ -197,21 +202,41 @@ impl PipewireManager {
                     }
                 }
                 Some(msg) = recv_async.recv() => {
-                    match msg {
-                        PipewireReceiver::AnnouncedClock(clock) => {
-                            if let Some(clock) = clock {
-                                self.clock_rate = Some(clock);
-                            } else {
-                                self.clock_rate = Some(48000);
-                            }
+                    if let PipewireReceiver::AnnouncedClock(clock) = msg {
+                        if loaded_profile {
+                            warn!("Clock Received after Profile Loaded");
+                            continue;
+                        }
 
-                            if !loaded_profile {
-                                debug!("Loading Profile, Clock Rate: {:?}", self.clock_rate);
-                                if let Err(e) = self.load_profile().await {
-                                    error!("Error Loading Profile: {}", e);
-                                }
-                                loaded_profile = true;
+                        if let Some(clock) = clock {
+                            self.clock_rate = Some(clock);
+                        } else {
+                            self.clock_rate = Some(48000);
+                        }
+
+                        if !loaded_profile {
+                            debug!("Loading Profile, Clock Rate: {:?}", self.clock_rate);
+                            debug!("{:?}", self.profile);
+                            if let Err(e) = self.load_profile().await {
+                                error!("Error Loading Profile: {}", e);
                             }
+                            loaded_profile = true;
+
+                            for msg in &requeue {
+                                // Resend anything that's been waiting until we've got this source
+                                let _ = send_local_async.send(msg.clone()).await;
+                            }
+                            continue;
+                        }
+                    } else if !loaded_profile {
+                        // Profile hasn't been loaded yet, queue this for after it has.
+                        requeue.push(msg.clone());
+                        continue;
+                    }
+
+                    match msg {
+                        PipewireReceiver::AnnouncedClock(_) => {
+                            warn!("This shouldn't happen twice!");
                         }
 
                         PipewireReceiver::DeviceAdded(node) => {
@@ -251,7 +276,7 @@ impl PipewireManager {
                                             let _ = self.target_device_removed(id).await;
                                         }
                                     }
-                                    let _ = self.worker_sender.send(WorkerMessage::TransientChange).await;
+                                    let _ = self.worker_sender.send(TransientChange).await;
                                 }
                             }
                         }
@@ -262,55 +287,39 @@ impl PipewireManager {
                             }
                         }
                         PipewireReceiver::ApplicationAdded(node) => {
-                            info!("Application Found: {:?}", node);
-                            self.application_nodes.insert(node.node_id, node);
+                            let _ = self.application_appeared(node);
 
+                            // Send a transient change message to refresh the applications
                             if self.worker_sender.capacity() > 0 {
                                 let _ = self.worker_sender.send(TransientChange).await;
                             }
                         }
                         PipewireReceiver::ApplicationTargetChanged(id, target) => {
-                            debug!("Application Target Changed: {}, {:?}", id, target);
-                            if let Some(dev) = self.application_nodes.get_mut(&id) {
-                                dev.media_target = target;
-
-                                if self.worker_sender.capacity() > 0 {
-                                    let _ = self.worker_sender.send(TransientChange).await;
-                                }
+                            let _ = self.application_target_changed(id, Some(target));
+                            if self.worker_sender.capacity() > 0 {
+                                let _ = self.worker_sender.send(TransientChange).await;
                             }
                         }
                         PipewireReceiver::ApplicationVolumeChanged(id, volume) => {
-                            debug!("Application Volume Changed: {}, {:?}", id, volume);
-                            if let Some(dev) = self.application_nodes.get_mut(&id) {
-                                dev.volume = volume;
-
-                                if self.worker_sender.capacity() > 0 {
-                                    let _ = self.worker_sender.send(TransientChange).await;
-                                }
+                            let _ = self.application_volume_changed(id, volume);
+                            if self.worker_sender.capacity() > 0 {
+                                let _ = self.worker_sender.send(TransientChange).await;
                             }
-
                         }
                         PipewireReceiver::ApplicationTitleChanged(id, title) => {
-                            debug!("Application Title Changed: {}, {:?}", id, title);
-                            if let Some(dev) = self.application_nodes.get_mut(&id) {
-                                dev.title = Some(title);
-
-                                if self.worker_sender.capacity() > 0 {
-                                    let _ = self.worker_sender.send(TransientChange).await;
-                                }
+                            let _ = self.application_title_changed(id, title);
+                            if self.worker_sender.capacity() > 0 {
+                                let _ = self.worker_sender.send(TransientChange).await;
                             }
                         }
                         PipewireReceiver::ApplicationRemoved(id) => {
-                            if let Some(node) = self.application_nodes.remove(&id) {
-                                info!("Application Node Removed: {}, {}", node.node_id, node.name);
-
-                                if self.worker_sender.capacity() > 0 {
-                                    let _ = self.worker_sender.send(TransientChange).await;
-                                }
+                            let _ = self.application_removed(id);
+                            if self.worker_sender.capacity() > 0 {
+                                let _ = self.worker_sender.send(TransientChange).await;
                             }
                         }
                         PipewireReceiver::NodeVolumeChanged(id, volume) => {
-                            if volumes_ready {
+                            if initial_ready {
                                 if let Err(e) = self.sync_node_volume(id, volume).await {
                                     warn!("Error Setting Volume: {}", e);
                                 }
@@ -334,11 +343,11 @@ impl PipewireManager {
                         }
                     }
                 }
-                _ = Pin::as_mut(&mut volumes_ready_timer), if !volumes_ready => {
+                _ = Pin::as_mut(&mut initial_ready_timer), if !initial_ready => {
                     debug!("Activating Pipewire Volume Manager");
                     self.sync_all_pipewire_volumes().await;
                     self.sync_all_pipewire_mutes().await;
-                    volumes_ready = true;
+                    initial_ready = true;
                 }
                 Some(node_id) = device_ready_rx.recv() => {
                     // A device has been sat here for 500ms without being removed
@@ -370,7 +379,7 @@ impl PipewireManager {
 
                         // Add node to our definitive list
                         self.device_nodes.insert(device.node_id, device);
-                        let _ = self.worker_sender.send(WorkerMessage::TransientChange).await;
+                        let _ = self.worker_sender.send(TransientChange).await;
                     } else {
                         panic!("Got a Timer Ready for non-existent Node");
                     }
@@ -401,7 +410,7 @@ impl PipewireManager {
 }
 
 // Kinda ugly, but we're going to wrap around a blocking receiver, and bounce messages to an async
-pub fn run_receiver_wrapper(recv: StdRecv, resend: mpsc::Sender<PipewireReceiver>) {
+pub fn run_receiver_wrapper(recv: StdRecv, resend: Sender<PipewireReceiver>) {
     info!("[MessageWrapper] Starting Receive Wrapper");
     while let Ok(msg) = recv.recv() {
         if msg == PipewireReceiver::Quit {

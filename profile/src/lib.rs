@@ -1,7 +1,7 @@
 mod default;
 
 use enum_map::{enum_map, EnumMap};
-use pipeweaver_shared::{Application, Colour, Mix, MuteState, MuteTarget, OrderGroup};
+use pipeweaver_shared::{ApplicationMatch, Colour, Mix, MuteState, MuteTarget, OrderGroup};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use ulid::Ulid;
@@ -14,7 +14,7 @@ pub struct Profile {
     pub routes: HashMap<Ulid, HashSet<Ulid>>,
 
     #[serde(default)]
-    pub application_mapping: HashMap<Application, Ulid>,
+    pub application_mapping: Vec<ApplicationMatch>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

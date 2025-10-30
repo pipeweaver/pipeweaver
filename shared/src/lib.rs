@@ -2,6 +2,7 @@ use enum_map::Enum;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use strum_macros::{Display, EnumIter};
+use ulid::Ulid;
 
 #[derive(Debug, Display, Copy, Clone, PartialEq, Enum, EnumIter, Serialize, Deserialize)]
 pub enum NodeType {
@@ -48,9 +49,9 @@ pub enum OrderGroup {
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
-pub enum Application {
-    Exact(String),
-    Glob(String),
+pub enum ApplicationMatch {
+    Exact(String, Ulid),
+    Glob(String, Ulid),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
