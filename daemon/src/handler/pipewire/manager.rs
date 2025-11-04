@@ -1,4 +1,4 @@
-use crate::handler::pipewire::components::application::ApplicationManagement;
+use crate::handler::pipewire::components::application::{get_application_type, ApplicationManagement};
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
@@ -7,13 +7,12 @@ use crate::handler::pipewire::ipc::IPCHandler;
 use crate::handler::primary_worker::WorkerMessage::TransientChange;
 use crate::handler::primary_worker::{ManagerMessage, WorkerMessage};
 use crate::servers::http_server::MeterEvent;
-use enum_map::EnumMap;
-use image::load;
+use enum_map::{enum_map, EnumMap};
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{APICommandResponse, Application, AudioConfiguration, PhysicalDevice};
-use pipeweaver_pipewire::{ApplicationNode, DeviceNode, MediaClass, PipewireMessage, PipewireReceiver, PipewireRunner};
+use pipeweaver_pipewire::{ApplicationNode, DeviceNode, MediaClass, PipewireMessage, PipewireReceiver, PipewireRunner, RouteTarget};
 use pipeweaver_profile::Profile;
-use pipeweaver_shared::{DeviceType, Mix};
+use pipeweaver_shared::{AppTarget, DeviceType, Mix};
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
@@ -103,28 +102,55 @@ impl PipewireManager {
             profile: self.profile.clone(),
             devices: self.node_list.clone(),
             applications: {
-                let mut map: HashMap<String, Vec<Application>> = HashMap::new();
+                let mut sources: HashMap<String, HashMap<String, Vec<Application>>> = HashMap::new();
+                let mut targets: HashMap<String, HashMap<String, Vec<Application>>> = HashMap::new();
 
                 for (id, application) in &self.application_nodes {
-                    if let Some(node) = map.get_mut(&application.name) {
-                        node.push(Application {
-                            node_id: *id,
-                            name: application.name.clone(),
+                    let app_type = get_application_type(application.node_class);
+                    let map = match app_type {
+                        DeviceType::Source => &mut sources,
+                        DeviceType::Target => &mut targets,
+                    };
 
-                            volume: application.volume,
-                            title: application.title.clone(),
-                        });
+                    let app = Application {
+                        node_id: *id,
+                        name: application.name.clone(),
+
+                        volume: application.volume,
+                        muted: application.muted,
+                        title: application.title.clone(),
+
+                        target: match application.media_target {
+                            None => None,
+                            Some(None) => None,
+                            Some(Some(target)) => {
+                                match target {
+                                    RouteTarget::Node(id) => Some(AppTarget::Managed(id)),
+                                    RouteTarget::UnmanagedNode(id) => Some(AppTarget::Unmanaged(id)),
+                                }
+                            }
+                        },
+                    };
+
+
+                    if let Some(process) = map.get_mut(&application.process_name) {
+                        if let Some(title) = process.get_mut(&application.name) {
+                            title.push(app);
+                        } else {
+                            process.insert(application.name.clone(), vec![app]);
+                        }
                     } else {
-                        map.insert(application.name.clone(), vec![Application {
-                            node_id: *id,
-                            name: application.name.clone(),
-
-                            volume: application.volume,
-                            title: application.title.clone(),
-                        }]);
+                        map.insert(
+                            application.process_name.clone(),
+                            HashMap::from([(application.name.clone(), vec![app])]),
+                        );
                     }
                 }
-                map
+
+                enum_map! {
+                    DeviceType::Source => sources.clone(),
+                    DeviceType::Target => targets.clone(),
+                }
             },
         }
     }
@@ -160,8 +186,18 @@ impl PipewireManager {
         let mut device_timers: HashMap<u32, JoinHandle<()>> = HashMap::new();
         let (device_ready_tx, mut device_ready_rx) = mpsc::channel(256);
 
-        // A simple list of devices which have been discovered, but not flagged 'Ready'
+        // We do the same for Application nodes, the problem with ApplicationsList is that they will
+        // never arrive with their default route as that's sent 'later' by pipewire, but we also
+        // can't handle this on the pipewire side because there's a chance the route is *NEVER* sent
+        // if it's set to a default. So the goal is to just wait for 200ms after an application node
+        // arrives to see if a default route comes in. If the timeout expires assume it's a default
+        // otherwise handle the arrival when we get the default route.
+        let mut application_timers: HashMap<u32, JoinHandle<()>> = HashMap::new();
+        let (application_ready_tx, mut application_ready_rx) = mpsc::channel(256);
+
+        // A simple list of nodes which have been discovered, but not flagged 'Ready'
         let mut discovered_devices: HashMap<u32, DeviceNode> = HashMap::new();
+        let mut discovered_applications: HashMap<u32, ApplicationNode> = HashMap::new();
 
         // Let the primary worker know we're ready
         let _ = self
@@ -215,17 +251,18 @@ impl PipewireManager {
                         }
 
                         if !loaded_profile {
+                            // Requeue all previous messages before loading the profile, this
+                            // needs to be done here to prevent messages during loading from
+                            // superseding what we've already received.
+                            for msg in &requeue {
+                                let _ = send_local_async.send(msg.clone()).await;
+                            }
+
                             debug!("Loading Profile, Clock Rate: {:?}", self.clock_rate);
-                            debug!("{:?}", self.profile);
                             if let Err(e) = self.load_profile().await {
                                 error!("Error Loading Profile: {}", e);
                             }
                             loaded_profile = true;
-
-                            for msg in &requeue {
-                                // Resend anything that's been waiting until we've got this source
-                                let _ = send_local_async.send(msg.clone()).await;
-                            }
                             continue;
                         }
                     } else if !loaded_profile {
@@ -287,35 +324,91 @@ impl PipewireManager {
                             }
                         }
                         PipewireReceiver::ApplicationAdded(node) => {
-                            let _ = self.application_appeared(node);
+                            if node.media_target.is_some() {
+                                // We already have a target defined, no point waiting for it.
+                                let _ = self.application_appeared(node);
 
-                            // Send a transient change message to refresh the applications
-                            if self.worker_sender.capacity() > 0 {
-                                let _ = self.worker_sender.send(TransientChange).await;
+                                if self.worker_sender.capacity() > 0 {
+                                    let _ = self.worker_sender.send(TransientChange).await;
+                                }
+                                continue;
                             }
+
+                            if application_timers.contains_key(&node.node_id) {
+                                continue;
+                            }
+
+                            let done = application_ready_tx.clone();
+                            let handle = tokio::spawn(async move {
+                                sleep(Duration::from_millis(250)).await;
+                                let _ = done.send(node.node_id).await;
+                            });
+                            application_timers.insert(node.node_id, handle);
+                            discovered_applications.insert(node.node_id, node);
                         }
                         PipewireReceiver::ApplicationTargetChanged(id, target) => {
-                            let _ = self.application_target_changed(id, Some(target));
+                            if let Some(handle) = application_timers.remove(&id) {
+                                if let Some(mut node) = discovered_applications.remove(&id) {
+                                    debug!("Route Received During Discovery: {}, {:?}", id, target);
+
+                                    // Ok, set this target, and flag this application as appeared.
+                                    node.media_target = Some(target);
+                                    let _ = self.application_appeared(node);
+                                }
+                                handle.abort();
+                            } else {
+                                let _ = self.application_target_changed(id, Some(target));
+                            }
+
                             if self.worker_sender.capacity() > 0 {
                                 let _ = self.worker_sender.send(TransientChange).await;
                             }
                         }
                         PipewireReceiver::ApplicationVolumeChanged(id, volume) => {
-                            let _ = self.application_volume_changed(id, volume);
-                            if self.worker_sender.capacity() > 0 {
-                                let _ = self.worker_sender.send(TransientChange).await;
+                            // Are we still waiting for this application to finalise?
+                            if let Some(application) = discovered_applications.get_mut(&id) {
+                                debug!("Application Volume Changed during Discovery Phase: {}", volume);
+                                application.volume = volume;
+                            } else {
+                                let _ = self.application_volume_changed(id, volume);
+                                if self.worker_sender.capacity() > 0 {
+                                    let _ = self.worker_sender.send(TransientChange).await;
+                                }
                             }
                         }
                         PipewireReceiver::ApplicationTitleChanged(id, title) => {
-                            let _ = self.application_title_changed(id, title);
-                            if self.worker_sender.capacity() > 0 {
-                                let _ = self.worker_sender.send(TransientChange).await;
+                            if let Some(application) = discovered_applications.get_mut(&id) {
+                                debug!("Application Title Changed during Discovery Phase: {}", title);
+                                application.title = Some(title);
+                            } else {
+                                let _ = self.application_title_changed(id, title);
+                                if self.worker_sender.capacity() > 0 {
+                                    let _ = self.worker_sender.send(TransientChange).await;
+                                }
+                            }
+                        }
+                        PipewireReceiver::ApplicationMuteChanged(id, muted) => {
+                            if let Some(application) = discovered_applications.get_mut(&id) {
+                                debug!("Application Muted Changed during Discovery Phase: {}", muted);
+                                application.muted = muted;
+                            } else {
+                                let _ = self.application_mute_changed(id, muted);
+                                if self.worker_sender.capacity() > 0 {
+                                    let _ = self.worker_sender.send(TransientChange).await;
+                                }
                             }
                         }
                         PipewireReceiver::ApplicationRemoved(id) => {
-                            let _ = self.application_removed(id);
-                            if self.worker_sender.capacity() > 0 {
-                                let _ = self.worker_sender.send(TransientChange).await;
+                            // If this application disappears during the 'discovery' phase, clean it
+                            if let Some(handle) = application_timers.remove(&id) {
+                                debug!("Application Disappeared During Discovery Period: {}", id);
+                                discovered_applications.remove(&id);
+                                handle.abort();
+                            } else {
+                                let _ = self.application_removed(id);
+                                if self.worker_sender.capacity() > 0 {
+                                    let _ = self.worker_sender.send(TransientChange).await;
+                                }
                             }
                         }
                         PipewireReceiver::NodeVolumeChanged(id, volume) => {
@@ -379,9 +472,24 @@ impl PipewireManager {
 
                         // Add node to our definitive list
                         self.device_nodes.insert(device.node_id, device);
-                        let _ = self.worker_sender.send(TransientChange).await;
+                        if self.worker_sender.capacity() > 0 {
+                            let _ = self.worker_sender.send(TransientChange).await;
+                        }
                     } else {
                         panic!("Got a Timer Ready for non-existent Node");
+                    }
+                }
+                Some(node_id) = application_ready_rx.recv() => {
+                    // An Application has been hanging around for 200ms without receiving a route,
+                    // proceed assuming it's using a default.
+                    application_timers.remove(&node_id);
+                    if let Some(node) = discovered_applications.remove(&node_id) {
+                        debug!("Node Arrived without Route, {}", node_id);
+                        let _ = self.application_appeared(node);
+
+                        if self.worker_sender.capacity() > 0 {
+                            let _ = self.worker_sender.send(TransientChange).await;
+                        }
                     }
                 }
                 result = meter_receiver.recv_many(&mut meter_buffer, 64) => {

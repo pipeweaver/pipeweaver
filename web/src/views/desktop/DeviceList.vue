@@ -138,7 +138,6 @@ export default {
 
   computed: {
     deviceListKey() {
-      console.log(this);
       return this.deviceList.join("-");
     }
   },

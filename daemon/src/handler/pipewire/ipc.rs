@@ -1,3 +1,4 @@
+use crate::handler::pipewire::components::application::ApplicationManagement;
 use crate::handler::pipewire::components::mute::MuteManager;
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
@@ -5,6 +6,7 @@ use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::Error;
+use log::debug;
 use pipeweaver_ipc::commands::{APICommand, APICommandResponse};
 use pipeweaver_shared::MuteState::{Muted, Unmuted};
 
@@ -74,6 +76,25 @@ impl IPCHandler for PipewireManager {
             }
             Cmd::SetOrder(id, position) => {
                 self.node_set_position(id, position).await.map(|_| Resp::Ok)
+            }
+            Cmd::SetApplicationRoute(definition, target_id) => {
+                self.set_application_target(definition, target_id).await.map(|_| Resp::Ok)
+            }
+            Cmd::ClearApplicationRoute(definition) => {
+                self.clear_application_target(definition).await.map(|_| Resp::Ok)
+            }
+            Cmd::SetTransientApplicationRoute(id, route) => {
+                self.set_application_transient_target(id, route).await.map(|_| Resp::Ok)
+            }
+            Cmd::ClearTransientApplicationRoute(id) => {
+                self.clear_application_transient_target(id).await.map(|_| Resp::Ok)
+            }
+            Cmd::SetApplicationVolume(id, volume) => {
+                debug!("ERR?");
+                self.set_application_volume(id, volume).await.map(|_| Resp::Ok)
+            }
+            Cmd::SetApplicationMute(id, state) => {
+                self.set_application_mute(id, state).await.map(|_| Resp::Ok)
             }
         }
     }

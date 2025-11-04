@@ -4,8 +4,8 @@ use crate::{
     VirtualSourceDevice, VirtualTargetDevice, Volumes,
 };
 use enum_map::enum_map;
-use pipeweaver_shared::{ApplicationMatch, Colour, MuteTarget, OrderGroup};
-use std::collections::HashSet;
+use pipeweaver_shared::{Colour, DeviceType, MuteTarget, OrderGroup};
+use std::collections::{HashMap, HashSet};
 use ulid::Ulid;
 
 impl Profile {
@@ -340,10 +340,16 @@ impl Profile {
                 .into_iter()
                 .collect(),
 
-            application_mapping: vec![
-                ApplicationMatch::Exact("Firefox".into(), browser_id),
-                ApplicationMatch::Glob("*.exe".into(), game_id)
-            ],
+            application_mapping: enum_map! {
+                DeviceType::Source => {
+                    HashMap::from([
+                        ("firefox".into(), HashMap::from([("Firefox".into(), browser_id)])),
+                    ])
+                },
+                DeviceType::Target => {
+                    Default::default()
+                }
+            },
         }
     }
 }

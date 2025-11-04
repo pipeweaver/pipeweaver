@@ -1,16 +1,19 @@
-use crate::store::Store;
+use crate::store::{Store, TargetType};
 use crate::RouteTarget;
 use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
-use pipewire::keys::{ACCESS, APP_NAME, AUDIO_CHANNEL, CLIENT_ID, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FACTORY_TYPE_NAME, FACTORY_TYPE_VERSION, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_NAME, MODULE_ID, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, OBJECT_SERIAL, PORT_DIRECTION, PORT_ID, PORT_MONITOR, PORT_NAME, PROTOCOL, SEC_GID, SEC_PID, SEC_UID};
+use log::{debug, warn};
+use pipewire::client::{Client, ClientChangeMask, ClientListener};
+use pipewire::keys::{ACCESS, APP_NAME, APP_PROCESS_BINARY, AUDIO_CHANNEL, CLIENT_ID, DEVICE_DESCRIPTION, DEVICE_ID, DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FACTORY_TYPE_NAME, FACTORY_TYPE_VERSION, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_NAME, MODULE_ID, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, OBJECT_SERIAL, PORT_DIRECTION, PORT_ID, PORT_MONITOR, PORT_NAME, PROTOCOL, SEC_GID, SEC_PID, SEC_UID};
 use pipewire::metadata::{Metadata, MetadataListener};
 use pipewire::node::{Node, NodeChangeMask, NodeListener};
 use pipewire::registry::Listener;
 use pipewire::registry::Registry;
 use pipewire::spa::param::ParamType;
 use pipewire::spa::pod::deserialize::PodDeserializer;
+use pipewire::spa::pod::Value::Bool;
 use pipewire::spa::pod::{Value, ValueArray};
-use pipewire::spa::sys::{SPA_PARAM_Props, SPA_PROP_channelVolumes};
+use pipewire::spa::sys::{SPA_PARAM_Props, SPA_PROP_channelVolumes, SPA_PROP_mute};
 use pipewire::spa::utils::dict::DictRef;
 use pipewire::types::ObjectType;
 use std::cell::RefCell;
@@ -102,6 +105,15 @@ impl PipewireRegistry {
                                                                     param_local.borrow_mut().unmanaged_client_node_set_volume(id, volume);
                                                                 }
                                                             }
+                                                            let prop = object
+                                                                .properties
+                                                                .iter()
+                                                                .find(|p| p.key == SPA_PROP_mute);
+                                                            if let Some(prop) = prop {
+                                                                if let Bool(value) = prop.value {
+                                                                    param_local.borrow_mut().unmanaged_client_node_set_mute(id, value);
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -114,6 +126,9 @@ impl PipewireRegistry {
                                                             }
                                                         }
                                                     }
+                                                    if change == NodeChangeMask::STATE {
+                                                        info_local.borrow_mut().unmanaged_client_node_set_state(id, info.state());
+                                                    }
                                                 }
                                             }).register();
 
@@ -121,7 +136,7 @@ impl PipewireRegistry {
                                                 ParamType::Props,
                                             ]);
                                             proxy.enum_params(0, None, 0, u32::MAX);
-                                            node._proxy = Some(proxy);
+                                            node.proxy = Some(proxy);
                                             node._listener = Some(listener);
                                         }
 
@@ -211,8 +226,32 @@ impl PipewireRegistry {
                         }
                         ObjectType::Client => {
                             if let Some(props) = global.props {
-                                if let Ok(client) = RegistryClient::try_from(props) {
-                                    store.unmanaged_client_add(id, client);
+                                if let Ok(mut client) = RegistryClient::try_from(props) {
+                                    let proxy: Option<Client> = registry.borrow().bind(global).ok();
+                                    if let Some(client_proxy) = proxy {
+                                        let info_local = listener_store.clone();
+                                        let listener = client_proxy.add_listener_local().info(move |info| {
+                                            debug!("{:?}", info);
+
+                                            for change in info.change_mask().iter() {
+                                                if change == ClientChangeMask::PROPS {
+                                                    //debug!("Props: {:?}", info);
+                                                    if let Some(props) = info.props() {
+                                                        if let Some(process) = props.get(*APP_PROCESS_BINARY) {
+                                                            debug!("Process Binary Changed to {:?}", process);
+                                                            info_local.borrow_mut().unmanaged_client_set_binary(id, String::from(process));
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }).register();
+                                        client._listener = Some(listener);
+                                        client._proxy = Some(client_proxy);
+
+                                        store.unmanaged_client_add(id, client);
+                                    }
+                                } else {
+                                    debug!("Failed to create client: {:?}", props);
                                 }
                             }
                         }
@@ -224,13 +263,14 @@ impl PipewireRegistry {
                                         if let Some(metadata) = proxy {
                                             let listen_store = listener_store.clone();
                                             let listener = metadata.add_listener_local().property(move |subject, key, _type, value| {
-
-                                                // TODO: I've seen 'target.node' floating around in places, but not seen it directly used. Might need to address that.
                                                 if key == Some("target.object") {
                                                     let target = value.and_then(|s| s.parse::<u32>().ok());
-                                                    listen_store.borrow_mut().unmanaged_client_node_set_target(subject, target);
+                                                    listen_store.borrow_mut().unmanaged_client_node_set_target(subject, TargetType::Serial(target));
                                                 }
-
+                                                if key == Some("target.node") {
+                                                    let target = value.and_then(|s| s.parse::<u32>().ok());
+                                                    listen_store.borrow_mut().unmanaged_client_node_set_target(subject, TargetType::Node(target));
+                                                }
                                                 0
                                             }).register();
 
@@ -439,7 +479,6 @@ impl RegistryPort {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct RegistryClient {
     object_serial: u32,
 
@@ -449,7 +488,11 @@ pub(crate) struct RegistryClient {
     user_id: u32,
     group_id: u32,
     access: String,
-    application_name: String,
+    pub(crate) application_name: String,
+    pub(crate) application_binary: Option<String>,
+
+    pub(crate) _proxy: Option<Client>,
+    pub(crate) _listener: Option<ClientListener>,
 
     pub(crate) nodes: Vec<u32>,
 }
@@ -482,7 +525,13 @@ impl TryFrom<&DictRef> for RegistryClient {
             user_id,
             group_id,
             access,
+
             application_name,
+            application_binary: None,
+
+            _proxy: None,
+            _listener: None,
+
             nodes: vec![],
         })
     }
@@ -501,9 +550,14 @@ pub(crate) struct RegistryClientNode {
     pub(crate) volume: u8,
     pub(crate) media_title: Option<String>,
 
+    pub(crate) n_input_ports: u8,
+    pub(crate) n_output_ports: u8,
+    pub(crate) is_running: Option<bool>,
+    pub(crate) is_muted: bool,
+
     pub(crate) media_target: Option<Option<RouteTarget>>,
 
-    pub(crate) _proxy: Option<Node>,
+    pub(crate) proxy: Option<Node>,
     pub(crate) _listener: Option<NodeListener>,
 
     pub ports: EnumMap<Direction, HashMap<u32, RegistryPort>>,
@@ -521,6 +575,7 @@ impl TryFrom<&DictRef> for RegistryClientNode {
         Ok(Self {
             object_serial,
             parent_id,
+
             application_name,
             node_name,
 
@@ -528,7 +583,12 @@ impl TryFrom<&DictRef> for RegistryClientNode {
             media_title: None,
             media_target: None,
 
-            _proxy: None,
+            n_input_ports: 0,
+            n_output_ports: 0,
+            is_running: None,
+            is_muted: false,
+
+            proxy: None,
             _listener: None,
 
             metadata: None,

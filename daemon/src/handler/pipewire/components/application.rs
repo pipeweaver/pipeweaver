@@ -1,61 +1,156 @@
+use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::manager::PipewireManager;
-use anyhow::Result;
-use globset::Glob;
+use anyhow::{bail, Result};
 use log::{debug, warn};
-use pipeweaver_pipewire::PipewireMessage::SetApplicationTarget;
-use pipeweaver_pipewire::{ApplicationNode, PipewireMessage, RouteTarget};
-use pipeweaver_shared::ApplicationMatch;
+use pipeweaver_pipewire::PipewireMessage::{ClearApplicationTarget, SetApplicationMute, SetApplicationTarget, SetApplicationVolume};
+use pipeweaver_pipewire::{ApplicationNode, MediaClass, RouteTarget};
+use pipeweaver_shared::{AppDefinition, DeviceType, NodeType};
+use std::collections::HashMap;
 use ulid::Ulid;
 
 type Target = Option<Option<RouteTarget>>;
 pub(crate) trait ApplicationManagement {
-    fn set_application_target(&mut self, title: ApplicationMatch, target: Ulid) -> Result<()>;
-    fn clear_application_target(&mut self, title: ApplicationMatch) -> Result<()>;
-    fn set_application_transient_target(&mut self, id: u32, target: Ulid) -> Result<()>;
+    async fn set_application_target(&mut self, def: AppDefinition, target: Ulid) -> Result<()>;
+    async fn clear_application_target(&mut self, def: AppDefinition) -> Result<()>;
+    async fn set_application_transient_target(&mut self, id: u32, target: Ulid) -> Result<()>;
+    async fn clear_application_transient_target(&mut self, id: u32) -> Result<()>;
+    async fn set_application_volume(&mut self, id: u32, volume: u8) -> Result<()>;
+    async fn set_application_mute(&mut self, id: u32, mute: bool) -> Result<()>;
+
 
     fn application_appeared(&mut self, node: ApplicationNode) -> Result<()>;
     fn application_target_changed(&mut self, id: u32, target: Target) -> Result<()>;
     fn application_volume_changed(&mut self, id: u32, volume: u8) -> Result<()>;
     fn application_title_changed(&mut self, id: u32, title: String) -> Result<()>;
+    fn application_mute_changed(&mut self, id: u32, muted: bool) -> Result<()>;
     fn application_removed(&mut self, id: u32) -> Result<()>;
 }
 
 impl ApplicationManagement for PipewireManager {
-    fn set_application_target(&mut self, title: ApplicationMatch, target: Ulid) -> Result<()> {
-        todo!()
+    async fn set_application_target(&mut self, def: AppDefinition, target: Ulid) -> Result<()> {
+
+        // Perform Validation on the Target
+        if let Some(target) = self.get_application_type_from_node(target) {
+            if target != def.device_type {
+                bail!("Device Type Mismatch");
+            }
+        } else {
+            bail!("Target not found: {}", target);
+        }
+
+        // Ok, first, does this binary exist in the profile?
+        let map = &mut self.profile.application_mapping[def.device_type];
+
+        // Update or Insert the definition into the map
+        let process_name = def.process.clone();
+        let app_name = def.name.clone();
+
+        if let Some(app) = map.get_mut(&process_name) {
+            app.insert(app_name, target);
+        } else {
+            map.insert(process_name, HashMap::from([(app_name, target)]));
+        }
+
+        // Next, we need to find all nodes which match this definition
+        let matching_nodes = self.find_matching_nodes(&def);
+
+        // Send all the nodes across to the new target
+        for node in matching_nodes {
+            let message = SetApplicationTarget(node, target);
+            self.pipewire().send_message(message)?;
+        }
+
+        Ok(())
     }
 
-    fn clear_application_target(&mut self, title: ApplicationMatch) -> Result<()> {
-        todo!()
+    async fn clear_application_target(&mut self, def: AppDefinition) -> Result<()> {
+        let map = &mut self.profile.application_mapping[def.device_type];
+        if let Some(app) = map.get_mut(&def.process) {
+            app.remove(&def.name);
+
+            // If there are no apps left, remove the process
+            if app.is_empty() {
+                map.remove(&def.process);
+            }
+        }
+
+        let matching_nodes = self.find_matching_nodes(&def);
+        for node in matching_nodes {
+            let message = ClearApplicationTarget(node);
+            self.pipewire().send_message(message)?;
+        }
+
+        Ok(())
     }
 
-    fn set_application_transient_target(&mut self, id: u32, target: Ulid) -> Result<()> {
-        // This code sets a 'transient' target for a node, and flags it as ignored.
-        let message = SetApplicationTarget(id, target);
-        self.pipewire().send_message(message)?;
+    async fn set_application_transient_target(&mut self, id: u32, target: Ulid) -> Result<()> {
+        if let Some(node) = self.application_nodes.get(&id) {
+            if let Some(target) = self.get_application_type_from_node(target) {
+                if target != get_application_type(node.node_class) {
+                    bail!("Target Type mismatch");
+                }
+            } else {
+                bail!("Invalid Target");
+            }
 
-        // Flag all future changes to this node as 'ignored'
-        if !self.application_target_ignore.contains(&id) {
-            self.application_target_ignore.push(id);
+            // Send this node to its new target
+            let message = SetApplicationTarget(id, target);
+            self.pipewire().send_message(message)?;
+        }
+
+        Ok(())
+    }
+
+    async fn clear_application_transient_target(&mut self, id: u32) -> Result<()> {
+        // We need to force this transient target back to the default output
+        if let Some(_) = self.application_nodes.get(&id) {
+            let message = ClearApplicationTarget(id);
+            self.pipewire().send_message(message)?;
         }
         Ok(())
     }
 
+    async fn set_application_volume(&mut self, id: u32, volume: u8) -> Result<()> {
+        if !self.application_nodes.contains_key(&id) {
+            bail!("Invalid Application Specified");
+        }
+        if !(0..=100).contains(&volume) {
+            bail!("Volume out of range");
+        }
+        let message = SetApplicationVolume(id, volume);
+        self.pipewire().send_message(message)?;
+        Ok(())
+    }
+
+    async fn set_application_mute(&mut self, id: u32, mute: bool) -> Result<()> {
+        if !self.application_nodes.contains_key(&id) {
+            bail!("Invalid Application Specified");
+        }
+        let message = SetApplicationMute(id, mute);
+        self.pipewire().send_message(message)?;
+        Ok(())
+    }
+
+
     fn application_appeared(&mut self, node: ApplicationNode) -> Result<()> {
+        debug!("Node Appeared: {:?}", node);
+
+        // Get the current node id, and it's reported target
         let node_id = node.node_id;
         let node_target = node.media_target;
 
+        // Add this to our node list
         self.application_nodes.insert(node_id, node);
+
         if self.application_target_ignore.contains(&node_id) {
-            debug!("Target node is ignored, we're done here.");
+            debug!("Application node is ignored, we're done here.");
             return Ok(());
         }
 
-        // Check whether this node is assigned in the profile
-        if let Some(target) = self.check_assignment(node_id) {
-            // Compare against the existing target..
+        if let Some(target) = self.get_application_assignment(node_id) {
             let message = SetApplicationTarget(node_id, target);
 
+            // Compare against the nodes arrival target
             match node_target {
                 None => {
                     // We've not received a RouteTarget for this app, so redirect it.
@@ -69,6 +164,8 @@ impl ApplicationManagement for PipewireManager {
                                 // Set to the wrong target, fix it.
                                 debug!("Fixing {} from {} to {}", node_id, ulid, target);
                                 self.pipewire().send_message(message)?;
+                            } else {
+                                debug!("Node Arrived and correctly configured: {}", node_id);
                             }
                         }
                         Some(RouteTarget::UnmanagedNode(node_id)) => {
@@ -84,6 +181,8 @@ impl ApplicationManagement for PipewireManager {
                     }
                 }
             }
+        } else {
+            warn!("No Target found for {}", node_id);
         }
         Ok(())
     }
@@ -98,7 +197,7 @@ impl ApplicationManagement for PipewireManager {
             node.media_target = target;
 
             // Find whether this should be going somewhere
-            if let Some(desired) = self.check_assignment(id) {
+            if let Some(desired) = self.get_application_assignment(id) {
                 match target {
                     None => {
                         // This shouldn't theoretically occur, a target change should only be triggered
@@ -147,6 +246,8 @@ impl ApplicationManagement for PipewireManager {
                     }
                 }
             }
+        } else {
+            warn!("Received Route for Unknown Node");
         }
 
         // If we fall through here, this isn't a managed node, so just go on normally.
@@ -166,6 +267,12 @@ impl ApplicationManagement for PipewireManager {
         }
         Ok(())
     }
+    fn application_mute_changed(&mut self, id: u32, muted: bool) -> Result<()> {
+        if let Some(dev) = self.application_nodes.get_mut(&id) {
+            dev.muted = muted;
+        }
+        Ok(())
+    }
 
     fn application_removed(&mut self, id: u32) -> Result<()> {
         let _ = self.application_nodes.remove(&id);
@@ -174,40 +281,63 @@ impl ApplicationManagement for PipewireManager {
 }
 
 trait ApplicationManagementLocal {
-    fn check_assignment(&mut self, id: u32) -> Option<Ulid>;
-    fn get_assignment(&mut self, name: String) -> Option<Ulid>;
+    fn get_application_assignment(&mut self, id: u32) -> Option<Ulid>;
+    fn get_application_type_from_node(&self, id: Ulid) -> Option<DeviceType>;
+    fn find_matching_nodes(&self, def: &AppDefinition) -> Vec<u32>;
 }
 
 impl ApplicationManagementLocal for PipewireManager {
-    fn check_assignment(&mut self, id: u32) -> Option<Ulid> {
+    fn get_application_assignment(&mut self, id: u32) -> Option<Ulid> {
         if let Some(node) = self.application_nodes.get(&id) {
-            // Grab the application name, and see if we match
-            return self.get_assignment(node.name.clone());
+            let node_type = get_application_type(node.node_class);
+
+            let mapping = &self.profile.application_mapping[node_type];
+            if let Some(app) = mapping.get(&node.process_name) {
+                if let Some(id) = app.get(&node.name) {
+                    return Some(*id);
+                } else {
+                    debug!("App {} - {} has no entry", node.process_name, node.name);
+                }
+            } else {
+                debug!("Process {} has No entry", node.process_name);
+            }
+        } else {
+            warn!("Node Not Present Application Node List: {}", id);
         }
-        warn!("Application assignment not found: {}", id);
         None
     }
 
-    fn get_assignment(&mut self, node_name: String) -> Option<Ulid> {
-        for matcher in &self.profile.application_mapping {
-            match matcher {
-                ApplicationMatch::Exact(name, target) => {
-                    if node_name == *name {
-                        // Got an exact name match, send it
-                        return Some(*target);
-                    }
-                }
-                ApplicationMatch::Glob(name, target) => {
-                    if Glob::new(name)
-                        .unwrap()
-                        .compile_matcher()
-                        .is_match(&node_name)
-                    {
-                        return Some(*target);
-                    }
-                }
+    fn get_application_type_from_node(&self, id: Ulid) -> Option<DeviceType> {
+        match self.get_node_type(id) {
+            None => None,
+            Some(node_type) => match node_type {
+                NodeType::PhysicalSource => Some(DeviceType::Source),
+                NodeType::PhysicalTarget => Some(DeviceType::Target),
+                NodeType::VirtualSource => Some(DeviceType::Source),
+                NodeType::VirtualTarget => Some(DeviceType::Target),
+            },
+        }
+    }
+
+    fn find_matching_nodes(&self, def: &AppDefinition) -> Vec<u32> {
+        let mut list = vec![];
+        for (node_id, node) in &self.application_nodes {
+            let node_type = get_application_type(node.node_class);
+
+            if node.name == def.name
+                && node.process_name == def.process
+                && node_type == def.device_type
+            {
+                list.push(*node_id);
             }
         }
-        None
+        list
+    }
+}
+
+pub fn get_application_type(class: MediaClass) -> DeviceType {
+    match class {
+        MediaClass::Sink => DeviceType::Target,
+        _ => DeviceType::Source,
     }
 }

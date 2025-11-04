@@ -16,6 +16,7 @@ export const store = reactive({
     devices: {
       Source: [],
       Target: [],
+      applications: {},
     }
   },
   a11y: {
@@ -71,6 +72,10 @@ export const store = reactive({
 
   getDevices() {
     return this.status.devices;
+  },
+
+  getApplications() {
+    return this.status.audio.applications;
   },
 
   getStatus() {

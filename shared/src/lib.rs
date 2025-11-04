@@ -49,9 +49,16 @@ pub enum OrderGroup {
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
-pub enum ApplicationMatch {
-    Exact(String, Ulid),
-    Glob(String, Ulid),
+pub enum AppTarget {
+    Managed(Ulid),
+    Unmanaged(u32),
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct AppDefinition {
+    pub device_type: DeviceType,
+    pub process: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -34,6 +34,9 @@ pub enum PipewireMessage {
     SetNodeMute(Ulid, bool),
 
     SetApplicationTarget(u32, Ulid),
+    SetApplicationVolume(u32, u8),
+    SetApplicationMute(u32, bool),
+    ClearApplicationTarget(u32),
 
     DestroyUnmanagedLinks(u32),
 
@@ -61,8 +64,11 @@ pub enum PipewireInternalMessage {
     SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<()>>),
     SetNodeVolume(Ulid, u8, oneshot::Sender<Result<()>>),
     SetNodeMute(Ulid, bool, oneshot::Sender<Result<()>>),
+    SetApplicationVolume(u32, u8, oneshot::Sender<Result<()>>),
+    SetApplicationMute(u32, bool, oneshot::Sender<Result<()>>),
 
     SetApplicationTarget(u32, Ulid, oneshot::Sender<Result<()>>),
+    ClearApplicationTarget(u32, oneshot::Sender<Result<()>>),
 
     DestroyUnmanagedLinks(u32, oneshot::Sender<Result<()>>),
     Quit(oneshot::Sender<Result<()>>),
@@ -81,6 +87,7 @@ pub enum PipewireReceiver {
     ApplicationTargetChanged(u32, Option<RouteTarget>),
     ApplicationTitleChanged(u32, String),
     ApplicationVolumeChanged(u32, u8),
+    ApplicationMuteChanged(u32, bool),
     ApplicationRemoved(u32),
 
     NodeVolumeChanged(Ulid, u8),
@@ -178,6 +185,15 @@ impl PipewireRunner {
             }
             PipewireMessage::SetApplicationTarget(app_id, target) => {
                 PipewireInternalMessage::SetApplicationTarget(app_id, target, tx)
+            }
+            PipewireMessage::SetApplicationVolume(id, volume) => {
+                PipewireInternalMessage::SetApplicationVolume(id, volume, tx)
+            }
+            PipewireMessage::SetApplicationMute(id, state) => {
+                PipewireInternalMessage::SetApplicationMute(id, state, tx)
+            }
+            PipewireMessage::ClearApplicationTarget(id) => {
+                PipewireInternalMessage::ClearApplicationTarget(id, tx)
             }
             PipewireMessage::Quit => PipewireInternalMessage::Quit(tx),
         };
@@ -348,7 +364,10 @@ pub struct ApplicationNode {
     pub media_target: Option<Option<RouteTarget>>,
 
     pub volume: u8,
+    pub muted: bool,
+
     pub title: Option<String>,
 
+    pub process_name: String,
     pub name: String,
 }

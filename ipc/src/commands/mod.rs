@@ -1,7 +1,7 @@
 use enum_map::EnumMap;
 use json_patch::Patch;
 use pipeweaver_profile::Profile;
-use pipeweaver_shared::{Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType, OrderGroup};
+use pipeweaver_shared::{AppDefinition, AppTarget, Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType, OrderGroup};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use ulid::Ulid;
@@ -74,6 +74,16 @@ pub enum APICommand {
     AttachPhysicalNode(Ulid, u32),
     RemovePhysicalNode(Ulid, usize),
 
+    // Used for Application Routing
+    SetApplicationRoute(AppDefinition, Ulid),
+    ClearApplicationRoute(AppDefinition),
+
+    SetTransientApplicationRoute(u32, Ulid),
+    ClearTransientApplicationRoute(u32),
+
+    SetApplicationVolume(u32, u8),
+    SetApplicationMute(u32, bool),
+
     // Set the position of a node in the order tree
     SetOrderGroup(Ulid, OrderGroup),
     SetOrder(Ulid, u8),
@@ -96,7 +106,7 @@ pub struct DaemonStatus {
 pub struct AudioConfiguration {
     pub profile: Profile,
     pub devices: EnumMap<DeviceType, Vec<PhysicalDevice>>,
-    pub applications: HashMap<String, Vec<Application>>,
+    pub applications: EnumMap<DeviceType, HashMap<String, HashMap<String, Vec<Application>>>>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -129,5 +139,8 @@ pub struct Application {
     pub name: String,
 
     pub volume: u8,
+    pub muted: bool,
     pub title: Option<String>,
+
+    pub target: Option<AppTarget>,
 }

@@ -3,6 +3,7 @@
 import {websocket} from "@/app/sockets.js";
 import Router from "@/views/desktop/routing/Router.vue";
 import Mixer from "@/views/Mixer.vue";
+import ApplicationsList from "@/views/desktop/applications/ApplicationsList.vue";
 
 function addDevice(type, e) {
   let name = prompt("Device Name:");
@@ -22,7 +23,12 @@ function addDevice(type, e) {
       <Mixer :is_source="true"/>
       <Mixer :is_source="false"/>
     </div>
-    <Router/>
+    <div class="routing">
+      <div class="applications">
+        <ApplicationsList/>
+      </div>
+      <Router/>
+    </div>
   </div>
 </template>
 
@@ -44,6 +50,16 @@ function addDevice(type, e) {
   flex: 1;
   flex-direction: row;
   gap: 20px;
+}
+
+.routing {
+  display: flex;
+  flex-direction: row;
+}
+
+.applications {
+  min-width: 250px;
+  /*max-width: 250px;*/
 }
 
 

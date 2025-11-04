@@ -675,8 +675,25 @@ impl PipewireManager {
         Ok(())
     }
 
+    fn clear_application_target(&mut self, app_id: u32) -> Result<()> {
+        let mut store = self.store.borrow_mut();
+
+        // This should (in theory) route a target to the default, this *MIGHT* need to be -1 rather than 'None'
+        store.unmanaged_node_set_meta(app_id, String::from("target.node"), Some(String::from("Spa:Id")), None);
+        store.unmanaged_node_set_meta(app_id, String::from("target.object"), Some(String::from("Spa:Id")), None);
+        Ok(())
+    }
+
     fn set_node_volume(&mut self, id: Ulid, volume: u8) -> Result<()> {
         self.store.borrow_mut().set_volume(id, volume)
+    }
+
+    fn set_application_volume(&mut self, id: u32, volume: u8) -> Result<()> {
+        self.store.borrow_mut().set_application_volume(id, volume)
+    }
+
+    fn set_application_muted(&mut self, id: u32, state: bool) -> Result<()> {
+        self.store.borrow_mut().set_application_muted(id, state)
     }
 
     fn set_node_mute(&mut self, id: Ulid, mute: bool) -> Result<()> {
@@ -781,6 +798,15 @@ pub fn run_pw_main_loop(
 
             PipewireInternalMessage::SetApplicationTarget(id, target, result) => {
                 let _ = result.send(manager.borrow_mut().set_application_target(id, target));
+            }
+            PipewireInternalMessage::SetApplicationVolume(id, volue, result) => {
+                let _ = result.send(manager.borrow_mut().set_application_volume(id, volue));
+            }
+            PipewireInternalMessage::SetApplicationMute(id, state, result) => {
+                let _ = result.send(manager.borrow_mut().set_application_muted(id, state));
+            }
+            PipewireInternalMessage::ClearApplicationTarget(id, result) => {
+                let _ = result.send(manager.borrow_mut().clear_application_target(id));
             }
         }
     });

@@ -7,7 +7,6 @@ import LoadingScreen from '@/views/LoadingScreen.vue';
 import HomePage from '@/views/HomePage.vue';
 import {useDeviceType, useOrientation} from "@/app/util.js";
 
-
 // Run once on component setup
 runWebsocket();
 

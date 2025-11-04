@@ -9,7 +9,7 @@ use oneshot::Sender;
 use parking_lot::RwLock;
 use pipewire::filter::{Filter, FilterListener, FilterPort};
 use pipewire::link::{Link, LinkListener};
-use pipewire::node::{Node, NodeListener};
+use pipewire::node::{Node, NodeListener, NodeState};
 use pipewire::properties::Properties;
 use pipewire::proxy::ProxyListener;
 use pipewire::spa::param::ParamType;
@@ -21,12 +21,18 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::io::Cursor;
+use std::mem::discriminant;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::mpsc;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use ulid::Ulid;
+
+pub(crate) enum TargetType {
+    Node(Option<u32>),
+    Serial(Option<u32>),
+}
 
 pub struct Store {
     // The main Session Proxy Metadata
@@ -219,6 +225,26 @@ impl Store {
         Ok(())
     }
 
+    pub fn set_application_volume(&mut self, id: u32, volume: u8) -> Result<()> {
+        let node = self.unmanaged_client_nodes.get(&id).ok_or(anyhow!("Failed to find node"))?;
+
+        let volume = (volume as f32 / 100.0).powi(3);
+        let pod = Value::Object(object! {
+                    utils::SpaTypes::ObjectParamProps,
+                    ParamType::Props,
+                    Property::new(SPA_PROP_channelVolumes, Value::ValueArray(ValueArray::Float(vec![volume, volume]))),
+                });
+
+        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod).unwrap();
+        let bytes = cursor.into_inner();
+        if let Some(bytes) = Pod::from_bytes(&bytes) {
+            if let Some(proxy) = &node.proxy {
+                proxy.set_param(ParamType::Props, 0, bytes);
+            }
+        }
+        Ok(())
+    }
+
     pub fn on_volume_change(&mut self, id: Ulid, volume: u8) {
         let _ = self.callback_tx.send(PipewireReceiver::NodeVolumeChanged(id, volume));
     }
@@ -231,10 +257,26 @@ impl Store {
             ParamType::Props,
             Property::new(SPA_PROP_mute, Value::Bool(muted)),
         });
-        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod).unwrap();
+        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod)?;
         let bytes = cursor.into_inner();
         if let Some(bytes) = Pod::from_bytes(&bytes) {
             node.proxy.set_param(ParamType::Props, 0, bytes);
+        }
+        Ok(())
+    }
+    pub fn set_application_muted(&mut self, id: u32, muted: bool) -> Result<()> {
+        let node = self.unmanaged_client_node_get(id).ok_or(anyhow!("Failed to find node"))?;
+        let pod = Value::Object(object! {
+            utils::SpaTypes::ObjectParamProps,
+            ParamType::Props,
+            Property::new(SPA_PROP_mute, Value::Bool(muted)),
+        });
+        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod).unwrap();
+        let bytes = cursor.into_inner();
+        if let Some(bytes) = Pod::from_bytes(&bytes) {
+            if let Some(proxy) = &node.proxy {
+                proxy.set_param(ParamType::Props, 0, bytes);
+            }
         }
         Ok(())
     }
@@ -388,6 +430,7 @@ impl Store {
     }
 
     pub fn unmanaged_node_check(&mut self, id: u32) {
+        debug!("Unmanaged Check: {}", id);
         if let Some(node) = self.unmanaged_device_nodes.get(&id) {
             let is_usable = self.is_usable_unmanaged_device_node(id);
             if let Some(media_type) = is_usable {
@@ -444,6 +487,20 @@ impl Store {
         self.unmanaged_clients.insert(id, device);
     }
 
+    pub fn unmanaged_client_set_binary(&mut self, id: u32, name: String) {
+        let nodes = if let Some(client) = self.unmanaged_clients.get_mut(&id) {
+            client.application_binary = Some(name);
+            client.nodes.clone()
+        } else {
+            vec![]
+        };
+
+        // Check all the client nodes to see if they were waiting for this
+        for node in nodes {
+            self.unmanaged_client_node_check(node);
+        }
+    }
+
     pub fn unmanaged_client_get(&mut self, id: u32) -> Option<&mut RegistryClient> {
         self.unmanaged_clients.get_mut(&id)
     }
@@ -471,6 +528,19 @@ impl Store {
         }
     }
 
+    // Naming here is terrible
+    pub fn unmanaged_client_node_set_mute(&mut self, id: u32, muted: bool) {
+        debug!("Finding Node");
+        if let Some(node) = self.unmanaged_client_node_get(id) {
+            if node.is_muted != muted {
+                node.is_muted = muted;
+                let _ = self.callback_tx.send(PipewireReceiver::ApplicationMuteChanged(id, muted));
+            }
+        } else {
+            error!("Failed to locate Application Node");
+        }
+    }
+
     pub fn unmanaged_client_node_set_media(&mut self, id: u32, media: String) {
         if let Some(node) = self.unmanaged_client_node_get(id) {
             if node.media_title.is_none() && media == "AudioStream" {
@@ -485,28 +555,52 @@ impl Store {
         }
     }
 
-    pub fn unmanaged_client_node_set_target(&mut self, id: u32, target: Option<u32>) {
+    pub fn unmanaged_client_node_set_target(&mut self, id: u32, target: TargetType) {
         // So we need to locate the target, which might be tricky as the target is passed as an
         // object serial, and not a node id, meaning we need to do some digging.
 
         let mut result: Option<RouteTarget> = None;
 
-        if let Some(target) = target {
-            for (id, node) in &self.managed_nodes {
-                if let Some(serial) = node.object_serial {
-                    if serial == target {
-                        result = Some(RouteTarget::Node(*id));
+        match target {
+            TargetType::Node(Some(id)) => {
+                for node in self.managed_nodes.values() {
+                    if let Some(object_id) = node.pw_id {
+                        if object_id == id {
+                            result = Some(RouteTarget::Node(node.id));
+                            break;
+                        }
+                    }
+                }
+
+                // If we get here, it's not a managed node, so check and send as unmanaged
+                if self.unmanaged_device_nodes.contains_key(&id) {
+                    result = Some(RouteTarget::UnmanagedNode(id));
+                }
+
+                debug!("Node not found: {}", id);
+            }
+            TargetType::Serial(Some(id)) => {
+                for node in self.managed_nodes.values() {
+                    if let Some(object_serial) = node.object_serial {
+                        if object_serial == id {
+                            result = Some(RouteTarget::Node(node.id));
+                            break;
+                        }
+                    }
+                }
+
+                // Can't find it, we need to look for object serials in the unmanaged list
+                for (node_id, node) in &self.unmanaged_device_nodes {
+                    if node.object_serial == id {
+                        result = Some(RouteTarget::UnmanagedNode(*node_id));
                         break;
                     }
                 }
-            }
 
-            if result.is_none() {
-                for (id, node) in &self.unmanaged_device_nodes {
-                    if target == node.object_serial {
-                        result = Some(RouteTarget::UnmanagedNode(*id));
-                    }
-                }
+                debug!("Serial not found: {}", id);
+            }
+            _ => {
+                warn!("Blank TargetType Received!");
             }
         }
 
@@ -519,6 +613,35 @@ impl Store {
             } else {
                 // Check whether we're ready to send
                 self.unmanaged_client_node_check(id);
+            }
+        } else {
+            debug!("Route for {} is not Managed", id);
+        }
+    }
+
+    pub fn unmanaged_client_node_set_state(&mut self, id: u32, state: NodeState) {
+        let is_running = discriminant(&state) == discriminant(&NodeState::Running);
+
+        if let Some(node) = self.unmanaged_client_node_get(id) {
+            match node.is_running {
+                None => {
+                    node.is_running = Some(is_running);
+                    self.unmanaged_client_node_check(id);
+                }
+                Some(node_state) => {
+                    if node_state == is_running {
+                        return;
+                    }
+
+                    node.is_running = Some(is_running);
+                    if !is_running {
+                        // We've gone from Running -> Not Running, flag the client as removed
+                        self.unmanaged_client_clear_usable(id);
+                    } else {
+                        // We've moved into a Running state, so perform a check.
+                        self.unmanaged_client_node_check(id);
+                    }
+                }
             }
         }
     }
@@ -538,30 +661,45 @@ impl Store {
         }
     }
 
+    pub fn unmanaged_client_clear_usable(&mut self, id: u32) {
+        let message = PipewireReceiver::ApplicationRemoved(id);
+        let _ = self.callback_tx.send(message);
+
+        // Remove the usable node, we can re-establish it later
+        self.usable_client_nodes.retain(|v| v != &id);
+    }
+
     pub fn unmanaged_client_node_check(&mut self, id: u32) {
         if self.usable_client_nodes.contains(&id) {
             // We already know this is usable, so don't trigger again
             return;
         }
 
+
         if let Some(node) = self.unmanaged_client_nodes.get(&id) {
-            let is_usable = self.is_usable_unmanaged_client_node(id);
-            if let Some(media_type) = is_usable {
-                if !self.usable_client_nodes.contains(&id) {
-                    self.usable_client_nodes.push(id);
-                    let node = ApplicationNode {
-                        node_id: id,
-                        node_class: media_type,
-                        media_target: node.media_target,
+            if let Some(media_type) = self.is_usable_unmanaged_client_node(id) {
+                if let Some(parent) = self.unmanaged_clients.get(&node.parent_id) {
+                    if !self.usable_client_nodes.contains(&id) {
+                        self.usable_client_nodes.push(id);
+                        let node = ApplicationNode {
+                            node_id: id,
+                            node_class: media_type,
+                            media_target: node.media_target,
 
-                        volume: node.volume,
-                        title: node.media_title.clone(),
-                        name: node.application_name.clone(),
-                    };
+                            volume: node.volume,
+                            muted: node.is_muted,
 
-                    let _ = self
-                        .callback_tx
-                        .send(PipewireReceiver::ApplicationAdded(node));
+                            title: node.media_title.clone(),
+
+                            name: node.application_name.clone(),
+
+                            // We can safely panic! here, is_usable_unamanged_client_node checks this.
+                            process_name: parent.application_binary.clone().expect("NO BINARY"),
+                        };
+
+                        let message = PipewireReceiver::ApplicationAdded(node);
+                        let _ = self.callback_tx.send(message);
+                    }
                 }
             }
         }
@@ -569,13 +707,20 @@ impl Store {
 
     pub fn is_usable_unmanaged_client_node(&self, id: u32) -> Option<MediaClass> {
         if let Some(node) = self.unmanaged_client_nodes.get(&id) {
-            let mut in_count = 0;
-            let mut out_count = 0;
-
-            if node.node_name.is_empty() || node.application_name.is_empty() {
+            if node.node_name.is_empty()
+                || node.application_name.is_empty()
+                || node.is_running.is_none()
+                || node.is_running == Some(false) {
                 return None;
             }
 
+            // We need the parent to have an application binary
+            if let Some(parent) = self.unmanaged_clients.get(&id) {
+                parent.application_binary.as_ref()?;
+            }
+
+            let mut in_count = 0;
+            let mut out_count = 0;
             for (direction, ports) in &node.ports {
                 let count = ports.values().filter(|port| !port.is_monitor).count();
 
