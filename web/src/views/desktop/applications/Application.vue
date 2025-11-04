@@ -88,7 +88,6 @@ export default {
         }
         element.style.transform = "rotate(-90deg)";
       }
-      console.log(this.$refs.nodes);
       this.$refs.nodes[index].show(e);
     },
 
@@ -102,8 +101,6 @@ export default {
 </script>
 
 <template>
-
-
   <div v-for="(app, index) in get_application_list()">
     <ApplicationNodes ref="nodes" :is-source="this.isSource" :nodes="get_application_nodes(app)"
                       @closed="on_app_close(index)"/>
