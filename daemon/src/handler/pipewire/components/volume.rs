@@ -149,8 +149,7 @@ impl VolumeManager for PipewireManager {
                 (volume as f32 * ratio) as u8
             } else {
                 (volume as f32 / ratio) as u8
-            };
-            volumes.volume[other_mix] = new_volume;
+            }.clamp(0, 100);
             Some(new_volume)
         } else {
             None
