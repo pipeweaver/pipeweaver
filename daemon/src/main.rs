@@ -55,6 +55,7 @@ async fn main() -> Result<()> {
     info!("Starting {} v{} - {}", APP_NAME, VERSION, HASH);
 
     let shutdown = Stop::new();
+    let (broadcast_tx, broadcast_rx) = broadcast::channel(16);
 
     // Create the Global Manager Channels...
     let (manager_send, manager_recv) = mpsc::channel(32);
@@ -69,6 +70,7 @@ async fn main() -> Result<()> {
     let communications_handle = tokio::spawn(spawn_ipc_server(
         ipc_socket,
         manager_send.clone(),
+        broadcast_tx.clone(),
         shutdown.clone(),
     ));
 
@@ -81,7 +83,6 @@ async fn main() -> Result<()> {
     };
 
     let (httpd_tx, httpd_rx) = tokio::sync::oneshot::channel();
-    let (broadcast_tx, broadcast_rx) = broadcast::channel(16);
     let (meter_tx, meter_rx) = broadcast::channel(32);
     drop(broadcast_rx);
     drop(meter_rx);

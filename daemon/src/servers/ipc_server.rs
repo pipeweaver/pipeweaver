@@ -1,4 +1,5 @@
 use crate::handler::packet::{handle_packet, Messenger};
+use crate::servers::http_server::PatchEvent;
 use crate::{Stop, APP_NAME, APP_NAME_ID};
 use anyhow::{bail, Error, Result};
 use directories::BaseDirs;
@@ -10,6 +11,8 @@ use pipeweaver_ipc::clients::ipc::ipc_socket::Socket;
 use pipeweaver_ipc::commands::{DaemonCommand, DaemonRequest, DaemonResponse};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
+use tokio::select;
+use tokio::sync::broadcast::Sender;
 
 pub fn get_socket_path() -> Result<PathBuf> {
     let path = BaseDirs::new()
@@ -78,17 +81,19 @@ pub async fn bind_socket() -> Result<LocalSocketListener> {
 pub async fn spawn_ipc_server(
     listener: LocalSocketListener,
     usb_tx: Messenger,
+    broadcast_tx: Sender<PatchEvent>,
     mut shutdown_signal: Stop,
 ) {
     let socket_path = format!("/tmp/{}.socket", APP_NAME);
     debug!("Running IPC Server..");
     loop {
-        tokio::select! {
+        select! {
             Ok(connection) = listener.accept() => {
                 let socket = Socket::new(connection);
                 let usb_tx = usb_tx.clone();
+                let broadcast_tx = broadcast_tx.clone();
                 tokio::spawn(async move {
-                    handle_connection(socket, usb_tx).await;
+                    handle_connection(socket, broadcast_tx, usb_tx).await;
                 });
             }
             () = shutdown_signal.recv() => {
@@ -101,31 +106,52 @@ pub async fn spawn_ipc_server(
     }
 }
 
-async fn handle_connection(mut socket: Socket<DaemonRequest, DaemonResponse>, usb_tx: Messenger) {
-    while let Some(msg) = socket.read().await {
-        match msg {
-            Ok(msg) => match handle_packet(msg, usb_tx.clone()).await {
-                Ok(response) => {
-                    if let Err(e) = socket.send(response).await {
-                        warn!("Couldn't reply to {:?}: {}", socket.address(), e);
-                        return;
-                    }
-                }
-                Err(e) => {
-                    if let Err(e) = socket.send(DaemonResponse::Err(e.to_string())).await {
-                        warn!("Couldn't reply to {:?}: {}", socket.address(), e);
-                        return;
-                    }
-                }
-            },
-            Err(e) => {
-                warn!("Invalid message from {:?}: {}", socket.address(), e);
-                if let Err(e) = socket.send(DaemonResponse::Err(e.to_string())).await {
-                    warn!("Could not reply to {:?}: {}", socket.address(), e);
+async fn handle_connection(
+    mut socket: Socket<DaemonRequest, DaemonResponse>,
+    broadcast_tx: Sender<PatchEvent>,
+    usb_tx: Messenger,
+) {
+    let mut subscriber = broadcast_tx.subscribe();
+
+    loop {
+        select! {
+            Ok(event) = subscriber.recv() => {
+                let patch = DaemonResponse::Patch(event.data);
+                if let Err(e) = socket.send(patch).await {
+                    warn!("Couldn't send PatchEvent to {:?}: {}", socket.address(), e);
                     return;
                 }
             }
+            Some(msg) = socket.read() => {
+                match msg {
+                    Ok(msg) => match handle_packet(msg, usb_tx.clone()).await {
+                        Ok(response) => {
+                            if let Err(e) = socket.send(response).await {
+                                warn!("Couldn't reply to {:?}: {}", socket.address(), e);
+                                return;
+                            }
+                        }
+                        Err(e) => {
+                            if let Err(e) = socket.send(DaemonResponse::Err(e.to_string())).await {
+                                warn!("Couldn't reply to {:?}: {}", socket.address(), e);
+                                return;
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        warn!("Invalid message from {:?}: {}", socket.address(), e);
+                        if let Err(e) = socket.send(DaemonResponse::Err(e.to_string())).await {
+                            warn!("Could not reply to {:?}: {}", socket.address(), e);
+                            return;
+                        }
+                    }
+                }
+            }
+            else => {
+                break;
+            }
         }
     }
+
     debug!("Disconnected {:?}", socket.address());
 }
