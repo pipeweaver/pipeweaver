@@ -24,9 +24,11 @@ export default {
 
 <style scoped>
 .applications {
+  padding: 10px;
+  min-height: 200px;
   display: flex;
   flex-direction: row;
-  gap: 15px;
+  gap: 25px;
 }
 
 .applications div {
