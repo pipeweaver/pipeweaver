@@ -35,13 +35,14 @@ function addDevice(type, e) {
 <style scoped>
 .content {
   position: absolute;
-  padding: 10px;
   inset: 0 0 0 0;
 
   display: flex;
   gap: 20px;
   flex-direction: column;
   align-items: stretch;
+
+  overflow: hidden;
 }
 
 .mix_wrap {
@@ -50,9 +51,55 @@ function addDevice(type, e) {
   flex: 1;
   flex-direction: row;
   gap: 20px;
+
+  padding: 10px 10px 0 10px; /* Remove bottom padding */
+
+  overflow-x: auto;
+  border-bottom: 2px solid #3b413f;
+
+  scrollbar-width: auto;
+  scrollbar-color: #4a5150 #2a2e2d;
+}
+
+/*
+  This is kinda awkward, chromium will place the scrollbar beneath the padding area, which is good
+  but firefox places it *INSIDE* padding area, which results in content being occluded. So we'll
+  check whether the scrollbar is a webkit or firefox one and adjust padding accordingly.
+
+  Having to do this in 2025 is kinda sad.
+ */
+@supports selector(::-webkit-scrollbar) {
+  .mix_wrap {
+    padding-bottom: 10px;
+  }
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .mix_wrap {
+    padding-bottom: 18px;
+  }
+}
+
+.mix_wrap::-webkit-scrollbar {
+  height: 12px;
+}
+
+.mix_wrap::-webkit-scrollbar-track {
+  background: #2a2e2d;
+  border-radius: 0px;
+}
+
+.mix_wrap::-webkit-scrollbar-thumb {
+  background: #4a5150;
+  border-radius: 0px;
+}
+
+.mix_wrap::-webkit-scrollbar-thumb:hover {
+  background: #5a6160;
 }
 
 .routing {
+  padding: 10px;
   display: flex;
   flex-direction: row;
 }
