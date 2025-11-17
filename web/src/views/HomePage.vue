@@ -52,7 +52,7 @@ function addDevice(type, e) {
   flex-direction: row;
   gap: 20px;
 
-  padding: 10px 10px 0 10px; /* Remove bottom padding */
+  padding: 10px; /* Remove bottom padding */
 
   overflow-x: auto;
   border-bottom: 2px solid #3b413f;
@@ -68,12 +68,6 @@ function addDevice(type, e) {
 
   Having to do this in 2025 is kinda sad.
  */
-@supports selector(::-webkit-scrollbar) {
-  .mix_wrap {
-    padding-bottom: 10px;
-  }
-}
-
 @supports not selector(::-webkit-scrollbar) {
   .mix_wrap {
     padding-bottom: 18px;
@@ -86,12 +80,12 @@ function addDevice(type, e) {
 
 .mix_wrap::-webkit-scrollbar-track {
   background: #2a2e2d;
-  border-radius: 0px;
+  border-radius: 3px;
 }
 
 .mix_wrap::-webkit-scrollbar-thumb {
   background: #4a5150;
-  border-radius: 0px;
+  border-radius: 3px;
 }
 
 .mix_wrap::-webkit-scrollbar-thumb:hover {
