@@ -99,7 +99,7 @@ impl VolumeManager for PipewireManager {
 
     async fn sync_node_volume(&mut self, id: Ulid, volume: u8) -> Result<()> {
         let volume = volume.clamp(0, 100);
-        
+
         let node_type = self.get_node_type(id).ok_or(anyhow!("Node Not Found"))?;
         match node_type {
             NodeType::PhysicalSource | NodeType::VirtualSource => {
@@ -173,6 +173,8 @@ impl VolumeManager for PipewireManager {
                 let _ = self.pipewire().send_message(message);
             }
 
+            // Set the secondary volume in the profile
+            self.get_volumes(id)?.volume[other_mix] = volume;
             self.volume_set_source(id, other_mix, volume).await?;
         }
 
