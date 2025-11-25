@@ -5,9 +5,46 @@
     <link href="/favicon.ico" rel="icon">
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
     <title>Vite App</title>
+    <style>
+        .wheel_canvas {
+            position: absolute;
+            top: -1000px;
+            left: -1000px;
+            width: 130px;
+            height: 130px;
+            z-index: 100;
+
+        }
+
+        .colour_hover {
+            position: absolute;
+            top: -1000px;
+            left: -1000px;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.5);
+            background-color: #fff;
+            pointer-events: none;
+            z-index: 120;
+        }
+    </style>
 </head>
 <body>
+<canvas id="wheelCanvas" class="wheel_canvas"></canvas>
+<div id="colourHover" class="colour_hover"></div>
 <div id="app"></div>
 <script src="/src/main.js" type="module"></script>
+
+<script type="text/javascript">
+    window.onload = function () {
+        let canvas = document.getElementById('wheelCanvas');
+        let context = canvas.getContext('2d');
+        let img = new Image();
+        img.onload = () => context.drawImage(img, 0, 0);
+        img.src = 'wheel.png';
+    };
+</script>
 </body>
 </html>

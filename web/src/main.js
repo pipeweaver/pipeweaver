@@ -20,7 +20,7 @@ import {
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 
-library.add(faVolumeHigh, faVolumeXmark, faAngleDown, faCircleCheck, faXmark, faCheck, faBars, faGripVertical, faEyeSlash);
+library.add(faVolumeHigh, faVolumeXmark, faAngleDown, faCircleCheck, faXmark, faCheck, faBars, faGripVertical, faEyeSlash, faXmark);
 
 
 const app = createApp(App);

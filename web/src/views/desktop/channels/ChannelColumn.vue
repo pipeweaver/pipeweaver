@@ -9,10 +9,12 @@ import MuteTargetSelector from "@/views/desktop/channels/MuteTargetSelector.vue"
 import MixAssignment from "@/views/desktop/channels/MixAssignment.vue";
 import PhysicalDeviceSelector from "@/views/desktop/channels/DevicePopup.vue";
 import DevicePopup from "@/views/desktop/channels/DevicePopup.vue";
+import ColourPicker from "@/views/desktop/components/ColourPicker.vue";
 
 export default {
   name: 'ChannelColumn',
   components: {
+    ColourPicker,
     DevicePopup,
     PhysicalDeviceSelector,
     MixAssignment,
@@ -69,6 +71,11 @@ export default {
         green: color.green,
         blue: color.blue
       }
+    },
+
+    getColourHex: function () {
+      let color = this.getDevice().description.colour;
+      return this.rgbToHex(color.red, color.green, color.blue);
     },
 
     calculateHeight: function () {
@@ -244,18 +251,31 @@ export default {
     },
 
     colour_clicked: function (e) {
-      const rgb = this.getColour();
-      
-      const hexColour = this.rgbToHex(rgb.red, rgb.green, rgb.blue);
+      // const rgb = this.getColour();
+      //
+      // const hexColour = this.rgbToHex(rgb.red, rgb.green, rgb.blue);
+      //
+      // this.$refs.colour_picker.value = hexColour;
+      // this.$refs.colour_picker.click();
+      this.$refs.colour.show(this.$refs['colour_section']);
+    },
 
-      this.$refs.colour_picker.value = hexColour;
+    colour_changed: function (value) {
+      // We're going to abuse the color_dragging function here, and fake an event
+      this.$refs.colour_picker.value = value;
+      this.color_dragging({target: {value: value}});
+    },
+
+    colour_show_native: function (e) {
+      const rgb = this.getColour();
+      this.$refs.colour_picker.value = this.rgbToHex(rgb.red, rgb.green, rgb.blue);
       this.$refs.colour_picker.click();
     },
 
     color_dragging: function (e) {
       const hex = e.target.value;
-      
-      const colorStruct =  this.hexToRGB(hex);
+
+      const colorStruct = this.hexToRGB(hex);
 
       this.getDevice().description.colour = colorStruct;
 
@@ -299,6 +319,10 @@ export default {
     output_closed: function (e) {
       let target = e + "_icon";
       this.$refs[target].style.transform = "";
+    },
+
+    colour_closed: function (e) {
+      // Nothing to do here..
     },
 
     menu_click: function (e) {
@@ -347,6 +371,10 @@ export default {
                       :type='type' target="TargetB"
                       @closed="output_closed"/>
 
+  <ColourPicker :id="`${id}_picker`" ref="colour" :colour-value="getColourHex()"
+                @closed="colour_closed" @colour-changed="colour_changed"
+                @preview-clicked="colour_show_native"/>
+
   <div class="mix">
     <div class="title">
       <div class="start drag-handle">
@@ -354,11 +382,13 @@ export default {
       </div>
       <div class="name">{{ getChannelName() }}</div>
       <div class="end">
-        <DevicePopup id="select_device" :device_id="id" :order_group='order_group' :type='type' :colour_callback="colour_clicked"/>
+        <DevicePopup id="select_device" :colour_callback="colour_clicked" :device_id="id"
+                     :order_group='order_group'
+                     :type='type'/>
       </div>
     </div>
-    <input ref="colour_picker" type="color" class="colour_picker" @input="color_dragging"/>
-    <div class="top" @click="colour_clicked"></div>
+    <input ref="colour_picker" class="colour_picker" type="color" @input="color_dragging"/>
+    <div ref="colour_section" class="top" @click="colour_clicked"></div>
     <div ref="fader_container" class="faders">
       <div class="fader_child">
         <ChannelColumnVolume

@@ -13,12 +13,17 @@ export default {
   },
 
   methods: {
-    showDialog(source_event, identifier, scrollTop) {
+    showDialog(source_event, identifier, scrollTop, bottom_aligned) {
       if (scrollTop === undefined) {
         scrollTop = 0;
       }
 
-      let positionElement = source_event.target;
+      let positionElement = null;
+      if (source_event.target === undefined) {
+        positionElement = source_event;
+      } else {
+        positionElement = source_event.target;
+      }
 
       // If it's an SVG or Path, we need to locate the containing div...
       let found = false;
@@ -35,9 +40,14 @@ export default {
       let left = positionElement.offsetLeft;
       let top = positionElement.offsetTop - scrollTop;
 
-      // Now we need to position it to the bottom right of the element clicked..
-      left += (positionElement.clientWidth);
-      top += (positionElement.clientHeight / 2);
+      if (bottom_aligned !== undefined && bottom_aligned) {
+        top += positionElement.clientHeight;
+      } else {
+        // Now we need to position it to the bottom right of the element clicked..
+        left += (positionElement.clientWidth);
+        top += (positionElement.clientHeight / 2);
+      }
+
 
       const container = this.$refs.container;
       this.identifier = identifier;
@@ -105,7 +115,7 @@ export default {
   margin: 0;
   padding: 0;
   top: 0;
-  z-index: 1000000;
+  z-index: 100;
   box-shadow: 2px 4px 6px rgba(0, 0, 0, 0.3);
 }
 
