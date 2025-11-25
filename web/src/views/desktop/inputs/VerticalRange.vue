@@ -50,6 +50,7 @@ export default {
       localFieldValue: 0,
       localMeterValue: 0,
 
+      meterColour: undefined,
       meterLastUpdate: performance.now(),
       meterCurrentLevel: 0,
       meterDecayFactor: 0.01,
@@ -116,10 +117,31 @@ export default {
       const y = canvas.height - barHeight;
 
       this.meterContext.clearRect(0, 0, canvas.width, canvas.height);
-      this.meterContext.fillStyle = 'limegreen';
+      this.meterContext.fillStyle = this.meterColour;
       this.meterContext.fillRect(0, y, canvas.width, barHeight);
 
       requestAnimationFrame(this.drawMeter);
+    },
+
+    calcColour: function (boost) {
+      let hex = this.selectedColour.replace('#', '');
+
+      // Expand Shorthand
+      if (hex.length === 3) {
+        hex = hex.split('').map(x => x + x).join('');
+      }
+
+      // Add the boost to the colour
+      let r = Math.min(255, parseInt(hex.substring(0, 2), 16) + boost);
+      let g = Math.min(255, parseInt(hex.substring(2, 4), 16) + boost);
+      let b = Math.min(255, parseInt(hex.substring(4, 6), 16) + boost);
+
+      return (
+        "#" +
+        r.toString(16).padStart(2, "0") +
+        g.toString(16).padStart(2, "0") +
+        b.toString(16).padStart(2, "0")
+      );
     }
   },
 
@@ -132,6 +154,10 @@ export default {
      */
     currentValue: function (newValue) {
       this.localFieldValue = newValue
+    },
+
+    selectedColour: function (newValue) {
+      this.meterColour = this.calcColour(50);
     }
   },
 
@@ -168,6 +194,7 @@ export default {
 
   mounted() {
     this.frameInterval = 1000 / this.targetFPS;
+    this.meterColour = this.calcColour(50);
 
     this.localFieldValue = this.currentValue
     this.meterContext = this.$refs.meter.getContext('2d');
