@@ -54,6 +54,10 @@ export default {
       meterCurrentLevel: 0,
       meterDecayFactor: 0.01,
       meterContext: undefined,
+
+      targetFPS: 40, // Target Framerate
+      frameInterval: 0, // Will be populated on mount
+      lastFrameTime: 0,
     }
   },
 
@@ -80,13 +84,21 @@ export default {
         : null
     },
 
-    drawMeter: function (e) {
+    drawMeter: function (currentTime) {
       if (this.$refs.meter === null) {
-        // Meter hasn't fully drawn yet, wait until it has
         requestAnimationFrame(this.drawMeter);
         return;
       }
 
+      // Frame limiting logic
+      const elapsed = currentTime - this.lastFrameTime;
+      if (elapsed < this.frameInterval) {
+        requestAnimationFrame(this.drawMeter);
+        return;
+      }
+      this.lastFrameTime = currentTime - (elapsed % this.frameInterval);
+
+      // Your existing drawing code continues unchanged
       if (this.meterContext === undefined) {
         this.meterContext = this.$refs.meter.getContext('2d');
       }
@@ -94,7 +106,6 @@ export default {
       const now = performance.now();
       const delta = now - this.meterLastUpdate;
       this.meterLastUpdate = now;
-
 
       const decayAmount = 1 - Math.exp(-this.meterDecayFactor * delta)
       this.meterCurrentLevel += (this.localMeterValue - this.meterCurrentLevel) * decayAmount;
@@ -156,6 +167,8 @@ export default {
   },
 
   mounted() {
+    this.frameInterval = 1000 / this.targetFPS;
+
     this.localFieldValue = this.currentValue
     this.meterContext = this.$refs.meter.getContext('2d');
     let self = this;
