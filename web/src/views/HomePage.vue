@@ -69,6 +69,8 @@ async function switchTab(tab) {
   flex: 1;
   flex-direction: row;
 
+  gap: 15px;
+
   padding: 10px;
   overflow-x: auto;
   border-bottom: 2px solid #3b413f;
