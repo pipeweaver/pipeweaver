@@ -9,7 +9,16 @@ export default {
       is_active: false,
       suppress_click: true,
       identifier: null,
+      last_position_params: null,
     };
+  },
+
+  mounted() {
+    window.addEventListener('resize', this.repositionDialog);
+  },
+
+  beforeUnmount() {
+    window.removeEventListener('resize', this.repositionDialog);
   },
 
   methods: {
@@ -35,45 +44,68 @@ export default {
         found = true;
       }
 
-      // We want to pop out from the right of whatever element was pressed, note that scrollTop has
-      // to be considered, otherwise it'll pop low on scrolled pages..
-      let left = positionElement.offsetLeft;
-      let top = positionElement.offsetTop - scrollTop;
+      this.identifier = identifier;
+      this.last_position_params = {
+        element: positionElement,
+        scrollTop: scrollTop,
+        bottom_aligned: bottom_aligned,
+      };
 
-      if (bottom_aligned !== undefined && bottom_aligned) {
-        top += positionElement.clientHeight;
-      } else {
-        // Now we need to position it to the bottom right of the element clicked..
-        left += (positionElement.clientWidth);
-        top += (positionElement.clientHeight / 2);
+      this.is_active = true;
+      this.$nextTick(() => {
+        this.repositionDialog();
+      });
+    },
+
+    repositionDialog() {
+      if (!this.is_active || !this.last_position_params) {
+        return;
       }
 
-
+      const PADDING = 5;
+      const {element, scrollTop, bottom_aligned} = this.last_position_params;
       const container = this.$refs.container;
-      this.identifier = identifier;
-
       let menuWidth = container.offsetWidth;
       let menuHeight = container.offsetHeight;
 
-      let leftPosition = left + "px";
-      let topPosition = top + "px";
+      let left = element.offsetLeft;
+      let top = element.offsetTop - scrollTop;
 
-      // Check if the Menu will break the window boundaries, and flip side if so.
-      if (menuWidth + left >= window.innerWidth) {
-        leftPosition = (left - menuWidth) + 'px';
+      if (bottom_aligned) {
+        top += element.clientHeight;
+      } else {
+        left += element.clientWidth;
+        top += (element.clientHeight / 2);
       }
 
-      let windowPosition = document.documentElement.scrollTop || document.body.scrollTop;
-      if (menuHeight + top >= window.innerHeight + windowPosition) {
-        topPosition = (top - menuHeight) + 'px';
+      let windowScrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+
+      // Check horizontal boundaries
+      if (menuWidth + left + PADDING >= window.innerWidth) {
+        left = left - menuWidth - element.clientWidth - PADDING;
       }
 
-      // Set the Container
-      container.style.left = leftPosition;
-      container.style.top = topPosition;
+      // Check vertical boundaries
+      if (menuHeight + top + PADDING >= window.innerHeight + windowScrollTop) {
+        if (bottom_aligned) {
+          top = element.offsetTop - scrollTop - menuHeight - PADDING;
+        } else {
+          top = window.innerHeight + windowScrollTop - menuHeight - PADDING;
+        }
+      }
 
-      // Activate the Container on the next tick, to prevent click outside immediately closing it
-      this.is_active = true;
+      // Ensure popup doesn't go off left edge
+      if (left < PADDING) {
+        left = PADDING;
+      }
+
+      // Ensure popup doesn't go off top edge
+      if (top < windowScrollTop + PADDING) {
+        top = windowScrollTop + PADDING;
+      }
+
+      container.style.left = left + "px";
+      container.style.top = top + "px";
     },
 
     close() {
@@ -81,10 +113,10 @@ export default {
     },
 
     hideDialog() {
-      // There are odd cases when this can trigger twice, don't do it if we're not here anymore.
       if (this.is_active) {
         this.is_active = false;
         this.suppress_click = true;
+        this.last_position_params = null;
         this.$emit('closed', this.identifier);
       }
     },
