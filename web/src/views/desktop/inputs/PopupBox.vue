@@ -76,6 +76,10 @@ export default {
       this.is_active = true;
     },
 
+    close() {
+      this.hideDialog();
+    },
+
     hideDialog() {
       // There are odd cases when this can trigger twice, don't do it if we're not here anymore.
       if (this.is_active) {

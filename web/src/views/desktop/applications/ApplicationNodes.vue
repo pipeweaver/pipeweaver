@@ -41,6 +41,10 @@ export default {
       this.$refs.popup.showDialog(e, this.id)
     },
 
+    close() {
+      this.$refs.popup.close();
+    },
+
     onClosed(e) {
       this.$emit('closed', e);
     },
