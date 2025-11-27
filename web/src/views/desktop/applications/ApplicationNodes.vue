@@ -12,6 +12,12 @@ export default {
     nodes: {type: Array, required: true},
   },
 
+  data() {
+    return {
+      controlWidth: 95,
+    };
+  },
+
   methods: {
     get_target_devices() {
       return get_devices(DeviceType.VirtualTarget)
@@ -39,6 +45,14 @@ export default {
 
     show(e) {
       this.$refs.popup.showDialog(e, this.id)
+      this.$nextTick(() => requestAnimationFrame(this.updateControlWidth));
+    },
+
+    updateControlWidth() {
+      if (this.$refs.controls) {
+        this.controlWidth = this.$refs.controls[0].clientWidth;
+        console.log(this.controlWidth);
+      }
     },
 
     close() {
@@ -140,10 +154,8 @@ export default {
       return maxWidth + 'px';
     },
     controlSize() {
-      const controls = this.$refs.controls;
-      const el = Array.isArray(controls) ? controls[0] : controls;
-      const width = (el && el.clientWidth) ? el.clientWidth : 95;
-      return width + 'px';
+      console.log(this.$refs.controls[0].clientWidth);
+      return this.controlWidth + 'px';
     }
   }
 }
@@ -172,7 +184,7 @@ export default {
         </PopupBox>
 
         <div class="title">{{ node.title }}</div>
-        <div class="content">
+        <div ref="controls" class="content">
           <div>
             <button>
               <span ref="mute">
@@ -186,8 +198,9 @@ export default {
               </span>
             </button>
           </div>
-          <div ref="controls"><input :value="node.volume" max="100" min="0" type="range"
-                                     @input="e => volume_changed(e, node.node_id)"/></div>
+          <div>
+            <input :value="node.volume" max="100" min="0" type="range"
+                   @input="e => volume_changed(e, node.node_id)"/></div>
 
           <div :style="{ width: `calc(${maxDeviceNameWidth} + 25px)` }" class="selector">
             <div class="inner" @click="open_selector($event, node, index)">
@@ -205,10 +218,10 @@ export default {
 <style scoped>
 .global {
   min-width: 290px;
-  max-width: v-bind(controlSize)
 }
 
 .entry .title {
+  max-width: v-bind(controlSize);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -262,8 +275,8 @@ export default {
 }
 
 .selector .inner {
-  display: flex;
   width: 100%;
+  display: flex;
   align-items: center;
   justify-content: space-between;
   border: 1px solid #666;
