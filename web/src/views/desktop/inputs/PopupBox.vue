@@ -62,7 +62,7 @@ export default {
         return;
       }
 
-      const PADDING = 5;
+      const SCREEN_PADDING = 5;
       const {element, scrollTop, bottom_aligned} = this.last_position_params;
       const container = this.$refs.container;
       let menuWidth = container.offsetWidth;
@@ -80,28 +80,33 @@ export default {
 
       let windowScrollTop = document.documentElement.scrollTop || document.body.scrollTop;
 
-      // Check horizontal boundaries
-      if (menuWidth + left + PADDING >= window.innerWidth) {
-        left = left - menuWidth - element.clientWidth - PADDING;
+      // Check horizontal boundaries (use padding only for screen edges)
+      const maxRight = window.innerWidth - SCREEN_PADDING;
+      if (left + menuWidth >= maxRight) {
+        // Flip to the left of the element (no extra screen padding between element and popup)
+        left = element.offsetLeft - menuWidth;
       }
 
       // Check vertical boundaries
-      if (menuHeight + top + PADDING >= window.innerHeight + windowScrollTop) {
+      const maxBottom = window.innerHeight + windowScrollTop - SCREEN_PADDING;
+      if (top + menuHeight >= maxBottom) {
         if (bottom_aligned) {
-          top = element.offsetTop - scrollTop - menuHeight - PADDING;
+          // Place above the element (no extra gap between element and popup)
+          top = element.offsetTop - scrollTop - menuHeight;
         } else {
-          top = window.innerHeight + windowScrollTop - menuHeight - PADDING;
+          // Clamp to bottom of screen with screen padding
+          top = maxBottom - menuHeight;
         }
       }
 
-      // Ensure popup doesn't go off left edge
-      if (left < PADDING) {
-        left = PADDING;
+      // Ensure popup doesn't go off left edge (screen padding)
+      if (left < SCREEN_PADDING) {
+        left = SCREEN_PADDING;
       }
 
-      // Ensure popup doesn't go off top edge
-      if (top < windowScrollTop + PADDING) {
-        top = windowScrollTop + PADDING;
+      // Ensure popup doesn't go off top edge (screen padding)
+      if (top < windowScrollTop + SCREEN_PADDING) {
+        top = windowScrollTop + SCREEN_PADDING;
       }
 
       container.style.left = left + "px";

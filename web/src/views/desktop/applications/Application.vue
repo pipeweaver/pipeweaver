@@ -3,10 +3,11 @@ import {store} from "@/app/store.js";
 import {DeviceType, get_devices} from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
 import ApplicationNodes from "@/views/desktop/applications/ApplicationNodes.vue";
+import PopupBox from "@/views/desktop/inputs/PopupBox.vue";
 
 export default {
   name: "Application",
-  components: {ApplicationNodes},
+  components: {PopupBox, ApplicationNodes},
 
   emits: ['request-remove'],
 
@@ -48,6 +49,19 @@ export default {
       return process[app] !== undefined ? String(process[app]) : "-1";
     },
 
+    get_application_target_name(app) {
+      let target = this.get_application_target(app);
+      if (target === "-1") {
+        return "Default";
+      }
+      const devices = this.get_devices();
+      for (const device of devices) {
+        if (String(device.description.id) === target) {
+          return device.description.name;
+        }
+      }
+    },
+
     get_application_nodes(app) {
       const appsRoot = store.getApplications && store.getApplications()[this.get_source_key()];
       const proc = (appsRoot && appsRoot[this.processName]) || {};
@@ -66,7 +80,9 @@ export default {
       return this.isSource ? this.get_source_devices() : this.get_target_devices();
     },
 
-    set_application_target(e, app) {
+    set_application_target(app, index, value) {
+      this.$refs['popups'][index].close();
+
       let definition = {
         device_type: this.get_source_key(),
         process: this.processName,
@@ -74,9 +90,9 @@ export default {
       };
 
       let command = {
-        "SetApplicationRoute": [definition, e.target.value]
+        "SetApplicationRoute": [definition, value]
       }
-      if (e.target.value === "-1") {
+      if (value === "-1") {
         command = {
           "ClearApplicationRoute": definition
         }
@@ -283,7 +299,20 @@ export default {
 
     hasPending(app) {
       return !!(this.pendingTimers && this.pendingTimers[app]);
-    }
+    },
+
+    open_selector(e, app, id) {
+      this.pause_pending_removal(app);
+
+      // The dialog only needs the target element to position itself, so we'll get the element
+      // attaches to the event and pass that along instead of the raw event.
+      const anchor = (e && e.currentTarget) ? e.currentTarget : (e && e.target) ? e.target : undefined;
+      const event = Object.assign({}, e, {target: anchor});
+      if (this.$refs.popups && this.$refs.popups[id]) {
+        // pass the anchor element (instead of the raw target)
+        this.$refs.popups[id].showDialog(event, app, undefined, true);
+      }
+    },
   },
 
   mounted() {
@@ -302,6 +331,31 @@ export default {
       if (entry && entry.id) clearTimeout(entry.id);
     }
     this.pendingTimers = {};
+  },
+
+  computed: {
+    maxDeviceNameWidth() {
+      const devices = this.get_devices();
+      if (!devices.length) return '120px';
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      // Match the actual font used in .inner
+      ctx.font = '14px sans-serif'; // Adjust based on your actual font-size and font-family
+
+      let maxWidth = 0;
+      devices.forEach(device => {
+        const width = ctx.measureText(device.description.name).width;
+        maxWidth = Math.max(maxWidth, width);
+      });
+
+      if (maxWidth + 10 > 95) {
+        return '95px';
+      }
+
+      // Reduce padding - adjust the value based on icon width
+      return maxWidth + 'px';
+    }
   }
 }
 </script>
@@ -310,21 +364,33 @@ export default {
   <div v-for="(app, index) in get_application_list()" :key="app">
     <ApplicationNodes ref="nodes" :is-source="this.isSource" :nodes="get_application_nodes(app)"
                       @closed="on_app_close(index)"/>
+
+    <PopupBox ref="popups" @closed="resume_pending_removal(app)">
+      <div :class="{ 'selected': this.get_application_target(app) === '-1' }"
+           :style="{ 'min-width': `calc(${maxDeviceNameWidth} + 3px)` }" class="entry"
+           @click="set_application_target(app, index, '-1')">
+        <span class="title">Default</span>
+      </div>
+
+      <div v-for="device in get_devices()">
+        <div
+          :class="{ 'selected': String(this.get_application_target(app)) === String(device.description.id) }"
+          :style="{ 'min-width': `calc(${maxDeviceNameWidth} + 3px )` }"
+          class="entry"
+          @click="set_application_target(app, index, device.description.id)">
+          <span class="title">{{ device.description.name }}</span>
+        </div>
+      </div>
+    </PopupBox>
+
     <div class="app">
       <div class="name">{{ app }}</div>
-      <div class="selector">
-        <select
-          @blur="resume_pending_removal(app)"
-          @change="e => { set_application_target(e, app); e.target.blur(); }"
-          @focus="pause_pending_removal(app)"
-          @keydown.esc="e => e.target.blur()">
-          <option :selected="this.get_application_target(app) === '-1'" value="-1">Default</option>
-          <option v-for="device in get_devices()"
-                  :selected="String(this.get_application_target(app)) === String(device.description.id)"
-                  :value="device.description.id">
-            {{ device.description.name }}
-          </option>
-        </select>
+      <div :style="{ width: `calc(${maxDeviceNameWidth} + 25px)` }" class="selector">
+        <div class="inner" @click="open_selector($event, app, index)">
+          <span v-if="this.get_application_target(app) === '-1'">Default</span>
+          <span v-else>{{ this.get_application_target_name(app) }}</span>
+          <font-awesome-icon :icon="['fas', 'angle-down']" class="selector-icon"/>
+        </div>
       </div>
       <div class="settings">
         <button v-if="!hasPending(app)" ref="app_icon" :title="'Open'" class="settings-btn"
@@ -361,6 +427,9 @@ export default {
 .app {
   display: flex;
   flex-direction: row;
+
+  align-items: center;
+  justify-content: center;
 }
 
 .app .name {
@@ -370,13 +439,35 @@ export default {
 }
 
 .app .selector {
-  padding: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.app .selector select {
-  border: 0;
-  padding: 0 5px;
+.app .selector .inner {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #666;
+  box-sizing: border-box;
 }
+
+.app .selector .inner:hover {
+  background-color: #3b413f;
+  cursor: pointer;
+}
+
+.app .selector .inner span {
+  padding: 2px 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app .selector .inner svg {
+  padding-right: 5px;
+}
+
 
 .app .settings {
   display: flex;
@@ -429,5 +520,27 @@ export default {
 
 .countdown .progress {
   transition: stroke-dashoffset 0.1s linear;
+}
+
+.selected {
+  background-color: #214283;
+}
+
+.title {
+  white-space: nowrap;
+}
+
+.entry {
+  white-space: nowrap;
+  padding: 4px 10px 4px 10px;
+}
+
+.entry:hover {
+  background-color: #49514e;
+  cursor: pointer;
+}
+
+.entry:not(:last-child) {
+  border-bottom: 1px solid #3b413f;
 }
 </style>
