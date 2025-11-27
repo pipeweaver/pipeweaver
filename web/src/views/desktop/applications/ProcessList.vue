@@ -46,6 +46,8 @@ export default {
         if (cached_app.length === 0) {
           const store_list = store.getApplications()[this.get_source_key()] || {};
           if (!store_list[processName]) {
+            // Force a 'resize' event to update any layouts that depend on this list
+            this.$nextTick(() => window.dispatchEvent(new Event('resize')));
             delete this.cached_apps[processName];
           }
         }
