@@ -336,7 +336,7 @@ export default {
   computed: {
     maxDeviceNameWidth() {
       const devices = this.get_devices();
-      if (!devices.length) return '120px';
+      if (!devices.length) return '95px';
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
