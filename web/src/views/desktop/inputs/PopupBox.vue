@@ -65,50 +65,53 @@ export default {
       const SCREEN_PADDING = 5;
       const {element, scrollTop, bottom_aligned} = this.last_position_params;
       const container = this.$refs.container;
-      let menuWidth = container.offsetWidth;
-      let menuHeight = container.offsetHeight;
+      if (!container || !element) return;
 
-      let left = element.offsetLeft;
-      let top = element.offsetTop - scrollTop;
+      // Get stable floats, then convert sizes to integer pixels for all comparisons
+      const containerRect = container.getBoundingClientRect();
+      const menuWidth = Math.ceil(containerRect.width);
+      const menuHeight = Math.ceil(containerRect.height);
 
+      const elementRect = element.getBoundingClientRect();
+
+      // Compute desired float coords
+      let leftF, topF;
       if (bottom_aligned) {
-        top += element.clientHeight;
+        topF = elementRect.bottom;
+        leftF = elementRect.left;
       } else {
-        left += element.clientWidth;
-        top += (element.clientHeight / 2);
+        leftF = elementRect.right;
+        topF = elementRect.top + (elementRect.height / 2);
       }
 
-      let windowScrollTop = document.documentElement.scrollTop || document.body.scrollTop;
-
-      // Check horizontal boundaries (use padding only for screen edges)
+      // Work in rounded pixels for decisions to avoid boundary jitter
       const maxRight = window.innerWidth - SCREEN_PADDING;
-      if (left + menuWidth >= maxRight) {
-        // Flip to the left of the element (no extra screen padding between element and popup)
-        left = element.offsetLeft - menuWidth;
+      let left = Math.round(leftF);
+
+      if (left + menuWidth > maxRight) {
+        left = Math.round(elementRect.left - menuWidth);
       }
 
-      // Check vertical boundaries
-      const maxBottom = window.innerHeight + windowScrollTop - SCREEN_PADDING;
-      if (top + menuHeight >= maxBottom) {
-        if (bottom_aligned) {
-          // Place above the element (no extra gap between element and popup)
-          top = element.offsetTop - scrollTop - menuHeight;
-        } else {
-          // Clamp to bottom of screen with screen padding
-          top = maxBottom - menuHeight;
-        }
-      }
-
-      // Ensure popup doesn't go off left edge (screen padding)
       if (left < SCREEN_PADDING) {
         left = SCREEN_PADDING;
       }
 
-      // Ensure popup doesn't go off top edge (screen padding)
-      if (top < windowScrollTop + SCREEN_PADDING) {
-        top = windowScrollTop + SCREEN_PADDING;
+      const maxBottom = window.innerHeight - SCREEN_PADDING;
+      let top = Math.round(topF);
+
+      if (top + menuHeight > maxBottom) {
+        if (bottom_aligned) {
+          top = Math.round(elementRect.top - menuHeight);
+        } else {
+          top = Math.max(SCREEN_PADDING, Math.round(maxBottom - menuHeight));
+        }
       }
 
+      if (top < SCREEN_PADDING) {
+        top = SCREEN_PADDING;
+      }
+
+      // Apply final integer pixels (consistent with checks above)
       container.style.left = left + "px";
       container.style.top = top + "px";
     },
@@ -151,7 +154,7 @@ export default {
   color: #fff;
   border: 1px solid #6e7676;
   list-style: none;
-  position: absolute;
+  position: fixed;
   left: 0;
   margin: 0;
   padding: 0;

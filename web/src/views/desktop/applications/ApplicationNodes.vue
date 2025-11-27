@@ -49,10 +49,10 @@ export default {
       this.$emit('closed', e);
     },
 
-    set_node_target(e, node_id) {
-      // SetTransientApplicationRoute(node_id, target)
-      let target = e.target.value;
+    set_node_target(node_id, index, target) {
+      this.$refs.popups[index].close();
 
+      // SetTransientApplicationRoute(node_id, target)
       let command = {
         "SetTransientApplicationRoute": [node_id, target]
       }
@@ -94,6 +94,50 @@ export default {
         "SetApplicationMute": [node_id, value]
       }
       websocket.send_command(command);
+    },
+
+    open_selector(e, app, id) {
+      const anchor = (e && e.currentTarget) ? e.currentTarget : (e && e.target) ? e.target : undefined;
+      const event = Object.assign({}, e, {target: anchor});
+      if (this.$refs.popups && this.$refs.popups[id]) {
+        this.$refs.popups[id].showDialog(event, app, undefined, true);
+      }
+    },
+
+    get_application_target_name(node) {
+      let target = this.get_target(node);
+      if (target === "-1") {
+        return "Default";
+      }
+      const devices = this.get_devices();
+      for (const device of devices) {
+        if (String(device.description.id) === target) {
+          return device.description.name;
+        }
+      }
+    },
+  },
+
+  computed: {
+    maxDeviceNameWidth() {
+      const devices = this.get_devices();
+      if (!devices.length) return '95px';
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      ctx.font = '14px sans-serif';
+
+      let maxWidth = 0;
+      devices.forEach(device => {
+        const width = ctx.measureText(device.description.name).width;
+        maxWidth = Math.max(maxWidth, width);
+      });
+
+      if (maxWidth + 10 > 95) {
+        return '95px';
+      }
+
+      return maxWidth + 'px';
     }
   }
 }
@@ -102,7 +146,25 @@ export default {
 <template>
   <PopupBox ref="popup" @closed="onClosed">
     <div class="global">
-      <div v-for="node in nodes" class="entry">
+      <div v-for="(node, index) in nodes" class="entry">
+        <PopupBox ref="popups">
+          <div :class="{ 'drop-selected': this.get_target(node) === '-1' }"
+               :style="{ 'min-width': `calc(${maxDeviceNameWidth} + 1px)` }" class="drop-entry"
+               @click="set_node_target(node.node_id, index, '-1')">
+            <span class="drop-title">Default</span>
+          </div>
+
+          <div v-for="device in get_devices()">
+            <div
+              :class="{ 'drop-selected': String(this.get_target(node)) === String(device.description.id) }"
+              :style="{ 'min-width': `calc(${maxDeviceNameWidth} + 3px )` }"
+              class="drop-entry"
+              @click="set_node_target(node.node_id, index, device.description.id)">
+              <span class="drop-title">{{ device.description.name }}</span>
+            </div>
+          </div>
+        </PopupBox>
+
         <div class="title">{{ node.title }}</div>
         <div class="content">
           <div>
@@ -120,15 +182,13 @@ export default {
           </div>
           <div><input :value="node.volume" max="100" min="0" type="range"
                       @input="e => volume_changed(e, node.node_id)"/></div>
-          <div>
-            <select @change="e => set_node_target(e, node.node_id)">
-              <option :selected="this.get_target(node) === -1" value="-1">Default</option>
-              <option v-for="device in get_devices()"
-                      :selected="this.get_target(node) === device.description.id"
-                      :value="device.description.id">
-                {{ device.description.name }}
-              </option>
-            </select>
+
+          <div :style="{ width: `calc(${maxDeviceNameWidth} + 25px)` }" class="selector">
+            <div class="inner" @click="open_selector($event, node, index)">
+              <span v-if="this.get_target(node) === '-1'">Default</span>
+              <span v-else>{{ this.get_application_target_name(node) }}</span>
+              <font-awesome-icon :icon="['fas', 'angle-down']" class="selector-icon"/>
+            </div>
           </div>
         </div>
       </div>
@@ -139,7 +199,6 @@ export default {
 <style scoped>
 .global {
   min-width: 290px;
-  max-width: 290px;
 }
 
 .entry .title {
@@ -188,4 +247,57 @@ export default {
 .entry:not(:last-child) {
   border-bottom: 3px solid #3b413f;
 }
+
+.selector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.selector .inner {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #666;
+  box-sizing: border-box;
+}
+
+.selector .inner:hover {
+  background-color: #3b413f;
+  cursor: pointer;
+}
+
+.selector .inner span {
+  padding: 2px 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.selector .inner svg {
+  padding-right: 5px;
+}
+
+.drop-selected {
+  background-color: #214283;
+}
+
+.drop-title {
+  white-space: nowrap;
+}
+
+.drop-entry {
+  white-space: nowrap;
+  padding: 4px 10px 4px 10px;
+}
+
+.drop-entry:hover {
+  background-color: #49514e;
+  cursor: pointer;
+}
+
+.drop-entry:not(:last-child) {
+  border-bottom: 1px solid #3b413f;
+}
+
 </style>
