@@ -14,8 +14,8 @@ export default {
 
   data() {
     return {
-      controlWidth: 95,
-    };
+      controlWidth: '95px',
+    }
   },
 
   methods: {
@@ -44,15 +44,8 @@ export default {
     },
 
     show(e) {
-      this.$refs.popup.showDialog(e, this.id)
-      this.$nextTick(() => requestAnimationFrame(this.updateControlWidth));
-    },
-
-    updateControlWidth() {
-      if (this.$refs.controls) {
-        this.controlWidth = this.$refs.controls[0].clientWidth;
-        console.log(this.controlWidth);
-      }
+      this.$refs.popup.showDialog(e, this.id);
+      this.$nextTick(() => this.controlWidth = this.$refs.controls[0].clientWidth + "px");
     },
 
     close() {
@@ -154,8 +147,7 @@ export default {
       return maxWidth + 'px';
     },
     controlSize() {
-      console.log(this.$refs.controls[0].clientWidth);
-      return this.controlWidth + 'px';
+      return this.controlWidth;
     }
   }
 }
