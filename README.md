@@ -1,20 +1,20 @@
-# PipeWeaver
+# Pipeweaver
 
-**PipeWeaver** is an audio management tool for Linux built on top of [PipeWire](https://pipewire.org), designed
+**Pipeweaver** is an audio management tool for Linux built on top of [PipeWire](https://pipewire.org), designed
 specifically with streaming and broadcasting in mind. Join us on [Discord](https://discord.gg/gKVREmSwTh).
 
 ****
 
 ### This project is still in heavy development.
 
-PipeWeaver is in active development, and my not yet be usable for everyone on a daily basis. There are definitely
+Pipeweaver is in active development, and my not yet be usable for everyone on a daily basis. There are definitely
 still some issues, and a lack of configuration for tuning that may make life a little difficult! It should, however
 be stable enough to check out and play with.
 
 Also note, that until I'm doing 'formal' releases changes to code may reset your settings. You have been warned!
 ****
 
-PipeWeaver is an attempt to bring a simple way to manage complex streaming audio setups, it allows creation of virtual
+Pipeweaver is an attempt to bring a simple way to manage complex streaming audio setups, it allows creation of virtual
 audio sources, attaching physical audio sources, managing volumes (including matrix mixing), 'complex' mute
 arrangements, and finally routing to physical and virtual outputs.
 
@@ -43,7 +43,7 @@ Firstly, ensure you have rust (and cargo) installed, as well as pipewire.
 2) Run `cargo build --release`
 3) Grab the `pipeweaver-daemon` binary from `target/release/`
 4) Run it (probably in a terminal, but you can also manually configure it to autostart).
-5) PipeWeaver will then create a 'Default' layout, with some nodes pre-routed
+5) Pipeweaver will then create a 'Default' layout, with some nodes pre-routed
 6) The configuration UI will be available at http://localhost:14565
 
 When you shut down pipeweaver, all the nodes and routes will be automatically removed.
