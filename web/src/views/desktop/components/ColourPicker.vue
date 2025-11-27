@@ -186,7 +186,11 @@ export default {
   },
 
   mounted() {
-    this.canvasContext = document.getElementById('wheelCanvas').getContext("2d");
+    this.canvasContext = document.getElementById('wheelCanvas').getContext("2d", {
+      alpha: false,  // You're using solid fills, don't need transparency
+      desynchronized: true,  // Reduces latency and memory overhead
+      willReadFrequently: true  // You're not reading back, only drawing
+    });
     this.hoverContainer = document.getElementById("colourHover");
     this.hexString = this.colourValue;
   },

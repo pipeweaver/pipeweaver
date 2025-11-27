@@ -59,6 +59,8 @@ export default {
       targetFPS: 40, // Target Framerate
       frameInterval: 0, // Will be populated on mount
       lastFrameTime: 0,
+
+      animationFrameId: undefined,
     }
   },
 
@@ -87,40 +89,54 @@ export default {
 
     drawMeter: function (currentTime) {
       if (this.$refs.meter === null) {
-        requestAnimationFrame(this.drawMeter);
+        this.animationFrameId = requestAnimationFrame(this.drawMeter);
+        return;
+      }
+
+      // Skip if not visible
+      if (this.$refs.meter.offsetParent === null || document.hidden) {
+        this.animationFrameId = requestAnimationFrame(this.drawMeter);
         return;
       }
 
       // Frame limiting logic
       const elapsed = currentTime - this.lastFrameTime;
       if (elapsed < this.frameInterval) {
-        requestAnimationFrame(this.drawMeter);
+        this.animationFrameId = requestAnimationFrame(this.drawMeter);
         return;
       }
       this.lastFrameTime = currentTime - (elapsed % this.frameInterval);
 
-      // Your existing drawing code continues unchanged
       if (this.meterContext === undefined) {
-        this.meterContext = this.$refs.meter.getContext('2d');
+        this.meterContext = this.$refs.meter.getContext('2d', {
+          alpha: true,  // Keep transparency
+          desynchronized: true,
+          willReadFrequently: false
+        });
       }
 
       const now = performance.now();
       const delta = now - this.meterLastUpdate;
       this.meterLastUpdate = now;
 
-      const decayAmount = 1 - Math.exp(-this.meterDecayFactor * delta)
+      const decayAmount = 1 - Math.exp(-this.meterDecayFactor * delta);
       this.meterCurrentLevel += (this.localMeterValue - this.meterCurrentLevel) * decayAmount;
 
       const canvas = this.$refs.meter;
       let barHeight = (this.meterCurrentLevel / 100) * (canvas.height / 100 * this.currentValue);
 
+      // Clamp to canvas bounds
+      barHeight = Math.max(0, Math.min(barHeight, canvas.height));
       const y = canvas.height - barHeight;
 
       this.meterContext.clearRect(0, 0, canvas.width, canvas.height);
-      this.meterContext.fillStyle = this.meterColour;
-      this.meterContext.fillRect(0, y, canvas.width, barHeight);
 
-      requestAnimationFrame(this.drawMeter);
+      if (barHeight > 0) {
+        this.meterContext.fillStyle = this.meterColour;
+        this.meterContext.fillRect(0, y, canvas.width, barHeight);
+      }
+
+      this.animationFrameId = requestAnimationFrame(this.drawMeter);
     },
 
     calcColour: function (boost) {
@@ -197,12 +213,25 @@ export default {
     this.meterColour = this.calcColour(50);
 
     this.localFieldValue = this.currentValue
-    this.meterContext = this.$refs.meter.getContext('2d');
+    this.meterContext = this.$refs.meter.getContext('2d', {
+      alpha: true,
+      desynchronized: true,
+      willReadFrequently: false
+    });
+
     let self = this;
     websocket_meter.register_callback(this.id, (value) => {
       self.localMeterValue = value;
     });
-    requestAnimationFrame(this.drawMeter)
+    this.animationFrameId = requestAnimationFrame(this.drawMeter)
+  },
+
+  beforeDestroy() {
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+    this.meterContext = null;
   }
 }
 </script>

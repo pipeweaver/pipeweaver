@@ -40,7 +40,11 @@
 <script type="text/javascript">
     window.onload = function () {
         let canvas = document.getElementById('wheelCanvas');
-        let context = canvas.getContext('2d');
+        let context = canvas.getContext('2d', {
+            alpha: false,
+            desynchronized: true,
+            willReadFrequently: true
+        });
         let img = new Image();
         img.onload = () => context.drawImage(img, 0, 0);
         img.src = 'wheel.png';
