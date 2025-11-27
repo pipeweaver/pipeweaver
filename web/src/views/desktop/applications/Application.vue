@@ -340,8 +340,7 @@ export default {
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      // Match the actual font used in .inner
-      ctx.font = '14px sans-serif'; // Adjust based on your actual font-size and font-family
+      ctx.font = '14px sans-serif';
 
       let maxWidth = 0;
       devices.forEach(device => {
@@ -353,7 +352,6 @@ export default {
         return '95px';
       }
 
-      // Reduce padding - adjust the value based on icon width
       return maxWidth + 'px';
     }
   }
