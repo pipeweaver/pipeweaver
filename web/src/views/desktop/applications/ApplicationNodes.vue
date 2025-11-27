@@ -138,6 +138,12 @@ export default {
       }
 
       return maxWidth + 'px';
+    },
+    controlSize() {
+      const controls = this.$refs.controls;
+      const el = Array.isArray(controls) ? controls[0] : controls;
+      const width = (el && el.clientWidth) ? el.clientWidth : 95;
+      return width + 'px';
     }
   }
 }
@@ -180,8 +186,8 @@ export default {
               </span>
             </button>
           </div>
-          <div><input :value="node.volume" max="100" min="0" type="range"
-                      @input="e => volume_changed(e, node.node_id)"/></div>
+          <div ref="controls"><input :value="node.volume" max="100" min="0" type="range"
+                                     @input="e => volume_changed(e, node.node_id)"/></div>
 
           <div :style="{ width: `calc(${maxDeviceNameWidth} + 25px)` }" class="selector">
             <div class="inner" @click="open_selector($event, node, index)">
@@ -199,6 +205,7 @@ export default {
 <style scoped>
 .global {
   min-width: 290px;
+  max-width: v-bind(controlSize)
 }
 
 .entry .title {
