@@ -74,7 +74,3 @@ Possible Future Plans:
 * Application Management (Move Applications to channels inside the UI)
 * LV2 support for Mic Effects (Gate, Compressor, Expander, Eq etc)
 * flatpak support
-
-****
-Finally, a shout-out to [SonusMix](https://codeberg.org/sonusmix/sonusmix), their pipewire implementation
-served as heavy inspiration for my own!
