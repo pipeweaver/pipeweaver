@@ -21,6 +21,7 @@ use tokio::sync::broadcast::Sender;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::sleep;
 use tokio::{select, task, time};
+use which::which;
 
 type Manage = mpsc::Sender<ManagerMessage>;
 
@@ -164,16 +165,36 @@ impl PrimaryWorker {
                         let _ = pw_tx.send(SetMetering(enabled)).await;
                     }
                     DaemonCommand::OpenInterface => {
-                        // TODO: Need to pull in the HTTP config
-                        // TODO: Attempt 'app' launch before browser
+                        if let Some(app_path) = get_ui_app_path() {
+                            use std::process::{Command, Stdio};
 
-                        if let Err(e) = open::that("http://localhost:14565") {
+                            let tmp_dir = std::env::temp_dir();
+
+                            info!("[DaemonCommand] Launching UI App at {}", app_path.to_string_lossy());
+                            let result = Command::new(app_path)
+                                .current_dir(tmp_dir)
+                                .stdout(Stdio::null())
+                                .stderr(Stdio::null())
+                                .spawn();
+
+                            match result {
+                                Ok(mut child) => {
+                                    task::spawn_blocking(move || {
+                                        let _ = child.wait();
+                                    });
+                                }
+                                Err(e) => {
+                                    warn!("Unable to launch UI App: {}, falling back to browser", e);
+                                    if let Err(e) = open::that("http://localhost:14565") {
+                                        warn!("Unable to open web interface: {}", e);
+                                    }
+                                }
+                            }
+                        } else if let Err(e) = open::that("http://localhost:14565") {
                             warn!("Unable to open web interface: {}", e);
                         }
                     }
-                    DaemonCommand::ResetAudio => {
-                        reset = true
-                    }
+                    DaemonCommand::ResetAudio => reset = true,
                 }
                 let _ = tx.send(DaemonResponse::Ok);
                 update = true;
@@ -277,6 +298,37 @@ impl PrimaryWorker {
         info!("[Profile] Saved");
         Ok(())
     }
+}
+
+static UI_NAME: &str = "pipeweaver-app";
+pub fn get_ui_app_path() -> Option<PathBuf> {
+    // This simply looks for the Pipeweaver UI App alongside the daemon binary and returns it..
+    let mut path = None;
+    let bin_name = UI_NAME;
+
+    // There are three possible places to check for this, the CWD, the binary WD, and $PATH
+    let cwd = std::env::current_dir().unwrap().join(bin_name);
+    if cwd.exists() {
+        path.replace(cwd);
+    }
+
+    if path.is_none()
+        && let Some(parent) = std::env::current_exe().unwrap().parent()
+    {
+        let bin = parent.join(bin_name);
+        if bin.exists() {
+            path.replace(bin);
+        }
+    }
+
+    if path.is_none() {
+        // Try and locate the binary on $PATH
+        if let Ok(which) = which(bin_name) {
+            path.replace(which);
+        }
+    }
+
+    path
 }
 
 pub enum MessageResult {
