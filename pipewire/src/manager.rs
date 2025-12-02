@@ -678,9 +678,9 @@ impl PipewireManager {
     fn clear_application_target(&mut self, app_id: u32) -> Result<()> {
         let mut store = self.store.borrow_mut();
 
-        // This should (in theory) route a target to the default, this *MIGHT* need to be -1 rather than 'None'
-        store.unmanaged_node_set_meta(app_id, String::from("target.node"), Some(String::from("Spa:Id")), None);
-        store.unmanaged_node_set_meta(app_id, String::from("target.object"), Some(String::from("Spa:Id")), None);
+        // This should (in theory) route a target to the default
+        store.unmanaged_node_set_meta(app_id, String::from("target.node"), Some(String::from("Spa:Id")), Some("-1".to_string()));
+        store.unmanaged_node_set_meta(app_id, String::from("target.object"), Some(String::from("Spa:Id")), Some("-1".to_string()));
         Ok(())
     }
 

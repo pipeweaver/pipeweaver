@@ -2,6 +2,7 @@ pub extern crate oneshot;
 mod manager;
 mod registry;
 mod store;
+mod default_device;
 
 use crate::manager::run_pw_main_loop;
 use anyhow::{anyhow, bail, Result};

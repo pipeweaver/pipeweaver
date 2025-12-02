@@ -1,3 +1,4 @@
+use crate::default_device::{DefaultDefinition, DefaultDevice};
 use crate::store::{Store, TargetType};
 use crate::RouteTarget;
 use anyhow::{anyhow, bail};
@@ -231,14 +232,11 @@ impl PipewireRegistry {
                                     if let Some(client_proxy) = proxy {
                                         let info_local = listener_store.clone();
                                         let listener = client_proxy.add_listener_local().info(move |info| {
-                                            debug!("{:?}", info);
-
                                             for change in info.change_mask().iter() {
                                                 if change == ClientChangeMask::PROPS {
                                                     //debug!("Props: {:?}", info);
                                                     if let Some(props) = info.props() {
                                                         if let Some(process) = props.get(*APP_PROCESS_BINARY) {
-                                                            debug!("Process Binary Changed to {:?}", process);
                                                             info_local.borrow_mut().unmanaged_client_set_binary(id, String::from(process));
                                                         }
                                                     }
@@ -270,6 +268,42 @@ impl PipewireRegistry {
                                                 if key == Some("target.node") {
                                                     let target = value.and_then(|s| s.parse::<u32>().ok());
                                                     listen_store.borrow_mut().unmanaged_client_node_set_target(subject, TargetType::Node(target));
+                                                }
+                                                if key == Some("default.audio.sink") && _type == Some("Spa:String:JSON") {
+                                                    if let Some(val) = value {
+                                                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(val) {
+                                                            if let Some(name) = json.get("name").and_then(|v| v.as_str()) {
+                                                                listen_store.borrow_mut().set_default_sink(DefaultDefinition::Default(String::from(name)));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                if key == Some("default.configured.audio.sink") && _type == Some("Spa:String:JSON") {
+                                                    if let Some(val) = value {
+                                                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(val) {
+                                                            if let Some(name) = json.get("name").and_then(|v| v.as_str()) {
+                                                                listen_store.borrow_mut().set_default_sink(DefaultDefinition::Configured(String::from(name)));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                if key == Some("default.audio.source") && _type == Some("Spa:String:JSON") {
+                                                    if let Some(val) = value {
+                                                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(val) {
+                                                            if let Some(name) = json.get("name").and_then(|v| v.as_str()) {
+                                                                listen_store.borrow_mut().set_default_source(DefaultDefinition::Default(String::from(name)));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                if key == Some("default.configured.audio.source") && _type == Some("Spa:String:JSON") {
+                                                    if let Some(val) = value {
+                                                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(val) {
+                                                            if let Some(name) = json.get("name").and_then(|v| v.as_str()) {
+                                                                listen_store.borrow_mut().set_default_source(DefaultDefinition::Configured(String::from(name)));
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                                 0
                                             }).register();

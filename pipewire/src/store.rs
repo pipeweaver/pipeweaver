@@ -1,6 +1,12 @@
+use crate::default_device::{DefaultDefinition, DefaultDevice};
 use crate::manager::FilterData;
-use crate::registry::{Direction, MetadataStore, RegistryClient, RegistryClientNode, RegistryDevice, RegistryDeviceNode, RegistryFactory, RegistryLink};
-use crate::{ApplicationNode, DeviceNode, FilterValue, LinkType, MediaClass, PipewireReceiver, RouteTarget};
+use crate::registry::{
+    Direction, MetadataStore, RegistryClient, RegistryClientNode, RegistryDevice,
+    RegistryDeviceNode, RegistryFactory, RegistryLink,
+};
+use crate::{
+    ApplicationNode, DeviceNode, FilterValue, LinkType, MediaClass, PipewireReceiver, RouteTarget,
+};
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
@@ -42,6 +48,10 @@ pub struct Store {
     // Pipewire Factories, helps us track types
     factories: HashMap<u32, RegistryFactory>,
 
+    // The default Sink / Source
+    default_sink: DefaultDevice,   // (eg pipeweaver_system)
+    default_source: DefaultDevice, // (eg pipeweaver_chat_mic)
+
     // These are nodes, filters and links created by us
     managed_nodes: HashMap<Ulid, NodeStore>,
     managed_filters: HashMap<Ulid, FilterStore>,
@@ -72,6 +82,9 @@ impl Store {
             settings_proxy: None,
 
             factories: HashMap::new(),
+
+            default_sink: DefaultDevice::default(),
+            default_source: DefaultDevice::default(),
 
             managed_nodes: HashMap::new(),
             managed_filters: HashMap::new(),
@@ -112,7 +125,9 @@ impl Store {
     }
 
     pub fn announce_clock_rate(&self, rate: Option<u32>) {
-        let _ = self.callback_tx.send(PipewireReceiver::AnnouncedClock(rate));
+        let _ = self
+            .callback_tx
+            .send(PipewireReceiver::AnnouncedClock(rate));
     }
 
     // ----- FACTORIES -----
@@ -122,6 +137,79 @@ impl Store {
 
     pub fn factory_get(&self, id: u32) -> Option<&RegistryFactory> {
         self.factories.get(&id)
+    }
+
+    // ----- SET DEFAULT DEVICES -----
+    pub fn set_default_sink(&mut self, device: DefaultDefinition) {
+        let changed = self.default_sink.set(device);
+
+        if changed {
+            let source_id = self.find_default_sink_id();
+            debug!(
+                "Default Sink Updated to: {:?} - {:?}",
+                self.default_sink, source_id
+            );
+        }
+    }
+
+    pub fn set_default_source(&mut self, device: DefaultDefinition) {
+        let changed = self.default_source.set(device);
+
+        if changed {
+            let source_id = self.find_default_source_id();
+            debug!(
+                "Default Source Updated to: {:?} - {:?}",
+                self.default_source, source_id
+            );
+            // let _ = self
+            //     .callback_tx
+            //     .send(PipewireReceiver::DefaultSinkChanged);
+        }
+    }
+
+    pub fn find_default_source_id(&mut self) -> Option<u32> {
+        self.find_default_node_id(&self.default_source)
+    }
+
+    pub fn find_default_sink_id(&mut self) -> Option<u32> {
+        self.find_default_node_id(&self.default_source)
+    }
+
+    fn find_default_node_id(&self, device: &DefaultDevice) -> Option<u32> {
+        // Firstly look for the configured source, see if it exists
+        if let Some(configured) = device.get_configured() {
+            if let Some(id) = self.find_node_by_name(configured) {
+                return Some(id);
+            }
+        }
+
+        // Not found, fall back to the default
+        if let Some(configured) = device.get_default() {
+            if let Some(id) = self.find_node_by_name(configured) {
+                return Some(id);
+            }
+        }
+
+        // We can't find it at all, something's probably wrong :D
+        None
+    }
+
+    fn find_node_by_name(&self, name: &str) -> Option<u32> {
+        for node in self.managed_nodes.values() {
+            if let Some(node_name) = node.props.get("node.name") {
+                if node_name == name {
+                    return node.pw_id;
+                }
+            }
+        }
+        for (id, node) in &self.unmanaged_device_nodes {
+            if let Some(node_name) = &node.name {
+                if node_name == name {
+                    return Some(*id);
+                }
+            }
+        }
+        None
     }
 
     // ----- MANAGED NODES -----
@@ -158,7 +246,11 @@ impl Store {
     }
 
     pub fn managed_node_set_pw_serial(&mut self, id: u32, serial: u32) {
-        if let Some(owned) = self.managed_nodes.values_mut().find(|v| v.pw_id.is_some_and(|e| e == id)) {
+        if let Some(owned) = self
+            .managed_nodes
+            .values_mut()
+            .find(|v| v.pw_id.is_some_and(|e| e == id))
+        {
             debug!("[{}] Pipewire Serial assigned: {}", owned.id, serial);
             owned.object_serial = Some(serial);
         }
@@ -208,14 +300,17 @@ impl Store {
 
     // ----- NODE VOLUMES -----
     pub fn set_volume(&mut self, id: Ulid, volume: u8) -> Result<()> {
-        let node = self.managed_nodes.get(&id).ok_or(anyhow!("Failed to find node"))?;
+        let node = self
+            .managed_nodes
+            .get(&id)
+            .ok_or(anyhow!("Failed to find node"))?;
 
         let volume = (volume as f32 / 100.0).powi(3);
         let pod = Value::Object(object! {
-                    utils::SpaTypes::ObjectParamProps,
-                    ParamType::Props,
-                    Property::new(SPA_PROP_channelVolumes, Value::ValueArray(ValueArray::Float(vec![volume, volume]))),
-                });
+            utils::SpaTypes::ObjectParamProps,
+            ParamType::Props,
+            Property::new(SPA_PROP_channelVolumes, Value::ValueArray(ValueArray::Float(vec![volume, volume]))),
+        });
 
         let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod).unwrap();
         let bytes = cursor.into_inner();
@@ -226,14 +321,17 @@ impl Store {
     }
 
     pub fn set_application_volume(&mut self, id: u32, volume: u8) -> Result<()> {
-        let node = self.unmanaged_client_nodes.get(&id).ok_or(anyhow!("Failed to find node"))?;
+        let node = self
+            .unmanaged_client_nodes
+            .get(&id)
+            .ok_or(anyhow!("Failed to find node"))?;
 
         let volume = (volume as f32 / 100.0).powi(3);
         let pod = Value::Object(object! {
-                    utils::SpaTypes::ObjectParamProps,
-                    ParamType::Props,
-                    Property::new(SPA_PROP_channelVolumes, Value::ValueArray(ValueArray::Float(vec![volume, volume]))),
-                });
+            utils::SpaTypes::ObjectParamProps,
+            ParamType::Props,
+            Property::new(SPA_PROP_channelVolumes, Value::ValueArray(ValueArray::Float(vec![volume, volume]))),
+        });
 
         let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod).unwrap();
         let bytes = cursor.into_inner();
@@ -246,11 +344,16 @@ impl Store {
     }
 
     pub fn on_volume_change(&mut self, id: Ulid, volume: u8) {
-        let _ = self.callback_tx.send(PipewireReceiver::NodeVolumeChanged(id, volume));
+        let _ = self
+            .callback_tx
+            .send(PipewireReceiver::NodeVolumeChanged(id, volume));
     }
 
     pub fn set_mute(&mut self, id: Ulid, muted: bool) -> Result<()> {
-        let node = self.managed_nodes.get(&id).ok_or(anyhow!("Failed to find node"))?;
+        let node = self
+            .managed_nodes
+            .get(&id)
+            .ok_or(anyhow!("Failed to find node"))?;
 
         let pod = Value::Object(object! {
             utils::SpaTypes::ObjectParamProps,
@@ -265,7 +368,9 @@ impl Store {
         Ok(())
     }
     pub fn set_application_muted(&mut self, id: u32, muted: bool) -> Result<()> {
-        let node = self.unmanaged_client_node_get(id).ok_or(anyhow!("Failed to find node"))?;
+        let node = self
+            .unmanaged_client_node_get(id)
+            .ok_or(anyhow!("Failed to find node"))?;
         let pod = Value::Object(object! {
             utils::SpaTypes::ObjectParamProps,
             ParamType::Props,
@@ -282,7 +387,9 @@ impl Store {
     }
 
     pub fn on_mute_change(&mut self, id: Ulid, muted: bool) {
-        let _ = self.callback_tx.send(PipewireReceiver::NodeMuteChanged(id, muted));
+        let _ = self
+            .callback_tx
+            .send(PipewireReceiver::NodeMuteChanged(id, muted));
     }
 
     // ----- MANAGED FILTERS -----
@@ -430,7 +537,6 @@ impl Store {
     }
 
     pub fn unmanaged_node_check(&mut self, id: u32) {
-        debug!("Unmanaged Check: {}", id);
         if let Some(node) = self.unmanaged_device_nodes.get(&id) {
             let is_usable = self.is_usable_unmanaged_device_node(id);
             if let Some(media_type) = is_usable {
@@ -523,7 +629,9 @@ impl Store {
             if node.volume != volume {
                 node.volume = volume;
 
-                let _ = self.callback_tx.send(PipewireReceiver::ApplicationVolumeChanged(id, volume));
+                let _ = self
+                    .callback_tx
+                    .send(PipewireReceiver::ApplicationVolumeChanged(id, volume));
             }
         }
     }
@@ -534,7 +642,9 @@ impl Store {
         if let Some(node) = self.unmanaged_client_node_get(id) {
             if node.is_muted != muted {
                 node.is_muted = muted;
-                let _ = self.callback_tx.send(PipewireReceiver::ApplicationMuteChanged(id, muted));
+                let _ = self
+                    .callback_tx
+                    .send(PipewireReceiver::ApplicationMuteChanged(id, muted));
             }
         } else {
             error!("Failed to locate Application Node");
@@ -550,7 +660,9 @@ impl Store {
                 node.media_title = None;
             } else if node.media_title != Some(media.clone()) {
                 node.media_title = Some(media.clone());
-                let _ = self.callback_tx.send(PipewireReceiver::ApplicationTitleChanged(id, media));
+                let _ = self
+                    .callback_tx
+                    .send(PipewireReceiver::ApplicationTitleChanged(id, media));
             }
         }
     }
@@ -596,8 +708,6 @@ impl Store {
                         break;
                     }
                 }
-
-                debug!("Serial not found: {}", id);
             }
             _ => {
                 warn!("Blank TargetType Received!");
@@ -609,7 +719,9 @@ impl Store {
 
             if self.usable_client_nodes.contains(&id) {
                 // We're already defined, send the node update
-                let _ = self.callback_tx.send(PipewireReceiver::ApplicationTargetChanged(id, result));
+                let _ = self
+                    .callback_tx
+                    .send(PipewireReceiver::ApplicationTargetChanged(id, result));
             } else {
                 // Check whether we're ready to send
                 self.unmanaged_client_node_check(id);
@@ -675,7 +787,6 @@ impl Store {
             return;
         }
 
-
         if let Some(node) = self.unmanaged_client_nodes.get(&id) {
             if let Some(media_type) = self.is_usable_unmanaged_client_node(id) {
                 if let Some(parent) = self.unmanaged_clients.get(&node.parent_id) {
@@ -710,7 +821,8 @@ impl Store {
             if node.node_name.is_empty()
                 || node.application_name.is_empty()
                 || node.is_running.is_none()
-                || node.is_running == Some(false) {
+                || node.is_running == Some(false)
+            {
                 return None;
             }
 
@@ -737,12 +849,19 @@ impl Store {
         None
     }
 
-    pub fn unmanaged_node_set_meta(&mut self, id: u32, key: String, type_: Option<String>, value: Option<String>) {
+    pub fn unmanaged_node_set_meta(
+        &mut self,
+        id: u32,
+        key: String,
+        type_: Option<String>,
+        value: Option<String>,
+    ) {
         if let Some(session) = &self.session_proxy {
-            session.metadata.set_property(id, &key, type_.as_deref(), value.as_deref())
+            session
+                .metadata
+                .set_property(id, &key, type_.as_deref(), value.as_deref())
         }
     }
-
 
     // ----- UNMANAGED LINKS -----
     pub fn unmanaged_link_add(&mut self, id: u32, link: RegistryLink) {
