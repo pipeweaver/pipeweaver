@@ -53,7 +53,7 @@ impl PrimaryWorker {
         let profile_path = config_path.join(format!("{}-profile.json", APP_NAME_ID));
         let mut first_run = true;
 
-        let local_stop = Stop::new();
+        //let local_stop = Stop::new();
 
         'main: loop {
             if !first_run {
@@ -277,15 +277,13 @@ impl PrimaryWorker {
     fn save_profile(&self, path: &PathBuf, profile: &Profile) -> Result<()> {
         info!("[Profile] Saving");
 
-        if let Some(parent) = path.parent() {
-            if let Err(e) = create_dir_all(parent) {
-                if e.kind() != ErrorKind::AlreadyExists {
-                    return Err(e).context(format!(
-                        "Could not create config directory at {}",
-                        parent.to_string_lossy()
-                    ))?;
-                }
-            }
+        if let Some(parent) = path.parent()
+            && let Err(e) = create_dir_all(parent)
+            && e.kind() != ErrorKind::AlreadyExists {
+            return Err(e).context(format!(
+                "Could not create config directory at {}",
+                parent.to_string_lossy()
+            ))?;
         }
 
         if path.exists() {

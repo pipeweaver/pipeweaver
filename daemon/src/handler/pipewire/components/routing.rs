@@ -39,8 +39,8 @@ impl RoutingManagement for PipewireManager {
         if let Some(targets) = self.profile.routes.get(source) {
             for target in targets {
                 debug!("Source to Target Filter Node: {} {}", source, target);
-                if !self.is_source_muted_to_some(*source, *target).await? {
-                    if let Some(map) = self.source_map.get(source).copied() {
+                if !self.is_source_muted_to_some(*source, *target).await?
+                    && let Some(map) = self.source_map.get(source).copied() {
                         debug!("Creating Link");
                         // Grab the Mix to Route From
                         let node = self.get_node_type(*target).ok_or(anyhow!("Unknown Node"))?;
@@ -52,7 +52,6 @@ impl RoutingManagement for PipewireManager {
                             self.link_create_filter_to_filter(map[mix], *target).await?;
                         }
                     }
-                }
             }
         }
         Ok(())

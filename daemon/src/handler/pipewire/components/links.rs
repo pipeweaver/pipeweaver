@@ -7,6 +7,7 @@ use ulid::Ulid;
 /// So this trait is INCREDIBLY verbose, I could simply just use LinkType and have a single function
 /// but from a readability perspective having incoming calls define exactly what they want to do
 /// and managing that accordingly ensures clean and defined behaviour.
+#[allow(unused)]
 pub(crate) trait LinkManagement {
     async fn link_create_type_to_type(&self, source: LinkType, target: LinkType) -> Result<()>;
 

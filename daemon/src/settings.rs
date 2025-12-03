@@ -4,11 +4,13 @@ use serde::{Deserialize, Serialize};
 /// have everything as an Option<T> and fixing it later
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
+#[allow(unused)]
 struct Settings {
     #[serde(default = "default_profile")]
     profile: String,
 }
 
+#[allow(unused)]
 fn default_profile() -> String {
     String::from("default")
 }

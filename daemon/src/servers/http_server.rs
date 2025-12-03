@@ -55,11 +55,11 @@ impl Actor for MeterWebsocket {
 
         let future = Box::pin(async move {
             loop {
-                if let Ok(event) = broadcast_rx.recv().await {
-                    if let Err(error) = address.clone().try_send(event) {
-                        error!("Failed to send Meter to websocket: {:?}", error);
-                        break;
-                    }
+                if let Ok(event) = broadcast_rx.recv().await
+                    && let Err(error) = address.clone().try_send(event)
+                {
+                    error!("Failed to send Meter to websocket: {:?}", error);
+                    break;
                 }
             }
         });

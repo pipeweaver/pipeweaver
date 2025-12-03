@@ -2,7 +2,9 @@ use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{bail, Result};
 use log::{debug, warn};
-use pipeweaver_pipewire::PipewireMessage::{ClearApplicationTarget, SetApplicationMute, SetApplicationTarget, SetApplicationVolume};
+use pipeweaver_pipewire::PipewireMessage::{
+    ClearApplicationTarget, SetApplicationMute, SetApplicationTarget, SetApplicationVolume,
+};
 use pipeweaver_pipewire::{ApplicationNode, MediaClass, NodeTarget};
 use pipeweaver_shared::{AppDefinition, DeviceType, NodeType};
 use std::collections::HashMap;
@@ -17,7 +19,6 @@ pub(crate) trait ApplicationManagement {
     async fn set_application_volume(&mut self, id: u32, volume: u8) -> Result<()>;
     async fn set_application_mute(&mut self, id: u32, mute: bool) -> Result<()>;
 
-
     fn application_appeared(&mut self, node: ApplicationNode) -> Result<()>;
     fn application_target_changed(&mut self, id: u32, target: Target) -> Result<()>;
     fn application_volume_changed(&mut self, id: u32, volume: u8) -> Result<()>;
@@ -28,7 +29,6 @@ pub(crate) trait ApplicationManagement {
 
 impl ApplicationManagement for PipewireManager {
     async fn set_application_target(&mut self, def: AppDefinition, target: Ulid) -> Result<()> {
-
         // Perform Validation on the Target
         if let Some(target) = self.get_application_type_from_node(target) {
             if target != def.device_type {
@@ -103,7 +103,7 @@ impl ApplicationManagement for PipewireManager {
 
     async fn clear_application_transient_target(&mut self, id: u32) -> Result<()> {
         // We need to force this transient target back to the default output
-        if let Some(_) = self.application_nodes.get(&id) {
+        if self.application_nodes.contains_key(&id) {
             let message = ClearApplicationTarget(id);
             self.pipewire().send_message(message)?;
         }
@@ -130,7 +130,6 @@ impl ApplicationManagement for PipewireManager {
         self.pipewire().send_message(message)?;
         Ok(())
     }
-
 
     fn application_appeared(&mut self, node: ApplicationNode) -> Result<()> {
         debug!("Node Appeared: {:?}", node);

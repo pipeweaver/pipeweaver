@@ -8,6 +8,7 @@ use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{FilterProperties, FilterValue, MediaClass, PipewireMessage};
 use ulid::Ulid;
 
+#[allow(unused)]
 pub(crate) trait FilterManagement {
     async fn filter_pass_create(&mut self, name: String) -> Result<Ulid>;
     async fn filter_pass_create_id(&mut self, name: String, id: Ulid) -> Result<()>;

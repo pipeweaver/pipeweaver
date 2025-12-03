@@ -7,7 +7,7 @@ use anyhow::{anyhow, bail, Result};
 use log::debug;
 use pipeweaver_ipc::commands::PhysicalDevice;
 use pipeweaver_pipewire::DeviceNode;
-use pipeweaver_profile::{PhysicalDeviceDescriptor, PhysicalSourceDevice};
+use pipeweaver_profile::PhysicalDeviceDescriptor;
 use pipeweaver_shared::{DeviceType, NodeType};
 use tokio::sync::mpsc::Sender;
 use ulid::Ulid;
@@ -103,56 +103,54 @@ impl PhysicalDevices for PipewireManager {
 
             if let Some(node_name) = &node.name {
                 for (name_i, dev) in device.attached_devices.iter().enumerate() {
-                    if let Some(name) = &dev.name {
-                        if name == node_name {
-                            debug!("Attaching Node {} to {}", node.node_id, device.description.id);
+                    if let Some(name) = &dev.name
+                        && name == node_name {
+                        debug!("Attaching Node {} to {}", node.node_id, device.description.id);
 
-                            // Got a hit, attach to our filter, and bring it into the tree
-                            self.link_create_unmanaged_to_filter(node.node_id, device.description.id)
-                                .await?;
+                        // Got a hit, attach to our filter, and bring it into the tree
+                        self.link_create_unmanaged_to_filter(node.node_id, device.description.id)
+                            .await?;
 
-                            // We'll force upgrade the description regardless, just to ensure the
-                            // node is accurately represented
-                            let mut descriptor = dev.clone();
-                            descriptor.description = node.description.clone();
+                        // We'll force upgrade the description regardless, just to ensure the
+                        // node is accurately represented
+                        let mut descriptor = dev.clone();
+                        descriptor.description = node.description.clone();
 
-                            let mut device = device.clone();
-                            device.attached_devices[name_i] = descriptor;
-                            self.profile.devices.sources.physical_devices[dev_i] = device;
+                        let mut device = device.clone();
+                        device.attached_devices[name_i] = descriptor;
+                        self.profile.devices.sources.physical_devices[dev_i] = device;
 
-                            // Let the Primary Worker know we've changed the config
-                            let _ = sender.send(WorkerMessage::ProfileChanged).await;
+                        // Let the Primary Worker know we've changed the config
+                        let _ = sender.send(WorkerMessage::ProfileChanged).await;
 
-                            break 'start;
-                        }
+                        break 'start;
                     }
                 }
             }
 
             if let Some(node_desc) = &node.description {
                 for (desc_i, dev) in device.attached_devices.iter().enumerate() {
-                    if let Some(desc) = &dev.description {
-                        if desc == node_desc {
-                            // Firstly, attach the Node
-                            debug!("Attaching Node {} to {}", node.node_id, device.description.id);
-                            self.link_create_unmanaged_to_filter(node.node_id, device.description.id)
-                                .await?;
+                    if let Some(desc) = &dev.description
+                        && desc == node_desc {
+                        // Firstly, attach the Node
+                        debug!("Attaching Node {} to {}", node.node_id, device.description.id);
+                        self.link_create_unmanaged_to_filter(node.node_id, device.description.id)
+                            .await?;
 
-                            debug!("Updating Profile Node to Name: {:?}", node.name);
+                        debug!("Updating Profile Node to Name: {:?}", node.name);
 
-                            // This is kinda ugly, but due to likely a changed node name, we need to
-                            // update the profile to ensure this now matches the new location for
-                            // future checks. Again, we *WANT* to defer to the name where possible.
-                            let mut descriptor = dev.clone();
-                            descriptor.name = node.name.clone();
+                        // This is kinda ugly, but due to likely a changed node name, we need to
+                        // update the profile to ensure this now matches the new location for
+                        // future checks. Again, we *WANT* to defer to the name where possible.
+                        let mut descriptor = dev.clone();
+                        descriptor.name = node.name.clone();
 
-                            let mut device = device.clone();
-                            device.attached_devices[desc_i] = descriptor;
-                            self.profile.devices.sources.physical_devices[dev_i] = device;
-                            let _ = sender.send(WorkerMessage::ProfileChanged).await;
+                        let mut device = device.clone();
+                        device.attached_devices[desc_i] = descriptor;
+                        self.profile.devices.sources.physical_devices[dev_i] = device;
+                        let _ = sender.send(WorkerMessage::ProfileChanged).await;
 
-                            break 'start;
-                        }
+                        break 'start;
                     }
                 }
             }
@@ -170,50 +168,48 @@ impl PhysicalDevices for PipewireManager {
         {
             if let Some(node_name) = &node.name {
                 for (name_i, dev) in device.attached_devices.iter().enumerate() {
-                    if let Some(name) = &dev.name {
-                        if name == node_name {
-                            debug!("Attaching Node {} to {}", node.node_id, device.description.id);
+                    if let Some(name) = &dev.name
+                        && name == node_name {
+                        debug!("Attaching Node {} to {}", node.node_id, device.description.id);
 
-                            // Got a hit, attach to our filter, and bring it into the tree
-                            self.link_create_filter_to_unmanaged(device.description.id, node.node_id).await?;
+                        // Got a hit, attach to our filter, and bring it into the tree
+                        self.link_create_filter_to_unmanaged(device.description.id, node.node_id).await?;
 
-                            let mut descriptor = dev.clone();
-                            descriptor.description = node.description.clone();
+                        let mut descriptor = dev.clone();
+                        descriptor.description = node.description.clone();
 
-                            let mut device = device.clone();
-                            device.attached_devices[name_i] = descriptor;
-                            self.profile.devices.targets.physical_devices[dev_i] = device;
+                        let mut device = device.clone();
+                        device.attached_devices[name_i] = descriptor;
+                        self.profile.devices.targets.physical_devices[dev_i] = device;
 
-                            // Let the Primary Worker know we've changed the config
-                            let _ = sender.send(WorkerMessage::ProfileChanged).await;
+                        // Let the Primary Worker know we've changed the config
+                        let _ = sender.send(WorkerMessage::ProfileChanged).await;
 
-                            break 'start;
-                        }
+                        break 'start;
                     }
                 }
             }
 
             if let Some(node_desc) = &node.description {
                 for (desc_i, dev) in device.attached_devices.iter().enumerate() {
-                    if let Some(desc) = &dev.description {
-                        if desc == node_desc {
-                            // Firstly, attach the Node
-                            debug!("Attaching Node {} to {}", device.description.id, node.node_id);
-                            self.link_create_filter_to_unmanaged(device.description.id, node.node_id).await?;
+                    if let Some(desc) = &dev.description
+                        && desc == node_desc {
+                        // Firstly, attach the Node
+                        debug!("Attaching Node {} to {}", device.description.id, node.node_id);
+                        self.link_create_filter_to_unmanaged(device.description.id, node.node_id).await?;
 
-                            debug!("Updating Profile Node to Name: {:?}", node.name);
-                            let mut descriptor = dev.clone();
-                            descriptor.name = node.name.clone();
+                        debug!("Updating Profile Node to Name: {:?}", node.name);
+                        let mut descriptor = dev.clone();
+                        descriptor.name = node.name.clone();
 
-                            let mut device = device.clone();
-                            device.attached_devices[desc_i] = descriptor;
-                            self.profile.devices.targets.physical_devices[dev_i] = device;
+                        let mut device = device.clone();
+                        device.attached_devices[desc_i] = descriptor;
+                        self.profile.devices.targets.physical_devices[dev_i] = device;
 
-                            // Let the Primary Worker know we've changed the config
-                            let _ = sender.send(WorkerMessage::ProfileChanged).await;
+                        // Let the Primary Worker know we've changed the config
+                        let _ = sender.send(WorkerMessage::ProfileChanged).await;
 
-                            break 'start;
-                        }
+                        break 'start;
                     }
                 }
             }
@@ -224,50 +220,48 @@ impl PhysicalDevices for PipewireManager {
         {
             if let Some(node_name) = &node.name {
                 for (name_i, dev) in device.attached_devices.iter().enumerate() {
-                    if let Some(name) = &dev.name {
-                        if name == node_name {
-                            debug!("Attaching Node {} to {}", node.node_id, device.description.id);
+                    if let Some(name) = &dev.name
+                        && name == node_name {
+                        debug!("Attaching Node {} to {}", node.node_id, device.description.id);
 
-                            // Got a hit, attach to our filter, and bring it into the tree
-                            self.link_create_node_to_unmanaged(device.description.id, node.node_id).await?;
+                        // Got a hit, attach to our filter, and bring it into the tree
+                        self.link_create_node_to_unmanaged(device.description.id, node.node_id).await?;
 
-                            let mut descriptor = dev.clone();
-                            descriptor.description = node.description.clone();
+                        let mut descriptor = dev.clone();
+                        descriptor.description = node.description.clone();
 
-                            let mut device = device.clone();
-                            device.attached_devices[name_i] = descriptor;
-                            self.profile.devices.targets.virtual_devices[dev_i] = device;
+                        let mut device = device.clone();
+                        device.attached_devices[name_i] = descriptor;
+                        self.profile.devices.targets.virtual_devices[dev_i] = device;
 
-                            // Let the Primary Worker know we've changed the config
-                            let _ = sender.send(WorkerMessage::ProfileChanged).await;
+                        // Let the Primary Worker know we've changed the config
+                        let _ = sender.send(WorkerMessage::ProfileChanged).await;
 
-                            break 'start;
-                        }
+                        break 'start;
                     }
                 }
             }
 
             if let Some(node_desc) = &node.description {
                 for (desc_i, dev) in device.attached_devices.iter().enumerate() {
-                    if let Some(desc) = &dev.description {
-                        if desc == node_desc {
-                            // Firstly, attach the Node
-                            debug!("Attaching Node {} to {}", device.description.id, node.node_id);
-                            self.link_create_node_to_unmanaged(device.description.id, node.node_id).await?;
+                    if let Some(desc) = &dev.description
+                        && desc == node_desc {
+                        // Firstly, attach the Node
+                        debug!("Attaching Node {} to {}", device.description.id, node.node_id);
+                        self.link_create_node_to_unmanaged(device.description.id, node.node_id).await?;
 
-                            debug!("Updating Profile Node to Name: {:?}", node.name);
-                            let mut descriptor = dev.clone();
-                            descriptor.name = node.name.clone();
+                        debug!("Updating Profile Node to Name: {:?}", node.name);
+                        let mut descriptor = dev.clone();
+                        descriptor.name = node.name.clone();
 
-                            let mut device = device.clone();
-                            device.attached_devices[desc_i] = descriptor;
-                            self.profile.devices.targets.virtual_devices[dev_i] = device;
+                        let mut device = device.clone();
+                        device.attached_devices[desc_i] = descriptor;
+                        self.profile.devices.targets.virtual_devices[dev_i] = device;
 
-                            // Let the Primary Worker know we've changed the config
-                            let _ = sender.send(WorkerMessage::ProfileChanged).await;
+                        // Let the Primary Worker know we've changed the config
+                        let _ = sender.send(WorkerMessage::ProfileChanged).await;
 
-                            break 'start;
-                        }
+                        break 'start;
                     }
                 }
             }
