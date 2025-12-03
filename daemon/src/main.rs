@@ -7,11 +7,11 @@ mod stop;
 use crate::handler::primary_worker::start_primary_worker;
 use crate::platform::{spawn_runtime, spawn_tray};
 use crate::servers::http_server::spawn_http_server;
-use crate::servers::ipc_server::{bind_socket, spawn_ipc_server};
+use crate::servers::ipc_server::{bind_socket, spawn_ipc_server, ErrorState};
 use crate::stop::Stop;
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{anyhow, bail, Context, Result};
 use directories::ProjectDirs;
-use log::{LevelFilter, error, info};
+use log::{error, info, LevelFilter};
 use pipeweaver_ipc::commands::HttpSettings;
 use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::sync::{broadcast, mpsc};
@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
         TerminalMode::Mixed,
         ColorChoice::Auto,
     )])
-    .context("Could not configure the logger")?;
+        .context("Could not configure the logger")?;
 
     info!("Starting {} v{} - {}", APP_NAME, VERSION, HASH);
 
@@ -62,10 +62,19 @@ async fn main() -> Result<()> {
 
     // Prepare the IPC Socket
     let ipc_socket = bind_socket().await;
-    if ipc_socket.is_err() {
-        error!("Error Starting Daemon: ");
-        bail!("{}", ipc_socket.err().unwrap());
+    if let Err(e) = ipc_socket {
+        match e.downcast_ref() {
+            Some(ErrorState::AlreadyRunning) => {
+                info!("Pipeweaver already running, triggering interface.");
+                return Ok(());
+            }
+            _ => {
+                error!("Error Starting Daemon: {}", e);
+                bail!("Error Starting Daemon: {}", e);
+            }
+        }
     }
+
     let ipc_socket = ipc_socket?;
     let communications_handle = tokio::spawn(spawn_ipc_server(
         ipc_socket,

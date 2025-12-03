@@ -1,7 +1,7 @@
-use crate::handler::packet::{Messenger, handle_packet};
+use crate::handler::packet::{handle_packet, Messenger};
 use crate::servers::http_server::PatchEvent;
-use crate::{APP_NAME, APP_NAME_ID, Stop};
-use anyhow::{Error, Result, bail};
+use crate::{Stop, APP_NAME, APP_NAME_ID};
+use anyhow::{Error, Result};
 use directories::BaseDirs;
 use interprocess::local_socket::tokio::prelude::{LocalSocketListener, LocalSocketStream};
 use interprocess::local_socket::traits::tokio::{Listener, Stream};
@@ -13,6 +13,21 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 use tokio::select;
 use tokio::sync::broadcast::Sender;
+
+#[derive(Debug)]
+pub enum ErrorState {
+    AlreadyRunning,
+}
+
+impl std::fmt::Display for ErrorState {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ErrorState::AlreadyRunning => write!(f, "Pipeweaver Already Running"),
+        }
+    }
+}
+
+impl std::error::Error for ErrorState {}
 
 pub fn get_socket_path() -> Result<PathBuf> {
     let path = BaseDirs::new()
@@ -62,8 +77,7 @@ async fn ipc_tidy() -> Result<()> {
     socket.read().await;
 
     // If we get here, there's an active Daemon running!
-    // TODO: Bailing here may cause problems with exit codes, currently c'est la vie
-    bail!("The {} Daemon is already running.", APP_NAME);
+    Err(ErrorState::AlreadyRunning.into())
 }
 
 pub async fn bind_socket() -> Result<LocalSocketListener> {
