@@ -38,7 +38,8 @@ export default {
         </div>
         <div style="margin-bottom: 10px;">
           The following button will restart the audio engine, disconnecting and destroying all
-          Pipeweaver nodes. After 2 seconds, it will attempt to recreate them again.<br/><br/>
+          Pipeweaver nodes. After 2 seconds, it will attempt to recreate them again, this may break
+          stuff.<br/><br/>
           Press this only if you're experiencing issues that cannot be resolved otherwise.<br/>
         </div>
         <div style="text-align: center">
