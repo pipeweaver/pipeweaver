@@ -1881,7 +1881,7 @@ dependencies = [
 [[package]]
 name = "libspa"
 version = "0.8.0"
-source = "git+https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git#7a2066588a5ca52c0a6abd36cdeb266b03f13482"
+source = "git+https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git#7a03ab974259137ec2432dbd141cd9cc207449e9"
 dependencies = [
  "bitflags",
  "cc",
@@ -1898,7 +1898,7 @@ dependencies = [
 [[package]]
 name = "libspa-sys"
 version = "0.8.0"
-source = "git+https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git#7a2066588a5ca52c0a6abd36cdeb266b03f13482"
+source = "git+https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git#7a03ab974259137ec2432dbd141cd9cc207449e9"
 dependencies = [
  "bindgen",
  "cc",
@@ -2391,7 +2391,7 @@ dependencies = [
 [[package]]
 name = "pipewire"
 version = "0.8.0"
-source = "git+https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git#7a2066588a5ca52c0a6abd36cdeb266b03f13482"
+source = "git+https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git#7a03ab974259137ec2432dbd141cd9cc207449e9"
 dependencies = [
  "anyhow",
  "bitflags",
@@ -2407,7 +2407,7 @@ dependencies = [
 [[package]]
 name = "pipewire-sys"
 version = "0.8.0"
-source = "git+https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git#7a2066588a5ca52c0a6abd36cdeb266b03f13482"
+source = "git+https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git#7a03ab974259137ec2432dbd141cd9cc207449e9"
 dependencies = [
  "bindgen",
  "libspa-sys",
