@@ -10,7 +10,7 @@ use crate::servers::http_server::MeterEvent;
 use enum_map::{enum_map, EnumMap};
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{APICommandResponse, Application, AudioConfiguration, PhysicalDevice};
-use pipeweaver_pipewire::{ApplicationNode, DeviceNode, MediaClass, PipewireMessage, PipewireReceiver, PipewireRunner, RouteTarget};
+use pipeweaver_pipewire::{ApplicationNode, DeviceNode, MediaClass, NodeTarget, PipewireMessage, PipewireReceiver, PipewireRunner};
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::{AppTarget, DeviceType, Mix};
 use std::collections::HashMap;
@@ -32,6 +32,8 @@ pub(crate) struct PipewireManager {
 
     pub(crate) pipewire: Option<PipewireRunner>,
     pub(crate) clock_rate: Option<u32>,
+    pub(crate) default_source: Option<NodeTarget>,
+    pub(crate) default_target: Option<NodeTarget>,
 
     pub(crate) profile: Profile,
     pub(crate) source_map: HashMap<Ulid, EnumMap<Mix, Ulid>>,
@@ -68,6 +70,8 @@ impl PipewireManager {
 
             pipewire: None,
             clock_rate: None,
+            default_source: None,
+            default_target: None,
 
             profile: config.profile,
 
@@ -101,6 +105,22 @@ impl PipewireManager {
         AudioConfiguration {
             profile: self.profile.clone(),
             devices: self.node_list.clone(),
+            defaults: enum_map! {
+                DeviceType::Source => match &self.default_source {
+                    None => None,
+                    Some(target) => match target {
+                        NodeTarget::Node(id) => Some(AppTarget::Managed(*id)),
+                        NodeTarget::UnmanagedNode(id) => Some(AppTarget::Unmanaged(*id)),
+                    }
+                },
+                DeviceType::Target => match &self.default_target {
+                    None => None,
+                    Some(target) => match target {
+                        NodeTarget::Node(id) => Some(AppTarget::Managed(*id)),
+                        NodeTarget::UnmanagedNode(id) => Some(AppTarget::Unmanaged(*id)),
+                    }
+                },
+            },
             applications: {
                 let mut sources: HashMap<String, HashMap<String, Vec<Application>>> = HashMap::new();
                 let mut targets: HashMap<String, HashMap<String, Vec<Application>>> = HashMap::new();
@@ -125,8 +145,8 @@ impl PipewireManager {
                             Some(None) => None,
                             Some(Some(target)) => {
                                 match target {
-                                    RouteTarget::Node(id) => Some(AppTarget::Managed(id)),
-                                    RouteTarget::UnmanagedNode(id) => Some(AppTarget::Unmanaged(id)),
+                                    NodeTarget::Node(id) => Some(AppTarget::Managed(id)),
+                                    NodeTarget::UnmanagedNode(id) => Some(AppTarget::Unmanaged(id)),
                                 }
                             }
                         },
@@ -274,6 +294,21 @@ impl PipewireManager {
                     match msg {
                         PipewireReceiver::AnnouncedClock(_) => {
                             warn!("This shouldn't happen twice!");
+                        }
+
+                        PipewireReceiver::DefaultChanged(class, target) => {
+                            match class {
+                                MediaClass::Source => {
+                                    self.default_target = Some(target);
+                                }
+                                MediaClass::Sink => {
+                                    self.default_source = Some(target);
+                                }
+                                _ => error!("Invalid MediaClass for Default")
+                            }
+
+                            debug!("Default {:?} Changed to {:?}", class, target);
+                            let _ = self.worker_sender.send(TransientChange).await;
                         }
 
                         PipewireReceiver::DeviceAdded(node) => {

@@ -1,6 +1,6 @@
 use crate::default_device::{DefaultDefinition, DefaultDevice};
 use crate::store::{Store, TargetType};
-use crate::RouteTarget;
+use crate::NodeTarget;
 use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
 use log::{debug, warn};
@@ -589,7 +589,7 @@ pub(crate) struct RegistryClientNode {
     pub(crate) is_running: Option<bool>,
     pub(crate) is_muted: bool,
 
-    pub(crate) media_target: Option<Option<RouteTarget>>,
+    pub(crate) media_target: Option<Option<NodeTarget>>,
 
     pub(crate) proxy: Option<Node>,
     pub(crate) _listener: Option<NodeListener>,

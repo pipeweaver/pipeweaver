@@ -96,6 +96,7 @@ pub enum APICommandResponse {
     Err(String),
 }
 
+
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct DaemonStatus {
     pub config: DaemonConfig,
@@ -106,6 +107,7 @@ pub struct DaemonStatus {
 pub struct AudioConfiguration {
     pub profile: Profile,
     pub devices: EnumMap<DeviceType, Vec<PhysicalDevice>>,
+    pub defaults: EnumMap<DeviceType, Option<AppTarget>>,
     pub applications: EnumMap<DeviceType, HashMap<String, HashMap<String, Vec<Application>>>>,
 }
 

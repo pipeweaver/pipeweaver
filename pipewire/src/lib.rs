@@ -81,11 +81,13 @@ pub enum PipewireReceiver {
 
     AnnouncedClock(Option<u32>),
 
+    DefaultChanged(MediaClass, NodeTarget),
+
     DeviceAdded(DeviceNode),
     DeviceRemoved(u32),
 
     ApplicationAdded(ApplicationNode),
-    ApplicationTargetChanged(u32, Option<RouteTarget>),
+    ApplicationTargetChanged(u32, Option<NodeTarget>),
     ApplicationTitleChanged(u32, String),
     ApplicationVolumeChanged(u32, u8),
     ApplicationMuteChanged(u32, bool),
@@ -316,7 +318,7 @@ pub enum LinkType {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum RouteTarget {
+pub enum NodeTarget {
     Node(Ulid),
     UnmanagedNode(u32),
 }
@@ -362,7 +364,7 @@ pub struct DeviceNode {
 pub struct ApplicationNode {
     pub node_id: u32,
     pub node_class: MediaClass,
-    pub media_target: Option<Option<RouteTarget>>,
+    pub media_target: Option<Option<NodeTarget>>,
 
     pub volume: u8,
     pub muted: bool,

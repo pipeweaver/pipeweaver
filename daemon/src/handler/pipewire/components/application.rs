@@ -3,12 +3,12 @@ use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{bail, Result};
 use log::{debug, warn};
 use pipeweaver_pipewire::PipewireMessage::{ClearApplicationTarget, SetApplicationMute, SetApplicationTarget, SetApplicationVolume};
-use pipeweaver_pipewire::{ApplicationNode, MediaClass, RouteTarget};
+use pipeweaver_pipewire::{ApplicationNode, MediaClass, NodeTarget};
 use pipeweaver_shared::{AppDefinition, DeviceType, NodeType};
 use std::collections::HashMap;
 use ulid::Ulid;
 
-type Target = Option<Option<RouteTarget>>;
+type Target = Option<Option<NodeTarget>>;
 pub(crate) trait ApplicationManagement {
     async fn set_application_target(&mut self, def: AppDefinition, target: Ulid) -> Result<()>;
     async fn clear_application_target(&mut self, def: AppDefinition) -> Result<()>;
@@ -159,7 +159,7 @@ impl ApplicationManagement for PipewireManager {
                 }
                 Some(route) => {
                     match route {
-                        Some(RouteTarget::Node(ulid)) => {
+                        Some(NodeTarget::Node(ulid)) => {
                             if ulid != target {
                                 // Set to the wrong target, fix it.
                                 debug!("Fixing {} from {} to {}", node_id, ulid, target);
@@ -168,7 +168,7 @@ impl ApplicationManagement for PipewireManager {
                                 debug!("Node Arrived and correctly configured: {}", node_id);
                             }
                         }
-                        Some(RouteTarget::UnmanagedNode(node_id)) => {
+                        Some(NodeTarget::UnmanagedNode(node_id)) => {
                             // Pointing to an unmanaged node, send it to the correct node
                             debug!("Sending from Unmanaged {} to {}", node_id, target);
                             self.pipewire().send_message(message)?;
@@ -208,7 +208,7 @@ impl ApplicationManagement for PipewireManager {
                     }
                     Some(route) => {
                         match route {
-                            Some(RouteTarget::Node(target)) => {
+                            Some(NodeTarget::Node(target)) => {
                                 if target != desired {
                                     debug!("Target is not the desired output, adding to ignore..");
                                     // This node has been manually routed somewhere else, ignore it.
@@ -222,7 +222,7 @@ impl ApplicationManagement for PipewireManager {
                                     self.application_target_ignore.retain(|node| *node != id);
                                 }
                             }
-                            Some(RouteTarget::UnmanagedNode(id)) => {
+                            Some(NodeTarget::UnmanagedNode(id)) => {
                                 if !self.application_target_ignore.contains(&id) {
                                     debug!("Ignoring Application Node {}", id);
                                     self.application_target_ignore.push(id);

@@ -5,7 +5,7 @@ use crate::registry::{
     RegistryDeviceNode, RegistryFactory, RegistryLink,
 };
 use crate::{
-    ApplicationNode, DeviceNode, FilterValue, LinkType, MediaClass, PipewireReceiver, RouteTarget,
+    ApplicationNode, DeviceNode, FilterValue, LinkType, MediaClass, NodeTarget, PipewireReceiver,
 };
 use anyhow::Result;
 use anyhow::{anyhow, bail};
@@ -143,70 +143,100 @@ impl Store {
     pub fn set_default_sink(&mut self, device: DefaultDefinition) {
         let changed = self.default_sink.set(device);
 
-        if changed {
-            let source_id = self.find_default_sink_id();
-            debug!(
-                "Default Sink Updated to: {:?} - {:?}",
-                self.default_sink, source_id
-            );
+        if changed && self.find_default_sink_id() {
+            debug!("Default Sink Updated to: {:?}", self.default_sink);
+            self.send_default_sink();
         }
     }
 
     pub fn set_default_source(&mut self, device: DefaultDefinition) {
         let changed = self.default_source.set(device);
 
-        if changed {
-            let source_id = self.find_default_source_id();
-            debug!(
-                "Default Source Updated to: {:?} - {:?}",
-                self.default_source, source_id
-            );
-            // let _ = self
-            //     .callback_tx
-            //     .send(PipewireReceiver::DefaultSinkChanged);
+        if changed && self.find_default_source_id() {
+            debug!("Default Source Updated to: {:?}", self.default_source);
+            self.send_default_source();
         }
     }
 
-    pub fn find_default_source_id(&mut self) -> Option<u32> {
-        self.find_default_node_id(&self.default_source)
+    fn send_default_sink(&self) {
+        self.send_default_update(&self.default_sink, MediaClass::Sink);
     }
 
-    pub fn find_default_sink_id(&mut self) -> Option<u32> {
-        self.find_default_node_id(&self.default_source)
+    fn send_default_source(&self) {
+        self.send_default_update(&self.default_source, MediaClass::Source);
     }
 
-    fn find_default_node_id(&self, device: &DefaultDevice) -> Option<u32> {
-        // Firstly look for the configured source, see if it exists
-        if let Some(configured) = device.get_configured() {
-            if let Some(id) = self.find_node_by_name(configured) {
-                return Some(id);
+    fn send_default_update(&self, default: &DefaultDevice, class: MediaClass) {
+        if let Some(node_id) = default.get_active_node_id() {
+            let message = if self.is_managed_node(node_id) {
+                let ulid = self.managed_node_find_by_node_id(node_id).unwrap();
+                PipewireReceiver::DefaultChanged(class, NodeTarget::Node(ulid))
+            } else {
+                PipewireReceiver::DefaultChanged(class, NodeTarget::UnmanagedNode(node_id))
+            };
+            let _ = self.callback_tx.send(message);
+        }
+    }
+
+    pub fn find_default_source_id(&mut self) -> bool {
+        self.populate_default_node_ids(false)
+    }
+
+    pub fn find_default_sink_id(&mut self) -> bool {
+        self.populate_default_node_ids(true)
+    }
+
+    fn populate_default_node_ids(&mut self, is_sink: bool) -> bool {
+        // Grab the Device Names
+        let device = match is_sink {
+            true => &mut self.default_sink,
+            false => &mut self.default_source,
+        };
+        let configured = device.get_configured().map(|s| s.to_string());
+        let default = device.get_default().map(|s| s.to_string());
+
+        // Try to find and set the configured device node
+        let mut send_update = false;
+        if let Some(configured) = configured
+            && let Some(id) = self.find_node_by_name(&configured)
+        {
+            let device = match is_sink {
+                true => &mut self.default_sink,
+                false => &mut self.default_source,
+            };
+            if device.set_configured_node_id(id) {
+                send_update = true;
             }
         }
 
-        // Not found, fall back to the default
-        if let Some(configured) = device.get_default() {
-            if let Some(id) = self.find_node_by_name(configured) {
-                return Some(id);
+        // Try to find and set the default device node
+        if let Some(default) = default
+            && let Some(id) = self.find_node_by_name(&default)
+        {
+            let device = match is_sink {
+                true => &mut self.default_sink,
+                false => &mut self.default_source,
+            };
+            if device.set_default_node_id(id) {
+                send_update = true;
             }
         }
-
-        // We can't find it at all, something's probably wrong :D
-        None
+        send_update
     }
 
     fn find_node_by_name(&self, name: &str) -> Option<u32> {
         for node in self.managed_nodes.values() {
-            if let Some(node_name) = node.props.get("node.name") {
-                if node_name == name {
-                    return node.pw_id;
-                }
+            if let Some(node_name) = node.props.get("node.name")
+                && node_name == name
+            {
+                return node.pw_id;
             }
         }
         for (id, node) in &self.unmanaged_device_nodes {
-            if let Some(node_name) = &node.name {
-                if node_name == name {
-                    return Some(*id);
-                }
+            if let Some(node_name) = &node.name
+                && node_name == name
+            {
+                return Some(*id);
             }
         }
         None
@@ -234,13 +264,33 @@ impl Store {
         // check for things like links here, PW will clean them up, so upstream should manage
         // anything extra.
         if self.managed_nodes.contains_key(&id) {
-            self.managed_nodes.remove(&id);
+            let node = self.managed_nodes.remove(&id);
+            if let Some(node) = node
+                && let Some(pw_id) = node.pw_id
+            {
+                if self.default_sink.device_removed(pw_id) {
+                    self.send_default_sink();
+                }
+                if self.default_source.device_removed(pw_id) {
+                    self.send_default_source();
+                }
+            }
         }
     }
 
     pub fn managed_node_set_pw_id(&mut self, id: Ulid, pw_id: u32) {
         let node = self.managed_nodes.get_mut(&id).expect("Broke");
+        let node_name = node.props.get("node.name").map(|s| s.to_string());
         node.pw_id.replace(pw_id);
+
+        if let Some(name) = node_name {
+            if self.default_sink.device_added(pw_id, &name) {
+                self.send_default_sink();
+            }
+            if self.default_source.device_added(pw_id, &name) {
+                self.send_default_source();
+            }
+        }
 
         self.managed_node_check_ready(id);
     }
@@ -296,6 +346,13 @@ impl Store {
                 }
             }
         }
+    }
+
+    pub fn managed_node_find_by_node_id(&self, id: u32) -> Option<Ulid> {
+        self.managed_nodes
+            .iter()
+            .find(|(_, node)| node.pw_id == Some(id))
+            .map(|(id, _)| id.clone())
     }
 
     // ----- NODE VOLUMES -----
@@ -515,6 +572,16 @@ impl Store {
         if self.is_managed_node(id) {
             return;
         }
+
+        if let Some(name) = node.name.clone() {
+            if self.default_sink.device_added(id, &name) {
+                self.send_default_sink();
+            }
+            if self.default_source.device_added(id, &name) {
+                self.send_default_source();
+            }
+        }
+
         self.unmanaged_device_nodes.insert(id, node);
         self.unmanaged_node_check(id);
     }
@@ -533,6 +600,14 @@ impl Store {
         self.unmanaged_device_nodes.remove(&id);
         for client in self.unmanaged_devices.values_mut() {
             client.nodes.retain(|n| n != &id);
+        }
+        
+        // Check to make sure these aren't defaults
+        if self.default_sink.device_removed(id) {
+            self.send_default_sink();
+        }
+        if self.default_source.device_removed(id) {
+            self.send_default_source();
         }
     }
 
@@ -638,7 +713,6 @@ impl Store {
 
     // Naming here is terrible
     pub fn unmanaged_client_node_set_mute(&mut self, id: u32, muted: bool) {
-        debug!("Finding Node");
         if let Some(node) = self.unmanaged_client_node_get(id) {
             if node.is_muted != muted {
                 node.is_muted = muted;
@@ -671,14 +745,14 @@ impl Store {
         // So we need to locate the target, which might be tricky as the target is passed as an
         // object serial, and not a node id, meaning we need to do some digging.
 
-        let mut result: Option<RouteTarget> = None;
+        let mut result: Option<NodeTarget> = None;
 
         match target {
             TargetType::Node(Some(id)) => {
                 for node in self.managed_nodes.values() {
                     if let Some(object_id) = node.pw_id {
                         if object_id == id {
-                            result = Some(RouteTarget::Node(node.id));
+                            result = Some(NodeTarget::Node(node.id));
                             break;
                         }
                     }
@@ -686,7 +760,7 @@ impl Store {
 
                 // If we get here, it's not a managed node, so check and send as unmanaged
                 if self.unmanaged_device_nodes.contains_key(&id) {
-                    result = Some(RouteTarget::UnmanagedNode(id));
+                    result = Some(NodeTarget::UnmanagedNode(id));
                 }
 
                 debug!("Node not found: {}", id);
@@ -695,7 +769,7 @@ impl Store {
                 for node in self.managed_nodes.values() {
                     if let Some(object_serial) = node.object_serial {
                         if object_serial == id {
-                            result = Some(RouteTarget::Node(node.id));
+                            result = Some(NodeTarget::Node(node.id));
                             break;
                         }
                     }
@@ -704,7 +778,7 @@ impl Store {
                 // Can't find it, we need to look for object serials in the unmanaged list
                 for (node_id, node) in &self.unmanaged_device_nodes {
                     if node.object_serial == id {
-                        result = Some(RouteTarget::UnmanagedNode(*node_id));
+                        result = Some(NodeTarget::UnmanagedNode(*node_id));
                         break;
                     }
                 }

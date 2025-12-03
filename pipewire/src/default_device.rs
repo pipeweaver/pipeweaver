@@ -14,36 +14,156 @@
 /// and perform lookups later.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct DefaultDevice {
-    configured: Option<String>, // User's explicit preference
-    default: Option<String>,    // Current default from session manager
+    configured: Option<DeviceState>, // User's explicit preference
+    default: Option<DeviceState>,    // Current default from session manager
+}
+
+#[derive(Debug, Clone)]
+struct DeviceState {
+    name: String,
+    id: Option<u32>,
 }
 
 impl DefaultDevice {
     pub(crate) fn set(&mut self, definition: DefaultDefinition) -> bool {
         match definition {
-            DefaultDefinition::Configured(name) => self.set_configured(Some(name)),
-            DefaultDefinition::Default(name) => self.set_default(Some(name)),
+            DefaultDefinition::Configured(name) => self.set_configured(name),
+            DefaultDefinition::Default(name) => self.set_default(name),
+        }
+    }
+
+    // Sorry, but the way that rustfmt works means that this looks ugly, so we'll skip
+    // formatting in this case.
+    pub(crate) fn get_active_node_id(&self) -> Option<u32> {
+        match (&self.configured, &self.default) {
+            (Some(node), _) if node.id.is_some() => node.id,
+            (_, Some(node)) if node.id.is_some() => node.id,
+            _ => None,
         }
     }
 
     pub(crate) fn get_configured(&self) -> Option<&String> {
-        self.configured.as_ref()
+        if let Some(configured) = &self.configured {
+            return Some(&configured.name);
+        }
+        None
     }
 
-    pub(crate) fn set_configured(&mut self, name: Option<String>) -> bool {
-        let changed = self.configured != name;
-        self.configured = name;
-        changed
+    pub(crate) fn set_configured(&mut self, name: String) -> bool {
+        // If this is the same as the existing, do nothing.
+        if let Some(node) = &self.configured
+            && node.name == name
+        {
+            return false;
+        }
+
+        self.configured = Some(DeviceState {
+            name: name.clone(),
+            id: None,
+        });
+        true
+    }
+
+    pub(crate) fn set_configured_node_id(&mut self, id: u32) -> bool {
+        if let Some(node) = &mut self.configured {
+            node.id = Some(id);
+            return true;
+        }
+        false
     }
 
     pub(crate) fn get_default(&self) -> Option<&String> {
-        self.default.as_ref()
+        if let Some(default) = &self.default {
+            return Some(&default.name);
+        }
+        None
     }
 
-    pub(crate) fn set_default(&mut self, name: Option<String>) -> bool {
-        let changed = self.default != name;
-        self.default = name;
-        changed
+    pub(crate) fn set_default(&mut self, name: String) -> bool {
+        if let Some(node) = &self.configured
+            && node.name == name
+        {
+            return false;
+        }
+
+        self.default = Some(DeviceState {
+            name: name.clone(),
+            id: None,
+        });
+        true
+    }
+
+    pub(crate) fn set_default_node_id(&mut self, id: u32) -> bool {
+        if let Some(node) = &mut self.default {
+            node.id = Some(id);
+
+            return if let Some(configured) = &self.configured {
+                // If configured.id is None, then this change is important to signal.
+                configured.id.is_none()
+            } else {
+                // Configured is not set, so this is a change.
+                true
+            };
+        }
+        false
+    }
+
+    /// When a device is added, we can check if it matches either the configured or default
+    /// and update the id accordingly.
+    pub(crate) fn device_added(&mut self, id: u32, name: &str) -> bool {
+        if let Some(node) = &mut self.configured
+            && node.name == name
+        {
+            node.id = Some(id);
+
+            // If we've changed this device, we should *ALWAYS* return true, this ensures
+            // that upstream can find the new default node.
+            return true;
+        }
+
+        if let Some(node) = &mut self.default
+            && node.name == name
+        {
+            node.id = Some(id);
+
+            return if let Some(configured) = &self.configured {
+                // If configured.id is None, then this change is important to signal.
+                configured.id.is_none()
+            } else {
+                // Configured is not set, so this is a change.
+                true
+            };
+        }
+
+        // Nothing Changed.
+        false
+    }
+
+    /// When a device is removed, if it's configured as a default, we need to clear the
+    /// node id.
+    pub(crate) fn device_removed(&mut self, id: u32) -> bool {
+        if let Some(node) = &mut self.configured
+            && node.id == Some(id)
+        {
+            node.id = None;
+            return true;
+        }
+
+        if let Some(node) = &mut self.default
+            && node.id == Some(id)
+        {
+            node.id = None;
+
+            return if let Some(configured) = &self.configured {
+                // If configured.id is None, then this change is important to signal.
+                configured.id.is_none()
+            } else {
+                // Configured is not set, so this is a change.
+                true
+            };
+        }
+
+        false
     }
 }
 
