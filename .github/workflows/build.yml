@@ -2,12 +2,10 @@ name: Build & Test
 
 on: [ push, pull_request, workflow_call, workflow_dispatch ]
 
-# TODO: Need to fix https://gitlab.freedesktop.org/pipewire/pipewire-rs/-/issues/75
-
 jobs:
   check_linux:
     name: Performing Linux Build / Update
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: "Install Dependencies"
         run: |
