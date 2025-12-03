@@ -1,8 +1,8 @@
 use crate::registry::PipewireRegistry;
 use crate::store::{FilterStore, LinkStore, LinkStoreMap, NodeStore, PortLocation, Store};
 use crate::{
-    registry, FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties,
-    PipewireInternalMessage, PipewireReceiver,
+    registry, FilterHandler, FilterProperties, FilterValue, LinkType,
+    NodeProperties, PipewireInternalMessage, PipewireReceiver,
 };
 use crate::{MediaClass, PWReceiver};
 use anyhow::Result;
@@ -10,7 +10,13 @@ use anyhow::{anyhow, bail};
 use log::{debug, error, info};
 use pipewire::core::Core;
 use pipewire::filter::{Filter, FilterFlags, FilterState, PortFlags};
-use pipewire::keys::{APP_ICON_NAME, APP_ID, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME, FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME};
+use pipewire::keys::{
+    APP_ICON_NAME, APP_ID, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME,
+    FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT,
+    MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION,
+    NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME,
+    NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME,
+};
 use pipewire::link::{Link, LinkListener, LinkState};
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
@@ -19,7 +25,12 @@ use pipewire::registry::Registry;
 use pipewire::spa::pod::builder::Builder;
 use pipewire::spa::pod::deserialize::PodDeserializer;
 use pipewire::spa::pod::{object, Pod, Property, Value, ValueArray};
-use pipewire::spa::sys::{spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position, SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_PARAM_Props, SPA_PROP_channelVolumes, SPA_PROP_mute, SPA_TYPE_OBJECT_ParamProcessLatency, SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR};
+use pipewire::spa::sys::{
+    spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position,
+    SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_PARAM_Props, SPA_PROP_channelVolumes,
+    SPA_PROP_mute, SPA_TYPE_OBJECT_ParamProcessLatency, SPA_AUDIO_CHANNEL_FL,
+    SPA_AUDIO_CHANNEL_FR,
+};
 use pipewire::spa::utils::Direction;
 
 use enum_map::{enum_map, EnumMap};
@@ -201,36 +212,34 @@ impl PipewireManager {
                                 .find(|p| p.key == SPA_PARAM_PORT_CONFIG_format);
 
                             // Format is optional
-                            if let Some(prop) = prop {
-                                if let Value::Object(object) = &prop.value {
-                                    // Value is of type SPA_TYPE_OBJECT_Format
-                                    let prop = object
-                                        .properties
-                                        .iter()
-                                        .find(|p| p.key == SPA_FORMAT_AUDIO_position);
+                            if let Some(prop) = prop
+                                && let Value::Object(object) = &prop.value
+                            {
+                                // Value is of type SPA_TYPE_OBJECT_Format
+                                let prop = object
+                                    .properties
+                                    .iter()
+                                    .find(|p| p.key == SPA_FORMAT_AUDIO_position);
 
-                                    if let Some(prop) = prop {
-                                        // Fucking hell, I hate how deep this is getting
-                                        if let Value::ValueArray(ValueArray::Id(array)) =
-                                            &prop.value
-                                        {
-                                            let mut store = listener_param_store.borrow_mut();
-                                            for (index, value) in array.iter().enumerate() {
-                                                let index = index as u32;
-                                                if value.0 == SPA_AUDIO_CHANNEL_FL {
-                                                    store.managed_node_add_port(
-                                                        listener_id,
-                                                        PortLocation::Left,
-                                                        index,
-                                                    );
-                                                }
-                                                if value.0 == SPA_AUDIO_CHANNEL_FR {
-                                                    store.managed_node_add_port(
-                                                        listener_id,
-                                                        PortLocation::Right,
-                                                        index,
-                                                    );
-                                                }
+                                if let Some(prop) = prop {
+                                    // Fucking hell, I hate how deep this is getting
+                                    if let Value::ValueArray(ValueArray::Id(array)) = &prop.value {
+                                        let mut store = listener_param_store.borrow_mut();
+                                        for (index, value) in array.iter().enumerate() {
+                                            let index = index as u32;
+                                            if value.0 == SPA_AUDIO_CHANNEL_FL {
+                                                store.managed_node_add_port(
+                                                    listener_id,
+                                                    PortLocation::Left,
+                                                    index,
+                                                );
+                                            }
+                                            if value.0 == SPA_AUDIO_CHANNEL_FR {
+                                                store.managed_node_add_port(
+                                                    listener_id,
+                                                    PortLocation::Right,
+                                                    index,
+                                                );
                                             }
                                         }
                                     }
@@ -242,31 +251,31 @@ impl PipewireManager {
                                 .iter()
                                 .find(|p| p.key == SPA_PROP_channelVolumes);
 
-
                             // Get the Left / Right value
-                            if let Some(prop) = prop {
-                                if let Value::ValueArray(ValueArray::Float(value)) = &prop.value {
-                                    // OK, so KDE and pwvucontrol use the highest value for their reference
-                                    let max = value
-                                        .iter()
-                                        .copied()
-                                        .max_by(|a, b| a.partial_cmp(b).unwrap())
-                                        .unwrap();
+                            if let Some(prop) = prop
+                                && let Value::ValueArray(ValueArray::Float(value)) = &prop.value
+                            {
+                                // OK, so KDE and pwvucontrol use the highest value for their reference
+                                let max = value
+                                    .iter()
+                                    .copied()
+                                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+                                    .unwrap();
 
-                                    let volume = (max.cbrt() * 100.0).round() as u8;
-                                    listener_param_store.borrow_mut().on_volume_change(listener_id, volume);
-                                }
+                                let volume = (max.cbrt() * 100.0).round() as u8;
+                                listener_param_store
+                                    .borrow_mut()
+                                    .on_volume_change(listener_id, volume);
                             }
 
-                            let prop = object
-                                .properties
-                                .iter()
-                                .find(|p| p.key == SPA_PROP_mute);
+                            let prop = object.properties.iter().find(|p| p.key == SPA_PROP_mute);
 
-                            if let Some(prop) = prop {
-                                if let Value::Bool(enabled) = &prop.value {
-                                    listener_param_store.borrow_mut().on_mute_change(listener_id, *enabled);
-                                }
+                            if let Some(prop) = prop
+                                && let Value::Bool(enabled) = &prop.value
+                            {
+                                listener_param_store
+                                    .borrow_mut()
+                                    .on_mute_change(listener_id, *enabled);
                             }
                         } else {
                             error!("Parameter Parse Error, Message was not of expected type");
@@ -289,8 +298,8 @@ impl PipewireManager {
             id: properties.node_id,
             props: node_properties.clone(),
             proxy,
-            listener,
-            proxy_listener,
+            _listener: listener,
+            _proxy_listener: proxy_listener,
 
             port_map: Default::default(),
             ports_ready: false,
@@ -372,10 +381,10 @@ impl PipewireManager {
                             Direction::Output,
                             PortFlags::MAP_BUFFERS,
                             properties! {
-                                    *FORMAT_DSP => "32 bit float mono audio",
-                                    *PORT_NAME => format!("output_{}", port),
-                                    *AUDIO_CHANNEL => format!("{}", port)
-                                },
+                                *FORMAT_DSP => "32 bit float mono audio",
+                                *PORT_NAME => format!("output_{}", port),
+                                *AUDIO_CHANNEL => format!("{}", port)
+                            },
                             &mut params,
                         )
                         .map_err(|e| anyhow!("Filter Input Creation Failed: {:?}", e))?,
@@ -465,8 +474,8 @@ impl PipewireManager {
                 registry::Direction::Out=> output_port_map,
             },
 
-            input_ports,
-            output_ports,
+            _input_ports: input_ports,
+            _output_ports: output_ports,
 
             ready_sender: Some(props.ready_sender),
         };
@@ -515,10 +524,10 @@ impl PipewireManager {
             let store = LinkStoreMap {
                 pw_id: None,
                 internal_id: link_id,
-                link,
+                _link: link,
                 _listener: lis,
-                source_port_id: src_index,
-                destination_port_id: tgt_index,
+                _source_port_id: src_index,
+                _destination_port_id: tgt_index,
             };
 
             port_map[port] = Some(store);
@@ -586,18 +595,18 @@ impl PipewireManager {
                 let ports = &node.ports[direction];
 
                 // Check whether this is a mono device
-                if ports.iter().count() == 1 {
-                    if let Some(index) = ports.keys().next() {
-                        return Ok((id, *index));
-                    }
+                if ports.iter().count() == 1
+                    && let Some(index) = ports.keys().next()
+                {
+                    return Ok((id, *index));
                 }
 
                 // Iterate over the ports, try and find the location
                 for (index, port) in ports.iter() {
-                    if let Ok(port_location) = PortLocation::from_str(&port.channel) {
-                        if port_location == location {
-                            return Ok((id, *index));
-                        }
+                    if let Ok(port_location) = PortLocation::from_str(&port.channel)
+                        && port_location == location
+                    {
+                        return Ok((id, *index));
                     }
                 }
 
@@ -666,10 +675,20 @@ impl PipewireManager {
 
         let mut store = self.store.borrow_mut();
         if let Some(pw_id) = pw_id {
-            store.unmanaged_node_set_meta(app_id, String::from("target.node"), Some(String::from("Spa:Id")), Some(pw_id.to_string()));
+            store.unmanaged_node_set_meta(
+                app_id,
+                String::from("target.node"),
+                Some(String::from("Spa:Id")),
+                Some(pw_id.to_string()),
+            );
         }
         if let Some(serial) = object_serial {
-            store.unmanaged_node_set_meta(app_id, String::from("target.object"), Some(String::from("Spa:Id")), Some(serial.to_string()));
+            store.unmanaged_node_set_meta(
+                app_id,
+                String::from("target.object"),
+                Some(String::from("Spa:Id")),
+                Some(serial.to_string()),
+            );
         }
 
         Ok(())
@@ -679,8 +698,18 @@ impl PipewireManager {
         let mut store = self.store.borrow_mut();
 
         // This should (in theory) route a target to the default
-        store.unmanaged_node_set_meta(app_id, String::from("target.node"), Some(String::from("Spa:Id")), Some("-1".to_string()));
-        store.unmanaged_node_set_meta(app_id, String::from("target.object"), Some(String::from("Spa:Id")), Some("-1".to_string()));
+        store.unmanaged_node_set_meta(
+            app_id,
+            String::from("target.node"),
+            Some(String::from("Spa:Id")),
+            Some("-1".to_string()),
+        );
+        store.unmanaged_node_set_meta(
+            app_id,
+            String::from("target.object"),
+            Some(String::from("Spa:Id")),
+            Some("-1".to_string()),
+        );
         Ok(())
     }
 

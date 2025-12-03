@@ -135,7 +135,7 @@ impl Store {
         self.factories.insert(id, factory);
     }
 
-    pub fn factory_get(&self, id: u32) -> Option<&RegistryFactory> {
+    pub fn _factory_get(&self, id: u32) -> Option<&RegistryFactory> {
         self.factories.get(&id)
     }
 
@@ -338,12 +338,13 @@ impl Store {
             .get_mut(&id)
             .expect("Attempted to lookup non-existing node!");
 
-        if node.ports_ready && node.pw_id.is_some() {
-            if let Some(sender) = node.ready_sender.take() {
-                debug!("[{}] Device Ready, sending callback", &id);
-                if let Some(sender) = sender {
-                    let _ = sender.send(());
-                }
+        if node.ports_ready
+            && node.pw_id.is_some()
+            && let Some(sender) = node.ready_sender.take()
+        {
+            debug!("[{}] Device Ready, sending callback", &id);
+            if let Some(sender) = sender {
+                let _ = sender.send(());
             }
         }
     }
@@ -352,7 +353,7 @@ impl Store {
         self.managed_nodes
             .iter()
             .find(|(_, node)| node.pw_id == Some(id))
-            .map(|(id, _)| id.clone())
+            .map(|(id, _)| *id)
     }
 
     // ----- NODE VOLUMES -----
@@ -392,10 +393,10 @@ impl Store {
 
         let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod).unwrap();
         let bytes = cursor.into_inner();
-        if let Some(bytes) = Pod::from_bytes(&bytes) {
-            if let Some(proxy) = &node.proxy {
-                proxy.set_param(ParamType::Props, 0, bytes);
-            }
+        if let Some(bytes) = Pod::from_bytes(&bytes)
+            && let Some(proxy) = &node.proxy
+        {
+            proxy.set_param(ParamType::Props, 0, bytes);
         }
         Ok(())
     }
@@ -435,11 +436,14 @@ impl Store {
         });
         let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod).unwrap();
         let bytes = cursor.into_inner();
-        if let Some(bytes) = Pod::from_bytes(&bytes) {
-            if let Some(proxy) = &node.proxy {
-                proxy.set_param(ParamType::Props, 0, bytes);
-            }
+
+        // Create the POD and send it to the proxy
+        if let Some(bytes) = Pod::from_bytes(&bytes)
+            && let Some(proxy) = &node.proxy
+        {
+            proxy.set_param(ParamType::Props, 0, bytes);
         }
+
         Ok(())
     }
 
@@ -510,13 +514,13 @@ impl Store {
     pub fn managed_link_ready(&mut self, id: Ulid, link_id: Ulid, pw_id: u32) {
         if let Some(link) = self.managed_links.get_mut(&id) {
             for port in PortLocation::iter() {
-                if let Some(port) = &mut link.links[port] {
-                    if port.internal_id == link_id {
-                        port.pw_id = Some(pw_id);
+                if let Some(port) = &mut link.links[port]
+                    && port.internal_id == link_id
+                {
+                    port.pw_id = Some(pw_id);
 
-                        // This will be unmanaged before the link callback, so take ownership
-                        self.unmanaged_links.remove(&pw_id);
-                    }
+                    // This will be unmanaged before the link callback, so take ownership
+                    self.unmanaged_links.remove(&pw_id);
                 }
             }
         }
@@ -601,7 +605,7 @@ impl Store {
         for client in self.unmanaged_devices.values_mut() {
             client.nodes.retain(|n| n != &id);
         }
-        
+
         // Check to make sure these aren't defaults
         if self.default_sink.device_removed(id) {
             self.send_default_sink();
@@ -614,20 +618,20 @@ impl Store {
     pub fn unmanaged_node_check(&mut self, id: u32) {
         if let Some(node) = self.unmanaged_device_nodes.get(&id) {
             let is_usable = self.is_usable_unmanaged_device_node(id);
-            if let Some(media_type) = is_usable {
-                if !self.usable_device_nodes.contains(&id) {
-                    self.usable_device_nodes.push(id);
-                    let node = DeviceNode {
-                        node_id: id,
-                        node_class: media_type,
-                        name: node.name.clone(),
-                        nickname: node.nickname.clone(),
-                        description: node.description.clone(),
-                    };
+            if let Some(media_type) = is_usable
+                && !self.usable_device_nodes.contains(&id)
+            {
+                self.usable_device_nodes.push(id);
+                let node = DeviceNode {
+                    node_id: id,
+                    node_class: media_type,
+                    name: node.name.clone(),
+                    nickname: node.nickname.clone(),
+                    description: node.description.clone(),
+                };
 
-                    let _ = self.callback_tx.send(PipewireReceiver::DeviceAdded(node));
-                    return;
-                }
+                let _ = self.callback_tx.send(PipewireReceiver::DeviceAdded(node));
+                return;
             }
 
             if is_usable.is_none() && self.usable_device_nodes.contains(&id) {
@@ -700,14 +704,14 @@ impl Store {
     }
 
     pub fn unmanaged_client_node_set_volume(&mut self, id: u32, volume: u8) {
-        if let Some(node) = self.unmanaged_client_node_get(id) {
-            if node.volume != volume {
-                node.volume = volume;
+        if let Some(node) = self.unmanaged_client_node_get(id)
+            && node.volume != volume
+        {
+            node.volume = volume;
 
-                let _ = self
-                    .callback_tx
-                    .send(PipewireReceiver::ApplicationVolumeChanged(id, volume));
-            }
+            let _ = self
+                .callback_tx
+                .send(PipewireReceiver::ApplicationVolumeChanged(id, volume));
         }
     }
 
@@ -750,11 +754,11 @@ impl Store {
         match target {
             TargetType::Node(Some(id)) => {
                 for node in self.managed_nodes.values() {
-                    if let Some(object_id) = node.pw_id {
-                        if object_id == id {
-                            result = Some(NodeTarget::Node(node.id));
-                            break;
-                        }
+                    if let Some(object_id) = node.pw_id
+                        && object_id == id
+                    {
+                        result = Some(NodeTarget::Node(node.id));
+                        break;
                     }
                 }
 
@@ -767,11 +771,11 @@ impl Store {
             }
             TargetType::Serial(Some(id)) => {
                 for node in self.managed_nodes.values() {
-                    if let Some(object_serial) = node.object_serial {
-                        if object_serial == id {
-                            result = Some(NodeTarget::Node(node.id));
-                            break;
-                        }
+                    if let Some(object_serial) = node.object_serial
+                        && object_serial == id
+                    {
+                        result = Some(NodeTarget::Node(node.id));
+                        break;
                     }
                 }
 
@@ -861,32 +865,30 @@ impl Store {
             return;
         }
 
-        if let Some(node) = self.unmanaged_client_nodes.get(&id) {
-            if let Some(media_type) = self.is_usable_unmanaged_client_node(id) {
-                if let Some(parent) = self.unmanaged_clients.get(&node.parent_id) {
-                    if !self.usable_client_nodes.contains(&id) {
-                        self.usable_client_nodes.push(id);
-                        let node = ApplicationNode {
-                            node_id: id,
-                            node_class: media_type,
-                            media_target: node.media_target,
+        if let Some(node) = self.unmanaged_client_nodes.get(&id)
+            && let Some(media_type) = self.is_usable_unmanaged_client_node(id)
+            && let Some(parent) = self.unmanaged_clients.get(&node.parent_id)
+            && !self.usable_client_nodes.contains(&id)
+        {
+            self.usable_client_nodes.push(id);
+            let node = ApplicationNode {
+                node_id: id,
+                node_class: media_type,
+                media_target: node.media_target,
 
-                            volume: node.volume,
-                            muted: node.is_muted,
+                volume: node.volume,
+                muted: node.is_muted,
 
-                            title: node.media_title.clone(),
+                title: node.media_title.clone(),
 
-                            name: node.application_name.clone(),
+                name: node.application_name.clone(),
 
-                            // We can safely panic! here, is_usable_unamanged_client_node checks this.
-                            process_name: parent.application_binary.clone().expect("NO BINARY"),
-                        };
+                // We can safely panic! here, is_usable_unamanged_client_node checks this.
+                process_name: parent.application_binary.clone().expect("NO BINARY"),
+            };
 
-                        let message = PipewireReceiver::ApplicationAdded(node);
-                        let _ = self.callback_tx.send(message);
-                    }
-                }
-            }
+            let message = PipewireReceiver::ApplicationAdded(node);
+            let _ = self.callback_tx.send(message);
         }
     }
 
@@ -979,13 +981,13 @@ impl Store {
 
         // Something may be trying to mess with a managed link, if so, completely drop our links
         // and report back to whatever is calling us that it's happened, so they can action it.
-        if let Some(id) = self.is_managed_link(id) {
-            if let Some(link) = self.managed_links.remove(&id) {
-                let _ = self.callback_tx.send(PipewireReceiver::ManagedLinkDropped(
-                    link.source,
-                    link.destination,
-                ));
-            }
+        if let Some(id) = self.is_managed_link(id)
+            && let Some(link) = self.managed_links.remove(&id)
+        {
+            let _ = self.callback_tx.send(PipewireReceiver::ManagedLinkDropped(
+                link.source,
+                link.destination,
+            ));
         }
     }
 
@@ -1013,8 +1015,8 @@ pub(crate) struct NodeStore {
     pub(crate) props: Properties,
 
     pub(crate) proxy: Node,
-    pub(crate) proxy_listener: ProxyListener,
-    pub(crate) listener: NodeListener,
+    pub(crate) _proxy_listener: ProxyListener,
+    pub(crate) _listener: NodeListener,
 
     // Nodes will always have inputs and outputs which directly link together, so we
     // don't need to track each side, we just need the ID and Location
@@ -1037,8 +1039,8 @@ pub struct FilterStore {
     pub(crate) port_map: EnumMap<Direction, EnumMap<PortLocation, u32>>,
 
     /// Details of the ports assigned to this filter
-    pub(crate) input_ports: Rc<RefCell<Vec<FilterPort>>>,
-    pub(crate) output_ports: Rc<RefCell<Vec<FilterPort>>>,
+    pub(crate) _input_ports: Rc<RefCell<Vec<FilterPort>>>,
+    pub(crate) _output_ports: Rc<RefCell<Vec<FilterPort>>>,
 
     /// These two fields need to exist purely to prevent the filter and the listener from
     /// being dropped, they're never directly accessed, they're just a store.
@@ -1067,12 +1069,12 @@ pub struct LinkStoreMap {
     pub(crate) internal_id: Ulid,
 
     /// Variables needed to keep this link alive
-    pub(crate) link: Link,
+    pub(crate) _link: Link,
     pub(crate) _listener: LinkListener,
 
     /// Internal Port Index Mapping
-    pub(crate) source_port_id: u32,
-    pub(crate) destination_port_id: u32,
+    pub(crate) _source_port_id: u32,
+    pub(crate) _destination_port_id: u32,
 }
 
 #[derive(Debug, Enum, EnumIter, Copy, Clone, PartialEq)]

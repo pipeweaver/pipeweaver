@@ -1,8 +1,8 @@
 pub extern crate oneshot;
+mod default_device;
 mod manager;
 mod registry;
 mod store;
-mod default_device;
 
 use crate::manager::run_pw_main_loop;
 use anyhow::{anyhow, bail, Result};
@@ -56,11 +56,7 @@ pub enum PipewireInternalMessage {
 
     RemoveDeviceNode(Ulid, oneshot::Sender<Result<()>>),
     RemoveFilterNode(Ulid, oneshot::Sender<Result<()>>),
-    RemoveDeviceLink(
-        LinkType,
-        LinkType,
-        oneshot::Sender<Result<()>>,
-    ),
+    RemoveDeviceLink(LinkType, LinkType, oneshot::Sender<Result<()>>),
 
     SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<()>>),
     SetNodeVolume(Ulid, u8, oneshot::Sender<Result<()>>),
@@ -216,18 +212,20 @@ impl Drop for PipewireRunner {
         let _ = self.send_message(PipewireMessage::Quit);
 
         // Wait on the threads to exit..
-        if let Some(pipewire_thread) = self.pipewire_thread.take() {
-            if let Err(e) = pipewire_thread.join() {
-                warn!("Unable to Join Pipewire Thread: {:?}", e);
-            }
+        if let Some(pipewire_thread) = self.pipewire_thread.take()
+            && let Err(e) = pipewire_thread.join()
+        {
+            warn!("Unable to Join Pipewire Thread: {:?}", e);
         }
+
         info!("[PIPEWIRE] Main Thread Stopped");
 
-        if let Some(messaging_thread) = self.messaging_thread.take() {
-            if let Err(e) = messaging_thread.join() {
-                warn!("Unable to Join Message Thread: {:?}", e);
-            }
+        if let Some(messaging_thread) = self.messaging_thread.take()
+            && let Err(e) = messaging_thread.join()
+        {
+            warn!("Unable to Join Message Thread: {:?}", e);
         }
+
         info!("[PIPEWIRE] Message Thread Stopped");
         info!("[PIPEWIRE] Stopped");
     }

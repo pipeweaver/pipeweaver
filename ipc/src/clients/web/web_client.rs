@@ -6,6 +6,7 @@ use anyhow::bail;
 use async_trait::async_trait;
 
 #[derive(Debug)]
+#[allow(unused)]
 pub struct WebClient {
     url: String,
     status: DaemonStatus,
