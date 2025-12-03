@@ -5,8 +5,8 @@ use crate::servers::http_server::{MeterEvent, PatchEvent};
 use crate::stop::Stop;
 use crate::APP_NAME_ID;
 use crate::{APP_DAEMON_NAME, APP_ID};
-use anyhow::{bail, Context};
 use anyhow::Result;
+use anyhow::{bail, Context};
 use ashpd::desktop::background::Background;
 use ini::Ini;
 use json_patch::diff;
@@ -253,6 +253,7 @@ impl PrimaryWorker {
 
         status.audio = config;
 
+        // TODO: We can probably cache this value somewhere instead of querying it every time
         status.config.auto_start = has_autostart().unwrap_or_else(|e| {
             warn!("Unable to obtain autostart status: {}", e);
             false
@@ -406,8 +407,6 @@ async fn set_autostart(enabled: bool) -> Result<()> {
 
 fn has_autostart() -> Result<bool> {
     let autostart_file = get_autostart_file()?;
-
-    debug!("Checking: {autostart_file:?}");
     Ok(autostart_file.exists())
 }
 
