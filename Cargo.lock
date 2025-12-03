@@ -1860,8 +1860,7 @@ dependencies = [
 [[package]]
 name = "ksni"
 version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3cc9a5e60d55371fd681051b05e9b58e1d818f5085f6364afe872c9347311f91"
+source = "git+https://github.com/FrostyCoolSlug/ksni.git#1fcf71080fd984719821babcc2c40daef2dad75a"
 dependencies = [
  "futures-util",
  "paste",

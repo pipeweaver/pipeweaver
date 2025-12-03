@@ -4,23 +4,25 @@ mod servers;
 mod settings;
 mod stop;
 
+use crate::handler::messaging::DaemonMessage;
 use crate::handler::primary_worker::start_primary_worker;
 use crate::platform::{spawn_runtime, spawn_tray};
 use crate::servers::http_server::spawn_http_server;
-use crate::servers::ipc_server::{ErrorState, bind_socket, spawn_ipc_server};
+use crate::servers::ipc_server::{bind_socket, spawn_ipc_server, ErrorState};
 use crate::stop::Stop;
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{anyhow, bail, Context, Result};
 use directories::ProjectDirs;
 use file_rotate::compression::Compression;
 use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
-use log::{LevelFilter, error, info};
-use pipeweaver_ipc::commands::HttpSettings;
+use log::{error, info, LevelFilter};
+use pipeweaver_ipc::commands::{DaemonCommand, HttpSettings};
 use simplelog::{
     ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
 };
+use std::env;
 use std::fs::create_dir_all;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::{join, task};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -141,6 +143,15 @@ async fn main() -> Result<()> {
         meter_tx.clone(),
         config_dir,
     ));
+
+    let args: Vec<String> = env::args().collect();
+    let hide_initial = args.contains(&"--startup".to_string());
+    if !hide_initial {
+        let (tx, rx) = oneshot::channel();
+        let message = DaemonMessage::RunDaemon(DaemonCommand::OpenInterface, tx);
+        let _ = manager_send.send(message).await;
+        let _ = rx.await;
+    }
 
     let tray_icon = task::spawn(spawn_tray(shutdown.clone(), manager_send.clone()));
     let runtime = task::spawn(spawn_runtime(shutdown.clone()));
