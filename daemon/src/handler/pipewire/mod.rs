@@ -1,3 +1,3 @@
 mod components;
-pub(crate) mod manager;
 mod ipc;
+pub(crate) mod manager;

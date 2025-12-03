@@ -1,8 +1,8 @@
 use crate::registry::PipewireRegistry;
 use crate::store::{FilterStore, LinkStore, LinkStoreMap, NodeStore, PortLocation, Store};
 use crate::{
-    registry, FilterHandler, FilterProperties, FilterValue, LinkType,
-    NodeProperties, PipewireInternalMessage, PipewireReceiver,
+    FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties,
+    PipewireInternalMessage, PipewireReceiver, registry,
 };
 use crate::{MediaClass, PWReceiver};
 use anyhow::Result;
@@ -24,16 +24,16 @@ use pipewire::proxy::ProxyT;
 use pipewire::registry::Registry;
 use pipewire::spa::pod::builder::Builder;
 use pipewire::spa::pod::deserialize::PodDeserializer;
-use pipewire::spa::pod::{object, Pod, Property, Value, ValueArray};
+use pipewire::spa::pod::{Pod, Property, Value, ValueArray, object};
 use pipewire::spa::sys::{
-    spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position,
+    SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR, SPA_FORMAT_AUDIO_position,
     SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_PARAM_Props, SPA_PROP_channelVolumes,
-    SPA_PROP_mute, SPA_TYPE_OBJECT_ParamProcessLatency, SPA_AUDIO_CHANNEL_FL,
-    SPA_AUDIO_CHANNEL_FR,
+    SPA_PROP_mute, SPA_TYPE_OBJECT_ParamProcessLatency, spa_process_latency_build,
+    spa_process_latency_info,
 };
 use pipewire::spa::utils::Direction;
 
-use enum_map::{enum_map, EnumMap};
+use enum_map::{EnumMap, enum_map};
 use oneshot::Sender;
 use parking_lot::RwLock;
 use pipewire::spa::param::ParamType;

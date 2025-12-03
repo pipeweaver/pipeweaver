@@ -6,8 +6,8 @@ use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME};
-use anyhow::{anyhow, bail, Result};
-use enum_map::{enum_map, EnumMap};
+use anyhow::{Result, anyhow, bail};
+use enum_map::{EnumMap, enum_map};
 use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{MediaClass, NodeProperties, PipewireMessage};
 use pipeweaver_profile::{
@@ -361,7 +361,8 @@ impl NodeManagementLocal for PipewireManager {
         self.link_create_node_to_filter(desc.id, mix_b).await?;
 
         // Create a map for this ID to the mixes
-        self.source_map.insert(desc.id, enum_map! { Mix::A => mix_a, Mix::B => mix_b });
+        self.source_map
+            .insert(desc.id, enum_map! { Mix::A => mix_a, Mix::B => mix_b });
 
         // And we're done :)
         Ok(())
@@ -399,8 +400,12 @@ impl NodeManagementLocal for PipewireManager {
     }
 
     async fn node_create_a_b_volumes(&mut self, desc: &DeviceDescription) -> Result<(Ulid, Ulid)> {
-        let mix_a = self.filter_volume_create(format!("{} A", desc.name)).await?;
-        let mix_b = self.filter_volume_create(format!("{} B", desc.name)).await?;
+        let mix_a = self
+            .filter_volume_create(format!("{} A", desc.name))
+            .await?;
+        let mix_b = self
+            .filter_volume_create(format!("{} B", desc.name))
+            .await?;
 
         Ok((mix_a, mix_b))
     }

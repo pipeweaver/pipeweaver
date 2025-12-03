@@ -15,7 +15,6 @@ fn main() {
 
     println!("cargo:rustc-env=GIT_HASH={}", version);
 
-
     println!("Building Web Interface..");
 
     // Next up, we need to build the UI into the Daemon

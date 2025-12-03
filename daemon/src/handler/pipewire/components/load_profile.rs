@@ -45,7 +45,6 @@ impl LoadProfileLocal for PipewireManager {
         }
         self.validate_device_order(true)?;
 
-
         for device in self.profile.devices.targets.physical_devices.clone() {
             self.node_create(NodeType::PhysicalTarget, &device.description)
                 .await?;

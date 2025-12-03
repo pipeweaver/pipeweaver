@@ -20,8 +20,8 @@ pub struct Socket<In, Out> {
 
 impl<In, Out> Socket<In, Out>
 where
-        for<'a> In: Deserialize<'a> + Unpin,
-        Out: Serialize + Unpin,
+    for<'a> In: Deserialize<'a> + Unpin,
+    Out: Serialize + Unpin,
 {
     // This is basically identical to the existing one, except we take an interprocess LocalSocketStream instead..
     pub fn new(stream: LocalSocketStream) -> Self {

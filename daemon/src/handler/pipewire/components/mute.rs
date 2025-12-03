@@ -5,7 +5,7 @@ use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use log::{debug, info, warn};
 use pipeweaver_pipewire::PipewireMessage;
 use pipeweaver_profile::MuteStates;
@@ -15,11 +15,26 @@ use strum::IntoEnumIterator;
 use ulid::Ulid;
 
 pub(crate) trait MuteManager {
-    async fn add_target_mute_node(&mut self, id: Ulid, state: MuteTarget, target: Ulid) -> Result<()>;
-    async fn del_target_mute_node(&mut self, id: Ulid, state: MuteTarget, target: Ulid) -> Result<()>;
+    async fn add_target_mute_node(
+        &mut self,
+        id: Ulid,
+        state: MuteTarget,
+        target: Ulid,
+    ) -> Result<()>;
+    async fn del_target_mute_node(
+        &mut self,
+        id: Ulid,
+        state: MuteTarget,
+        target: Ulid,
+    ) -> Result<()>;
     async fn clear_target_mute_nodes(&mut self, id: Ulid, state: MuteTarget) -> Result<()>;
 
-    async fn set_source_mute_state(&mut self, id: Ulid, target: MuteTarget, state: MuteState) -> Result<()>;
+    async fn set_source_mute_state(
+        &mut self,
+        id: Ulid,
+        target: MuteTarget,
+        state: MuteState,
+    ) -> Result<()>;
     async fn set_target_mute_state(&mut self, id: Ulid, state: MuteState) -> Result<()>;
 
     async fn is_source_muted_to_some(&self, source: Ulid, target: Ulid) -> Result<bool>;
@@ -28,9 +43,17 @@ pub(crate) trait MuteManager {
 }
 
 impl MuteManager for PipewireManager {
-    async fn add_target_mute_node(&mut self, id: Ulid, state: MuteTarget, target: Ulid) -> Result<()> {
+    async fn add_target_mute_node(
+        &mut self,
+        id: Ulid,
+        state: MuteTarget,
+        target: Ulid,
+    ) -> Result<()> {
         let node_type = self.get_node_type(target).ok_or(anyhow!("Unknown Node"))?;
-        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+        if !matches!(
+            node_type,
+            NodeType::PhysicalTarget | NodeType::VirtualTarget
+        ) {
             bail!("Provided Target is a Source Node");
         }
 
@@ -47,7 +70,8 @@ impl MuteManager for PipewireManager {
         if mute_state.mute_state.contains(&state) {
             // TODO: We should just 'Update' the current mute state, but for now, unmute it
             warn!("Un-muting {:?} to ensure consistency", state);
-            self.set_source_mute_state(id, state, MuteState::Unmuted).await?;
+            self.set_source_mute_state(id, state, MuteState::Unmuted)
+                .await?;
         }
 
         // Re-fetch the state to avoid borrow issues with calling `set_source_mute_state`
@@ -64,9 +88,17 @@ impl MuteManager for PipewireManager {
         Ok(())
     }
 
-    async fn del_target_mute_node(&mut self, id: Ulid, state: MuteTarget, target: Ulid) -> Result<()> {
+    async fn del_target_mute_node(
+        &mut self,
+        id: Ulid,
+        state: MuteTarget,
+        target: Ulid,
+    ) -> Result<()> {
         let node_type = self.get_node_type(target).ok_or(anyhow!("Unknown Node"))?;
-        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+        if !matches!(
+            node_type,
+            NodeType::PhysicalTarget | NodeType::VirtualTarget
+        ) {
             bail!("Provided Target is a Source Node");
         }
 
@@ -80,7 +112,8 @@ impl MuteManager for PipewireManager {
         if mute_state.mute_state.contains(&state) {
             // TODO: We should just 'Update' the current mute state, but for now, unmute it
             warn!("Un-muting {:?} to ensure consistency", state);
-            self.set_source_mute_state(id, state, MuteState::Unmuted).await?;
+            self.set_source_mute_state(id, state, MuteState::Unmuted)
+                .await?;
         }
 
         // Re-fetch the state to avoid borrow issues with calling `set_source_mute_state`
@@ -97,7 +130,8 @@ impl MuteManager for PipewireManager {
         if mute_state.mute_state.contains(&state) {
             // TODO: We should just 'Update' the current mute state, but for now, unmute it
             warn!("Un-muting {:?} to ensure consistency", state);
-            self.set_source_mute_state(id, state, MuteState::Unmuted).await?;
+            self.set_source_mute_state(id, state, MuteState::Unmuted)
+                .await?;
         }
 
         // Re-fetch the state to avoid borrow issues with calling `set_source_mute_state`
@@ -107,7 +141,12 @@ impl MuteManager for PipewireManager {
         Ok(())
     }
 
-    async fn set_source_mute_state(&mut self, id: Ulid, target: MuteTarget, state: MuteState) -> Result<()> {
+    async fn set_source_mute_state(
+        &mut self,
+        id: Ulid,
+        target: MuteTarget,
+        state: MuteState,
+    ) -> Result<()> {
         // Get the Mute States for this Source
         let mute_state = self.get_source_mute_states_mut(id)?;
 
@@ -123,7 +162,9 @@ impl MuteManager for PipewireManager {
         // Update the mute state
         match state {
             MuteState::Unmuted => mute_state.mute_state.retain(|&e| e != target),
-            MuteState::Muted => { mute_state.mute_state.insert(target); }
+            MuteState::Muted => {
+                mute_state.mute_state.insert(target);
+            }
         }
 
         // Let's do this again for the new values
@@ -161,8 +202,14 @@ impl MuteManager for PipewireManager {
                 self.mute_restore_routes(id, &mute_targets).await?;
             } else {
                 debug!("Transition: Muted (Some) → Muted (Different Some)");
-                let restore_routes = mute_targets.difference(&new_mute_targets).copied().collect();
-                let remove_routes = new_mute_targets.difference(&mute_targets).copied().collect();
+                let restore_routes = mute_targets
+                    .difference(&new_mute_targets)
+                    .copied()
+                    .collect();
+                let remove_routes = new_mute_targets
+                    .difference(&mute_targets)
+                    .copied()
+                    .collect();
 
                 self.mute_restore_routes(id, &restore_routes).await?;
                 self.mute_remove_routes(id, &remove_routes).await?;
@@ -176,7 +223,10 @@ impl MuteManager for PipewireManager {
 
     async fn set_target_mute_state(&mut self, id: Ulid, state: MuteState) -> Result<()> {
         let node_type = self.get_node_type(id).ok_or(anyhow!("Unknown Node"))?;
-        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+        if !matches!(
+            node_type,
+            NodeType::PhysicalTarget | NodeType::VirtualTarget
+        ) {
             bail!("Provided Target is a Source Node");
         }
 
@@ -214,10 +264,13 @@ impl MuteManager for PipewireManager {
             }
         } else {
             // Apply mute state to Pipewire
-            let message = PipewireMessage::SetNodeMute(id, match state {
-                MuteState::Unmuted => false,
-                MuteState::Muted => true,
-            });
+            let message = PipewireMessage::SetNodeMute(
+                id,
+                match state {
+                    MuteState::Unmuted => false,
+                    MuteState::Muted => true,
+                },
+            );
             let _ = self.pipewire().send_message(message);
         }
 
@@ -251,7 +304,10 @@ impl MuteManager for PipewireManager {
 
     async fn get_target_mute_state(&self, target: Ulid) -> Result<MuteState> {
         let node_type = self.get_node_type(target).ok_or(anyhow!("Unknown Node"))?;
-        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+        if !matches!(
+            node_type,
+            NodeType::PhysicalTarget | NodeType::VirtualTarget
+        ) {
             bail!("Provided Source is a Target Node");
         }
 
@@ -286,17 +342,28 @@ trait MuteManagerLocal {
 impl MuteManagerLocal for PipewireManager {
     fn get_mute_targets(state: &MuteStates) -> HashSet<Ulid> {
         // Check whether any target is empty, and assume a MuteToAll..
-        if state.mute_state.iter().any(|&target| state.mute_targets[target].is_empty()) {
+        if state
+            .mute_state
+            .iter()
+            .any(|&target| state.mute_targets[target].is_empty())
+        {
             return HashSet::new();
         }
 
         // Pull out the specific unique targets from all active Mute States
-        state.mute_state.iter().flat_map(|&t| state.mute_targets[t].iter().copied()).collect()
+        state
+            .mute_state
+            .iter()
+            .flat_map(|&t| state.mute_targets[t].iter().copied())
+            .collect()
     }
 
     fn get_source_mute_states(&self, source: Ulid) -> Result<&MuteStates> {
         let node_type = self.get_node_type(source).ok_or(anyhow!("Unknown Node"))?;
-        if !matches!(node_type, NodeType::PhysicalSource | NodeType::VirtualSource) {
+        if !matches!(
+            node_type,
+            NodeType::PhysicalSource | NodeType::VirtualSource
+        ) {
             bail!("Provided Source is a Target Node");
         }
 
@@ -312,7 +379,10 @@ impl MuteManagerLocal for PipewireManager {
 
     fn get_source_mute_states_mut(&mut self, source: Ulid) -> Result<&mut MuteStates> {
         let node_type = self.get_node_type(source).ok_or(anyhow!("Unknown Node"))?;
-        if !matches!(node_type, NodeType::PhysicalSource | NodeType::VirtualSource) {
+        if !matches!(
+            node_type,
+            NodeType::PhysicalSource | NodeType::VirtualSource
+        ) {
             bail!("Provided Source is a Target Node");
         }
 
@@ -356,16 +426,23 @@ impl MuteManagerLocal for PipewireManager {
             bail!("Route doesn't Exist");
         }
 
-        let node_type = self.get_node_type(target).ok_or(anyhow!("Cannot Find Node"))?;
-        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+        let node_type = self
+            .get_node_type(target)
+            .ok_or(anyhow!("Cannot Find Node"))?;
+        if !matches!(
+            node_type,
+            NodeType::PhysicalTarget | NodeType::VirtualTarget
+        ) {
             bail!("Provided Target is a Source Node");
         }
 
         let target_mix = self.routing_get_target_mix(&target).await?;
         if node_type == NodeType::PhysicalTarget {
-            self.link_remove_filter_to_filter(map[target_mix], target).await?;
+            self.link_remove_filter_to_filter(map[target_mix], target)
+                .await?;
         } else {
-            self.link_remove_filter_to_node(map[target_mix], target).await?;
+            self.link_remove_filter_to_node(map[target_mix], target)
+                .await?;
         }
 
         Ok(())
@@ -379,8 +456,10 @@ impl MuteManagerLocal for PipewireManager {
         let profile_volume_b = self.get_node_volume(source, Mix::B)?;
 
         debug!("Action: Restore Volume for Channel");
-        self.filter_volume_set(map[Mix::A], profile_volume_a).await?;
-        self.filter_volume_set(map[Mix::B], profile_volume_b).await?;
+        self.filter_volume_set(map[Mix::A], profile_volume_a)
+            .await?;
+        self.filter_volume_set(map[Mix::B], profile_volume_b)
+            .await?;
 
         Ok(())
     }
@@ -404,8 +483,13 @@ impl MuteManagerLocal for PipewireManager {
             bail!("Route doesn't Exist");
         }
 
-        let node_type = self.get_node_type(target).ok_or(anyhow!("Cannot Find Node"))?;
-        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+        let node_type = self
+            .get_node_type(target)
+            .ok_or(anyhow!("Cannot Find Node"))?;
+        if !matches!(
+            node_type,
+            NodeType::PhysicalTarget | NodeType::VirtualTarget
+        ) {
             bail!("Provided Target is a Source Node");
         }
 

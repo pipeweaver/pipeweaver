@@ -9,9 +9,9 @@ use crate::platform::{spawn_runtime, spawn_tray};
 use crate::servers::http_server::spawn_http_server;
 use crate::servers::ipc_server::{bind_socket, spawn_ipc_server};
 use crate::stop::Stop;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use directories::ProjectDirs;
-use log::{error, info, LevelFilter};
+use log::{LevelFilter, error, info};
 use pipeweaver_ipc::commands::HttpSettings;
 use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::sync::{broadcast, mpsc};
@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
         TerminalMode::Mixed,
         ColorChoice::Auto,
     )])
-        .context("Could not configure the logger")?;
+    .context("Could not configure the logger")?;
 
     info!("Starting {} v{} - {}", APP_NAME, VERSION, HASH);
 

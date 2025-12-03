@@ -20,7 +20,7 @@ use pipewire::properties::Properties;
 use pipewire::proxy::ProxyListener;
 use pipewire::spa::param::ParamType;
 use pipewire::spa::pod::serialize::PodSerializer;
-use pipewire::spa::pod::{object, Pod, Property, Value, ValueArray};
+use pipewire::spa::pod::{Pod, Property, Value, ValueArray, object};
 use pipewire::spa::sys::{SPA_PROP_channelVolumes, SPA_PROP_mute};
 use pipewire::spa::utils;
 use std::cell::RefCell;

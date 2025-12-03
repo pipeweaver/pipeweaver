@@ -1,6 +1,6 @@
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::manager::PipewireManager;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use log::{debug, warn};
 use pipeweaver_pipewire::PipewireMessage::{
     ClearApplicationTarget, SetApplicationMute, SetApplicationTarget, SetApplicationVolume,

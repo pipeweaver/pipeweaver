@@ -1,8 +1,11 @@
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::manager::PipewireManager;
-use anyhow::anyhow;
 use anyhow::Result;
-use pipeweaver_profile::{DeviceDescription, PhysicalSourceDevice, PhysicalTargetDevice, VirtualSourceDevice, VirtualTargetDevice};
+use anyhow::anyhow;
+use pipeweaver_profile::{
+    DeviceDescription, PhysicalSourceDevice, PhysicalTargetDevice, VirtualSourceDevice,
+    VirtualTargetDevice,
+};
 use pipeweaver_shared::NodeType;
 use ulid::Ulid;
 
@@ -59,7 +62,6 @@ impl ProfileManagement for PipewireManager {
             .find(|d| d.description.id == id)
     }
 
-
     fn get_physical_target(&self, id: Ulid) -> Option<&PhysicalTargetDevice> {
         self.profile
             .devices
@@ -77,7 +79,6 @@ impl ProfileManagement for PipewireManager {
             .iter_mut()
             .find(|d| d.description.id == id)
     }
-
 
     fn get_virtual_target(&self, id: Ulid) -> Option<&VirtualTargetDevice> {
         self.profile
@@ -103,10 +104,18 @@ impl ProfileManagement for PipewireManager {
 
         let err = anyhow!("Failed to Get Node Type");
         match node_type {
-            NodeType::PhysicalSource => Ok(&mut self.get_physical_source_mut(id).ok_or(err)?.description),
-            NodeType::PhysicalTarget => Ok(&mut self.get_physical_target_mut(id).ok_or(err)?.description),
-            NodeType::VirtualSource => Ok(&mut self.get_virtual_source_mut(id).ok_or(err)?.description),
-            NodeType::VirtualTarget => Ok(&mut self.get_virtual_target_mut(id).ok_or(err)?.description),
+            NodeType::PhysicalSource => {
+                Ok(&mut self.get_physical_source_mut(id).ok_or(err)?.description)
+            }
+            NodeType::PhysicalTarget => {
+                Ok(&mut self.get_physical_target_mut(id).ok_or(err)?.description)
+            }
+            NodeType::VirtualSource => {
+                Ok(&mut self.get_virtual_source_mut(id).ok_or(err)?.description)
+            }
+            NodeType::VirtualTarget => {
+                Ok(&mut self.get_virtual_target_mut(id).ok_or(err)?.description)
+            }
         }
     }
 }

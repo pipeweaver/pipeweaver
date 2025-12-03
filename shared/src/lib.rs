@@ -33,14 +33,18 @@ pub enum MuteState {
     Muted,
 }
 
-#[derive(Default, Debug, Copy, Clone, Hash, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(
+    Default, Debug, Copy, Clone, Hash, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq,
+)]
 pub enum MuteTarget {
     #[default]
     TargetA,
     TargetB,
 }
 
-#[derive(Default, Debug, Copy, Clone, Hash, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(
+    Default, Debug, Copy, Clone, Hash, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq,
+)]
 pub enum OrderGroup {
     #[default]
     Default,

@@ -3,7 +3,7 @@ use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::handler::primary_worker::WorkerMessage;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use log::debug;
 use pipeweaver_ipc::commands::PhysicalDevice;
 use pipeweaver_pipewire::DeviceNode;
@@ -16,8 +16,16 @@ use ulid::Ulid;
 pub(crate) trait PhysicalDevices {
     async fn connect_for_node(&mut self, id: Ulid) -> Result<()>;
 
-    async fn source_device_added(&mut self, node: PhysicalDevice, sender: Sender<WorkerMessage>) -> Result<()>;
-    async fn target_device_added(&mut self, node: PhysicalDevice, sender: Sender<WorkerMessage>) -> Result<()>;
+    async fn source_device_added(
+        &mut self,
+        node: PhysicalDevice,
+        sender: Sender<WorkerMessage>,
+    ) -> Result<()>;
+    async fn target_device_added(
+        &mut self,
+        node: PhysicalDevice,
+        sender: Sender<WorkerMessage>,
+    ) -> Result<()>;
 
     async fn source_device_removed(&mut self, node_id: u32) -> Result<()>;
     async fn target_device_removed(&mut self, node_id: u32) -> Result<()>;
@@ -30,29 +38,41 @@ impl PhysicalDevices for PipewireManager {
     async fn connect_for_node(&mut self, id: Ulid) -> Result<()> {
         let err = anyhow!("Cannot Locate Node");
         let node_type = self.get_node_type(id).ok_or(err)?;
-        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::PhysicalSource) {
+        if !matches!(
+            node_type,
+            NodeType::PhysicalTarget | NodeType::PhysicalSource
+        ) {
             bail!("Provided Target is not a Physical Node");
         }
 
         let err = anyhow!("Cannot Find Target Node by ID: {}", id);
         let devices = match node_type {
             NodeType::PhysicalSource => {
-                let node = self.profile.devices.sources.physical_devices.iter().find(|node| {
-                    node.description.id == id
-                }).ok_or(err)?;
+                let node = self
+                    .profile
+                    .devices
+                    .sources
+                    .physical_devices
+                    .iter()
+                    .find(|node| node.description.id == id)
+                    .ok_or(err)?;
                 node.attached_devices.clone()
             }
             NodeType::PhysicalTarget => {
-                let node = self.profile.devices.targets.physical_devices.iter().find(|node| {
-                    node.description.id == id
-                }).ok_or(err)?;
+                let node = self
+                    .profile
+                    .devices
+                    .targets
+                    .physical_devices
+                    .iter()
+                    .find(|node| node.description.id == id)
+                    .ok_or(err)?;
                 node.attached_devices.clone()
             }
             _ => {
                 bail!("Incorrect Node Type");
             }
         };
-
 
         // While during 'device added' we attempt to fix the profile, we're not going to do that
         // here, as we're iterating over known configuration, so we'll avoid the 'best guess'
@@ -64,7 +84,8 @@ impl PhysicalDevices for PipewireManager {
                     for paired in &devices {
                         // Check by Name First
                         if paired.name == device.name {
-                            self.link_create_unmanaged_to_filter(device.node_id, id).await?;
+                            self.link_create_unmanaged_to_filter(device.node_id, id)
+                                .await?;
                         }
                     }
                 }
@@ -75,7 +96,8 @@ impl PhysicalDevices for PipewireManager {
                     for paired in &devices {
                         // Check by Name First
                         if paired.name == device.name {
-                            self.link_create_filter_to_unmanaged(id, device.node_id).await?;
+                            self.link_create_filter_to_unmanaged(id, device.node_id)
+                                .await?;
                         }
                     }
                 }
@@ -86,14 +108,16 @@ impl PhysicalDevices for PipewireManager {
         Ok(())
     }
 
-
-    async fn source_device_added(&mut self, node: PhysicalDevice, sender: Sender<WorkerMessage>) -> Result<()> {
+    async fn source_device_added(
+        &mut self,
+        node: PhysicalDevice,
+        sender: Sender<WorkerMessage>,
+    ) -> Result<()> {
         self.node_list[DeviceType::Source].push(node.clone());
 
         // We need to check through our profile to see if we can find this device
         let devices = self.profile.devices.sources.physical_devices.clone();
-        'start: for (dev_i, device) in devices.iter().enumerate()
-        {
+        'start: for (dev_i, device) in devices.iter().enumerate() {
             // Clarification needed first, we go over the 'attached device' list twice, the
             // first time to match the absolute ALSA defined name, and the second time to
             // attempt to match the description (Human Readable Name). The main reason we do
@@ -104,8 +128,12 @@ impl PhysicalDevices for PipewireManager {
             if let Some(node_name) = &node.name {
                 for (name_i, dev) in device.attached_devices.iter().enumerate() {
                     if let Some(name) = &dev.name
-                        && name == node_name {
-                        debug!("Attaching Node {} to {}", node.node_id, device.description.id);
+                        && name == node_name
+                    {
+                        debug!(
+                            "Attaching Node {} to {}",
+                            node.node_id, device.description.id
+                        );
 
                         // Got a hit, attach to our filter, and bring it into the tree
                         self.link_create_unmanaged_to_filter(node.node_id, device.description.id)
@@ -131,9 +159,13 @@ impl PhysicalDevices for PipewireManager {
             if let Some(node_desc) = &node.description {
                 for (desc_i, dev) in device.attached_devices.iter().enumerate() {
                     if let Some(desc) = &dev.description
-                        && desc == node_desc {
+                        && desc == node_desc
+                    {
                         // Firstly, attach the Node
-                        debug!("Attaching Node {} to {}", node.node_id, device.description.id);
+                        debug!(
+                            "Attaching Node {} to {}",
+                            node.node_id, device.description.id
+                        );
                         self.link_create_unmanaged_to_filter(node.node_id, device.description.id)
                             .await?;
 
@@ -159,21 +191,29 @@ impl PhysicalDevices for PipewireManager {
         Ok(())
     }
 
-    async fn target_device_added(&mut self, node: PhysicalDevice, sender: Sender<WorkerMessage>) -> Result<()> {
+    async fn target_device_added(
+        &mut self,
+        node: PhysicalDevice,
+        sender: Sender<WorkerMessage>,
+    ) -> Result<()> {
         self.node_list[DeviceType::Target].push(node.clone());
 
         // Same as source node above, so read the comments there :)
         let devices = self.profile.devices.targets.physical_devices.clone();
-        'start: for (dev_i, device) in devices.iter().enumerate()
-        {
+        'start: for (dev_i, device) in devices.iter().enumerate() {
             if let Some(node_name) = &node.name {
                 for (name_i, dev) in device.attached_devices.iter().enumerate() {
                     if let Some(name) = &dev.name
-                        && name == node_name {
-                        debug!("Attaching Node {} to {}", node.node_id, device.description.id);
+                        && name == node_name
+                    {
+                        debug!(
+                            "Attaching Node {} to {}",
+                            node.node_id, device.description.id
+                        );
 
                         // Got a hit, attach to our filter, and bring it into the tree
-                        self.link_create_filter_to_unmanaged(device.description.id, node.node_id).await?;
+                        self.link_create_filter_to_unmanaged(device.description.id, node.node_id)
+                            .await?;
 
                         let mut descriptor = dev.clone();
                         descriptor.description = node.description.clone();
@@ -193,10 +233,15 @@ impl PhysicalDevices for PipewireManager {
             if let Some(node_desc) = &node.description {
                 for (desc_i, dev) in device.attached_devices.iter().enumerate() {
                     if let Some(desc) = &dev.description
-                        && desc == node_desc {
+                        && desc == node_desc
+                    {
                         // Firstly, attach the Node
-                        debug!("Attaching Node {} to {}", device.description.id, node.node_id);
-                        self.link_create_filter_to_unmanaged(device.description.id, node.node_id).await?;
+                        debug!(
+                            "Attaching Node {} to {}",
+                            device.description.id, node.node_id
+                        );
+                        self.link_create_filter_to_unmanaged(device.description.id, node.node_id)
+                            .await?;
 
                         debug!("Updating Profile Node to Name: {:?}", node.name);
                         let mut descriptor = dev.clone();
@@ -216,16 +261,20 @@ impl PhysicalDevices for PipewireManager {
         }
 
         let devices = self.profile.devices.targets.virtual_devices.clone();
-        'start: for (dev_i, device) in devices.iter().enumerate()
-        {
+        'start: for (dev_i, device) in devices.iter().enumerate() {
             if let Some(node_name) = &node.name {
                 for (name_i, dev) in device.attached_devices.iter().enumerate() {
                     if let Some(name) = &dev.name
-                        && name == node_name {
-                        debug!("Attaching Node {} to {}", node.node_id, device.description.id);
+                        && name == node_name
+                    {
+                        debug!(
+                            "Attaching Node {} to {}",
+                            node.node_id, device.description.id
+                        );
 
                         // Got a hit, attach to our filter, and bring it into the tree
-                        self.link_create_node_to_unmanaged(device.description.id, node.node_id).await?;
+                        self.link_create_node_to_unmanaged(device.description.id, node.node_id)
+                            .await?;
 
                         let mut descriptor = dev.clone();
                         descriptor.description = node.description.clone();
@@ -245,10 +294,15 @@ impl PhysicalDevices for PipewireManager {
             if let Some(node_desc) = &node.description {
                 for (desc_i, dev) in device.attached_devices.iter().enumerate() {
                     if let Some(desc) = &dev.description
-                        && desc == node_desc {
+                        && desc == node_desc
+                    {
                         // Firstly, attach the Node
-                        debug!("Attaching Node {} to {}", device.description.id, node.node_id);
-                        self.link_create_node_to_unmanaged(device.description.id, node.node_id).await?;
+                        debug!(
+                            "Attaching Node {} to {}",
+                            device.description.id, node.node_id
+                        );
+                        self.link_create_node_to_unmanaged(device.description.id, node.node_id)
+                            .await?;
 
                         debug!("Updating Profile Node to Name: {:?}", node.name);
                         let mut descriptor = dev.clone();
@@ -299,7 +353,8 @@ impl PhysicalDevices for PipewireManager {
                 device.attached_devices.push(new_node.clone());
                 let pw_node = self.locate_node(new_node);
                 if let Some(node) = pw_node {
-                    self.link_create_unmanaged_to_filter(node.node_id, id).await?;
+                    self.link_create_unmanaged_to_filter(node.node_id, id)
+                        .await?;
                 }
             }
             NodeType::PhysicalTarget => {
@@ -313,7 +368,8 @@ impl PhysicalDevices for PipewireManager {
                 device.attached_devices.push(new_node.clone());
                 let pw_node = self.locate_node(new_node);
                 if let Some(node) = pw_node {
-                    self.link_create_filter_to_unmanaged(id, node.node_id).await?;
+                    self.link_create_filter_to_unmanaged(id, node.node_id)
+                        .await?;
                 }
             }
             NodeType::VirtualTarget => {
@@ -348,7 +404,8 @@ impl PhysicalDevices for PipewireManager {
                 // Attempt to locate this node in our list
                 let pw_node = self.locate_node(descriptor);
                 if let Some(node) = pw_node {
-                    self.link_remove_unmanaged_to_filter(node.node_id, id).await?;
+                    self.link_remove_unmanaged_to_filter(node.node_id, id)
+                        .await?;
                 }
             }
             NodeType::PhysicalTarget => {
@@ -358,7 +415,8 @@ impl PhysicalDevices for PipewireManager {
                 // Attempt to locate this node in our list
                 let pw_node = self.locate_node(descriptor);
                 if let Some(node) = pw_node {
-                    self.link_remove_filter_to_unmanaged(id, node.node_id).await?;
+                    self.link_remove_filter_to_unmanaged(id, node.node_id)
+                        .await?;
                 }
             }
             NodeType::VirtualTarget => {
@@ -372,7 +430,7 @@ impl PhysicalDevices for PipewireManager {
                     self.link_remove_node_to_unmanaged(id, node.node_id).await?;
                 }
             }
-            _ => bail!("Node is not a Physical Node")
+            _ => bail!("Node is not a Physical Node"),
         }
 
         Ok(())
@@ -386,14 +444,20 @@ trait PhysicalDevicesLocal {
 impl PhysicalDevicesLocal for PipewireManager {
     fn locate_node(&self, descriptor: PhysicalDeviceDescriptor) -> Option<&DeviceNode> {
         if let Some(name) = descriptor.name {
-            let node = self.device_nodes.values().find(|node| node.name.as_ref() == Some(&name));
+            let node = self
+                .device_nodes
+                .values()
+                .find(|node| node.name.as_ref() == Some(&name));
             if let Some(node) = node {
                 return Some(node);
             }
         }
 
         if let Some(desc) = descriptor.description {
-            return self.device_nodes.values().find(|node| node.description.as_ref() == Some(&desc));
+            return self
+                .device_nodes
+                .values()
+                .find(|node| node.description.as_ref() == Some(&desc));
         }
 
         None

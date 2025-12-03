@@ -59,8 +59,7 @@ impl Client for IPCClient {
     }
 
     async fn command(&mut self, command: APICommand) -> Result<()> {
-        self.send(DaemonRequest::Pipewire(command))
-            .await
+        self.send(DaemonRequest::Pipewire(command)).await
     }
 
     fn status(&self) -> &DaemonStatus {

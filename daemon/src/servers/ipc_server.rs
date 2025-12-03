@@ -1,7 +1,7 @@
-use crate::handler::packet::{handle_packet, Messenger};
+use crate::handler::packet::{Messenger, handle_packet};
 use crate::servers::http_server::PatchEvent;
-use crate::{Stop, APP_NAME, APP_NAME_ID};
-use anyhow::{bail, Error, Result};
+use crate::{APP_NAME, APP_NAME_ID, Stop};
+use anyhow::{Error, Result, bail};
 use directories::BaseDirs;
 use interprocess::local_socket::tokio::prelude::{LocalSocketListener, LocalSocketStream};
 use interprocess::local_socket::traits::tokio::{Listener, Stream};

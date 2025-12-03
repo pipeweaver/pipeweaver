@@ -1,7 +1,9 @@
 use crate::client::Client;
 use anyhow::Result;
 
-use crate::commands::{APICommand, APICommandResponse, DaemonRequest, DaemonResponse, DaemonStatus};
+use crate::commands::{
+    APICommand, APICommandResponse, DaemonRequest, DaemonResponse, DaemonStatus,
+};
 use anyhow::bail;
 use async_trait::async_trait;
 

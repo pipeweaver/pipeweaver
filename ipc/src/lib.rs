@@ -1,6 +1,6 @@
-pub mod commands;
-pub mod clients;
 mod client;
+pub mod clients;
+pub mod commands;
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right

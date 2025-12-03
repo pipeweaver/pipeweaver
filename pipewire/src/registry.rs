@@ -1,6 +1,6 @@
+use crate::NodeTarget;
 use crate::default_device::DefaultDefinition;
 use crate::store::{Store, TargetType};
-use crate::NodeTarget;
 use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
 use log::debug;
@@ -17,8 +17,8 @@ use pipewire::node::{Node, NodeChangeMask, NodeListener};
 use pipewire::registry::Listener;
 use pipewire::registry::Registry;
 use pipewire::spa::param::ParamType;
-use pipewire::spa::pod::deserialize::PodDeserializer;
 use pipewire::spa::pod::Value::Bool;
+use pipewire::spa::pod::deserialize::PodDeserializer;
 use pipewire::spa::pod::{Value, ValueArray};
 use pipewire::spa::sys::{SPA_PARAM_Props, SPA_PROP_channelVolumes, SPA_PROP_mute};
 use pipewire::spa::utils::dict::DictRef;
@@ -90,7 +90,7 @@ impl PipewireRegistry {
                                                         PodDeserializer::deserialize_any_from(
                                                             pod.as_bytes(),
                                                         )
-                                                            .map(|(_, v)| v);
+                                                        .map(|(_, v)| v);
 
                                                     if let Ok(Value::Object(object)) = pod
                                                         && object.id == SPA_PARAM_Props
@@ -103,8 +103,8 @@ impl PipewireRegistry {
                                                         // Get the Left / Right value
                                                         if let Some(prop) = prop
                                                             && let Value::ValueArray(
-                                                            ValueArray::Float(value),
-                                                        ) = &prop.value
+                                                                ValueArray::Float(value),
+                                                            ) = &prop.value
                                                         {
                                                             let vol = if value.is_empty() {
                                                                 0_f32
@@ -282,7 +282,7 @@ impl PipewireRegistry {
                                                     //debug!("Props: {:?}", info);
                                                     if let Some(props) = info.props()
                                                         && let Some(process) =
-                                                        props.get(*APP_PROCESS_BINARY)
+                                                            props.get(*APP_PROCESS_BINARY)
                                                     {
                                                         info_local
                                                             .borrow_mut()
@@ -340,9 +340,9 @@ impl PipewireRegistry {
                                                 && _type == Some("Spa:String:JSON")
                                                 && let Some(val) = value
                                                 && let Ok(json) =
-                                                serde_json::from_str::<serde_json::Value>(val)
+                                                    serde_json::from_str::<serde_json::Value>(val)
                                                 && let Some(name) =
-                                                json.get("name").and_then(|v| v.as_str())
+                                                    json.get("name").and_then(|v| v.as_str())
                                             {
                                                 listen_store.borrow_mut().set_default_sink(
                                                     DefaultDefinition::Default(String::from(name)),
@@ -353,9 +353,9 @@ impl PipewireRegistry {
                                                 && _type == Some("Spa:String:JSON")
                                                 && let Some(val) = value
                                                 && let Ok(json) =
-                                                serde_json::from_str::<serde_json::Value>(val)
+                                                    serde_json::from_str::<serde_json::Value>(val)
                                                 && let Some(name) =
-                                                json.get("name").and_then(|v| v.as_str())
+                                                    json.get("name").and_then(|v| v.as_str())
                                             {
                                                 listen_store.borrow_mut().set_default_sink(
                                                     DefaultDefinition::Configured(String::from(
@@ -367,9 +367,9 @@ impl PipewireRegistry {
                                                 && _type == Some("Spa:String:JSON")
                                                 && let Some(val) = value
                                                 && let Ok(json) =
-                                                serde_json::from_str::<serde_json::Value>(val)
+                                                    serde_json::from_str::<serde_json::Value>(val)
                                                 && let Some(name) =
-                                                json.get("name").and_then(|v| v.as_str())
+                                                    json.get("name").and_then(|v| v.as_str())
                                             {
                                                 listen_store.borrow_mut().set_default_source(
                                                     DefaultDefinition::Default(String::from(name)),
@@ -380,12 +380,14 @@ impl PipewireRegistry {
                                                 && _type == Some("Spa:String:JSON")
                                                 && let Some(val) = value
                                                 && let Ok(json) =
-                                                serde_json::from_str::<serde_json::Value>(val)
+                                                    serde_json::from_str::<serde_json::Value>(val)
                                                 && let Some(name) =
-                                                json.get("name").and_then(|v| v.as_str())
+                                                    json.get("name").and_then(|v| v.as_str())
                                             {
                                                 listen_store.borrow_mut().set_default_source(
-                                                    DefaultDefinition::Configured(String::from(name)),
+                                                    DefaultDefinition::Configured(String::from(
+                                                        name,
+                                                    )),
                                                 );
                                             }
                                             0

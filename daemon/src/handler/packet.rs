@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 
@@ -49,4 +49,3 @@ pub async fn handle_packet(request: DaemonRequest, sender: Messenger) -> Respons
         }
     }
 }
-

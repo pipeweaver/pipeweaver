@@ -337,8 +337,8 @@ impl Profile {
                 ),
                 (system_id, [headphones_id].into_iter().collect()),
             ]
-                .into_iter()
-                .collect(),
+            .into_iter()
+            .collect(),
 
             application_mapping: enum_map! {
                 DeviceType::Source => {

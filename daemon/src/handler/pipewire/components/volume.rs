@@ -4,7 +4,7 @@ use crate::handler::pipewire::components::mute::MuteManager;
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use log::debug;
 use pipeweaver_pipewire::{FilterValue, PipewireMessage};
 use pipeweaver_profile::Volumes;
@@ -91,7 +91,8 @@ impl VolumeManager for PipewireManager {
     async fn sync_all_pipewire_mutes(&mut self) {
         for dev in &self.profile.devices.targets.virtual_devices {
             if let Ok(muted) = self.get_target_mute_state(dev.description.id).await {
-                let message = PipewireMessage::SetNodeMute(dev.description.id, muted == MuteState::Muted);
+                let message =
+                    PipewireMessage::SetNodeMute(dev.description.id, muted == MuteState::Muted);
                 let _ = self.pipewire().send_message(message);
             }
         }
@@ -127,7 +128,7 @@ impl VolumeManager for PipewireManager {
 
         dev.mute_state = match muted {
             true => MuteState::Muted,
-            false => MuteState::Unmuted
+            false => MuteState::Unmuted,
         };
 
         Ok(())
@@ -151,7 +152,8 @@ impl VolumeManager for PipewireManager {
                 (volume as f32 * ratio) as u8
             } else {
                 (volume as f32 / ratio) as u8
-            }.clamp(0, 100);
+            }
+            .clamp(0, 100);
             Some(new_volume)
         } else {
             None
@@ -196,8 +198,16 @@ impl VolumeManager for PipewireManager {
         }
 
         // Pull out the A and B volumes, if either is 0, force to 1 to prevent divide by zero
-        let volume_a = if volumes.volume[Mix::A] == 0 { 1 } else { volumes.volume[Mix::A] };
-        let volume_b = if volumes.volume[Mix::B] == 0 { 1 } else { volumes.volume[Mix::B] };
+        let volume_a = if volumes.volume[Mix::A] == 0 {
+            1
+        } else {
+            volumes.volume[Mix::A]
+        };
+        let volume_b = if volumes.volume[Mix::B] == 0 {
+            1
+        } else {
+            volumes.volume[Mix::B]
+        };
 
         let ratio = volume_b as f32 / volume_a as f32;
         debug!("Setting Ratio to {}", ratio);
@@ -220,7 +230,6 @@ impl VolumeManager for PipewireManager {
         } else if self.get_target_mute_state(id).await? == MuteState::Unmuted {
             self.filter_volume_set(id, volume).await?;
         }
-
 
         // We can safely unwrap here, errors will be thrown by get_target_mute_state if it's wrong
         if node_type == NodeType::PhysicalTarget {
@@ -307,7 +316,10 @@ trait VolumeManagerLocal {
 impl VolumeManagerLocal for PipewireManager {
     async fn volume_set_source(&mut self, id: Ulid, mix: Mix, volume: u8) -> Result<()> {
         let node_type = self.get_node_type(id).ok_or(anyhow!("Node Not Found"))?;
-        if !matches!(node_type, NodeType::PhysicalSource | NodeType::VirtualSource) {
+        if !matches!(
+            node_type,
+            NodeType::PhysicalSource | NodeType::VirtualSource
+        ) {
             bail!("Provided Source is a Target Node");
         }
 
@@ -326,22 +338,34 @@ impl VolumeManagerLocal for PipewireManager {
 
     fn get_volumes(&mut self, id: Ulid) -> Result<&mut Volumes> {
         let node_type = self.get_node_type(id).ok_or(anyhow!("Node Not Found"))?;
-        if !matches!(node_type, NodeType::PhysicalSource | NodeType::VirtualSource) {
+        if !matches!(
+            node_type,
+            NodeType::PhysicalSource | NodeType::VirtualSource
+        ) {
             bail!("Provided Source is a Target Node");
         }
 
         // Now, pull out the correct part of the profile..
         if node_type == NodeType::PhysicalSource {
-            Ok(&mut self.get_physical_source_mut(id).ok_or(anyhow!("Node not Found"))?.volumes)
+            Ok(&mut self
+                .get_physical_source_mut(id)
+                .ok_or(anyhow!("Node not Found"))?
+                .volumes)
         } else {
-            Ok(&mut self.get_virtual_source_mut(id).ok_or(anyhow!("Node not Found"))?.volumes)
+            Ok(&mut self
+                .get_virtual_source_mut(id)
+                .ok_or(anyhow!("Node not Found"))?
+                .volumes)
         }
     }
 
     async fn volume_source_load_with_mute(&self, id: Ulid) -> Result<()> {
         let err = anyhow!("Unable to Locate Node");
         let node_type = self.get_node_type(id).ok_or(err)?;
-        if !matches!(node_type, NodeType::PhysicalSource | NodeType::VirtualSource) {
+        if !matches!(
+            node_type,
+            NodeType::PhysicalSource | NodeType::VirtualSource
+        ) {
             bail!("Provided Source is a Target Node");
         }
 
@@ -371,10 +395,12 @@ impl VolumeManagerLocal for PipewireManager {
     async fn volume_target_load_with_mute(&self, id: Ulid, volume: u8) -> Result<()> {
         let err = anyhow!("Unable to Locate Node");
         let node_type = self.get_node_type(id).ok_or(err)?;
-        if !matches!(node_type, NodeType::PhysicalTarget | NodeType::VirtualTarget) {
+        if !matches!(
+            node_type,
+            NodeType::PhysicalTarget | NodeType::VirtualTarget
+        ) {
             bail!("Provided Source is a Source Node");
         }
-
 
         if node_type == NodeType::PhysicalTarget {
             // Physical Targets use a Volume filter

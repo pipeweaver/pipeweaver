@@ -5,12 +5,12 @@ mod registry;
 mod store;
 
 use crate::manager::run_pw_main_loop;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use log::{info, warn};
 use oneshot::TryRecvError;
 use std::sync::mpsc;
 use std::thread;
-use std::thread::{sleep, JoinHandle};
+use std::thread::{JoinHandle, sleep};
 use std::time::Duration;
 use ulid::Ulid;
 

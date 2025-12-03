@@ -3,7 +3,7 @@ use anyhow::Result;
 use log::info;
 use tokio::select;
 use tokio::signal::ctrl_c;
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::{SignalKind, signal};
 
 pub async fn spawn_platform_runtime(mut stop: Stop) -> Result<()> {
     // This one's a little odd, because Windows doesn't directly support SIGTERM, we're going

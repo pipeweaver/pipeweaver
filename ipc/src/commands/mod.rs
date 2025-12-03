@@ -1,7 +1,9 @@
 use enum_map::EnumMap;
 use json_patch::Patch;
 use pipeweaver_profile::Profile;
-use pipeweaver_shared::{AppDefinition, AppTarget, Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType, OrderGroup};
+use pipeweaver_shared::{
+    AppDefinition, AppTarget, Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType, OrderGroup,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use ulid::Ulid;
@@ -95,7 +97,6 @@ pub enum APICommandResponse {
     Id(Ulid),
     Err(String),
 }
-
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct DaemonStatus {

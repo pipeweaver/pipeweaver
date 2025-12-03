@@ -19,79 +19,89 @@ pub(crate) trait IPCHandler {
 impl IPCHandler for PipewireManager {
     async fn handle_command(&mut self, command: Cmd) -> Result<Resp, Error> {
         match command {
-            Cmd::CreateNode(node_type, id) => {
-                self.node_new(node_type, id).await.map(Resp::Id)
-            }
-            Cmd::RenameNode(id, new) => {
-                self.node_rename(id, new).await.map(|_| Resp::Ok)
-            }
+            Cmd::CreateNode(node_type, id) => self.node_new(node_type, id).await.map(Resp::Id),
+            Cmd::RenameNode(id, new) => self.node_rename(id, new).await.map(|_| Resp::Ok),
             Cmd::SetNodeColour(id, colour) => {
                 self.node_set_colour(id, colour).await.map(|_| Resp::Ok)
             }
-            Cmd::RemoveNode(id) => {
-                self.node_remove(id).await.map(|_| Resp::Ok)
-            }
-            Cmd::SetSourceVolume(id, mix, volume) => {
-                self.set_source_volume(id, mix, volume, true).await.map(|_| Resp::Ok)
-            }
-            Cmd::SetSourceVolumeLinked(id, linked) => {
-                self.set_source_volume_linked(id, linked).await.map(|_| Resp::Ok)
-            }
-            Cmd::SetTargetVolume(id, volume) => {
-                self.set_target_volume(id, volume, true).await.map(|_| Resp::Ok)
-            }
-            Cmd::SetTargetMix(target, mix) => {
-                self.routing_set_target_mix(target, mix).await.map(|_| Resp::Ok)
-            }
-            Cmd::SetRoute(source, target, enabled) => {
-                self.routing_set_route(source, target, enabled).await.map(|_| Resp::Ok)
-            }
-            Cmd::AddSourceMuteTarget(id, target) => {
-                self.set_source_mute_state(id, target, Muted).await.map(|_| Resp::Ok)
-            }
-            Cmd::DelSourceMuteTarget(id, target) => {
-                self.set_source_mute_state(id, target, Unmuted).await.map(|_| Resp::Ok)
-            }
-            Cmd::AddMuteTargetNode(id, target, target_id) => {
-                self.add_target_mute_node(id, target, target_id).await.map(|_| Resp::Ok)
-            }
-            Cmd::DelMuteTargetNode(id, target, target_id) => {
-                self.del_target_mute_node(id, target, target_id).await.map(|_| Resp::Ok)
-            }
-            Cmd::ClearMuteTargetNodes(id, target) => {
-                self.clear_target_mute_nodes(id, target).await.map(|_| Resp::Ok)
-            }
-            Cmd::SetTargetMuteState(id, state) => {
-                self.set_target_mute_state(id, state).await.map(|_| Resp::Ok)
-            }
+            Cmd::RemoveNode(id) => self.node_remove(id).await.map(|_| Resp::Ok),
+            Cmd::SetSourceVolume(id, mix, volume) => self
+                .set_source_volume(id, mix, volume, true)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::SetSourceVolumeLinked(id, linked) => self
+                .set_source_volume_linked(id, linked)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::SetTargetVolume(id, volume) => self
+                .set_target_volume(id, volume, true)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::SetTargetMix(target, mix) => self
+                .routing_set_target_mix(target, mix)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::SetRoute(source, target, enabled) => self
+                .routing_set_route(source, target, enabled)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::AddSourceMuteTarget(id, target) => self
+                .set_source_mute_state(id, target, Muted)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::DelSourceMuteTarget(id, target) => self
+                .set_source_mute_state(id, target, Unmuted)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::AddMuteTargetNode(id, target, target_id) => self
+                .add_target_mute_node(id, target, target_id)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::DelMuteTargetNode(id, target, target_id) => self
+                .del_target_mute_node(id, target, target_id)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::ClearMuteTargetNodes(id, target) => self
+                .clear_target_mute_nodes(id, target)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::SetTargetMuteState(id, state) => self
+                .set_target_mute_state(id, state)
+                .await
+                .map(|_| Resp::Ok),
 
             Cmd::AttachPhysicalNode(id, node_id) => {
                 self.add_device_to_node(id, node_id).await.map(|_| Resp::Ok)
             }
-            Cmd::RemovePhysicalNode(id, index) => {
-                self.remove_device_from_node(id, index).await.map(|_| Resp::Ok)
-            }
-            Cmd::SetOrderGroup(id, group) => {
-                self.node_set_group(id, group).await.map(|_| Resp::Ok)
-            }
+            Cmd::RemovePhysicalNode(id, index) => self
+                .remove_device_from_node(id, index)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::SetOrderGroup(id, group) => self.node_set_group(id, group).await.map(|_| Resp::Ok),
             Cmd::SetOrder(id, position) => {
                 self.node_set_position(id, position).await.map(|_| Resp::Ok)
             }
-            Cmd::SetApplicationRoute(definition, target_id) => {
-                self.set_application_target(definition, target_id).await.map(|_| Resp::Ok)
-            }
-            Cmd::ClearApplicationRoute(definition) => {
-                self.clear_application_target(definition).await.map(|_| Resp::Ok)
-            }
-            Cmd::SetTransientApplicationRoute(id, route) => {
-                self.set_application_transient_target(id, route).await.map(|_| Resp::Ok)
-            }
-            Cmd::ClearTransientApplicationRoute(id) => {
-                self.clear_application_transient_target(id).await.map(|_| Resp::Ok)
-            }
+            Cmd::SetApplicationRoute(definition, target_id) => self
+                .set_application_target(definition, target_id)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::ClearApplicationRoute(definition) => self
+                .clear_application_target(definition)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::SetTransientApplicationRoute(id, route) => self
+                .set_application_transient_target(id, route)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::ClearTransientApplicationRoute(id) => self
+                .clear_application_transient_target(id)
+                .await
+                .map(|_| Resp::Ok),
             Cmd::SetApplicationVolume(id, volume) => {
                 debug!("ERR?");
-                self.set_application_volume(id, volume).await.map(|_| Resp::Ok)
+                self.set_application_volume(id, volume)
+                    .await
+                    .map(|_| Resp::Ok)
             }
             Cmd::SetApplicationMute(id, state) => {
                 self.set_application_mute(id, state).await.map(|_| Resp::Ok)

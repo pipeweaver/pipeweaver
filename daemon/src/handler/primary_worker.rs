@@ -1,9 +1,9 @@
+use crate::APP_NAME_ID;
 use crate::handler::messaging::DaemonMessage;
-use crate::handler::pipewire::manager::{run_pipewire_manager, PipewireManagerConfig};
+use crate::handler::pipewire::manager::{PipewireManagerConfig, run_pipewire_manager};
 use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfiguration, SetMetering};
 use crate::servers::http_server::{MeterEvent, PatchEvent};
 use crate::stop::Stop;
-use crate::APP_NAME_ID;
 use anyhow::Context;
 use anyhow::Result;
 use json_patch::diff;
@@ -13,7 +13,7 @@ use pipeweaver_ipc::commands::{
 };
 use pipeweaver_profile::Profile;
 use std::fs;
-use std::fs::{create_dir_all, File};
+use std::fs::{File, create_dir_all};
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -170,7 +170,10 @@ impl PrimaryWorker {
 
                             let tmp_dir = std::env::temp_dir();
 
-                            info!("[DaemonCommand] Launching UI App at {}", app_path.to_string_lossy());
+                            info!(
+                                "[DaemonCommand] Launching UI App at {}",
+                                app_path.to_string_lossy()
+                            );
                             let result = Command::new(app_path)
                                 .current_dir(tmp_dir)
                                 .stdout(Stdio::null())
@@ -184,7 +187,10 @@ impl PrimaryWorker {
                                     });
                                 }
                                 Err(e) => {
-                                    warn!("Unable to launch UI App: {}, falling back to browser", e);
+                                    warn!(
+                                        "Unable to launch UI App: {}, falling back to browser",
+                                        e
+                                    );
                                     if let Err(e) = open::that("http://localhost:14565") {
                                         warn!("Unable to open web interface: {}", e);
                                     }
@@ -279,7 +285,8 @@ impl PrimaryWorker {
 
         if let Some(parent) = path.parent()
             && let Err(e) = create_dir_all(parent)
-            && e.kind() != ErrorKind::AlreadyExists {
+            && e.kind() != ErrorKind::AlreadyExists
+        {
             return Err(e).context(format!(
                 "Could not create config directory at {}",
                 parent.to_string_lossy()

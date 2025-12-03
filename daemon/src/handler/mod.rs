@@ -1,4 +1,4 @@
-pub(crate) mod packet;
 mod messaging;
-pub(crate) mod primary_worker;
+pub(crate) mod packet;
 mod pipewire;
+pub(crate) mod primary_worker;

@@ -44,7 +44,7 @@ impl FilterHandler for MeterFilter {
         vec![FilterProperty {
             id: 0,
             name: "Enabled".into(),
-            value: FilterValue::Bool(self.enabled)
+            value: FilterValue::Bool(self.enabled),
         }]
     }
 
@@ -55,7 +55,7 @@ impl FilterHandler for MeterFilter {
                 name: "Volume".into(),
                 value: FilterValue::Bool(self.enabled),
             },
-            _ => panic!("Attempted to lookup non-existent property!")
+            _ => panic!("Attempted to lookup non-existent property!"),
         }
     }
 
@@ -68,7 +68,7 @@ impl FilterHandler for MeterFilter {
                     panic!("Attempted to Toggle Meter without Bool type");
                 }
             }
-            _ => panic!("Attempted to set non-existent property!")
+            _ => panic!("Attempted to set non-existent property!"),
         }
     }
 

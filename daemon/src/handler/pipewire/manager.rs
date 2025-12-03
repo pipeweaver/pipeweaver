@@ -1,4 +1,6 @@
-use crate::handler::pipewire::components::application::{get_application_type, ApplicationManagement};
+use crate::handler::pipewire::components::application::{
+    ApplicationManagement, get_application_type,
+};
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
@@ -7,10 +9,15 @@ use crate::handler::pipewire::ipc::IPCHandler;
 use crate::handler::primary_worker::WorkerMessage::TransientChange;
 use crate::handler::primary_worker::{ManagerMessage, WorkerMessage};
 use crate::servers::http_server::MeterEvent;
-use enum_map::{enum_map, EnumMap};
+use enum_map::{EnumMap, enum_map};
 use log::{debug, error, info, warn};
-use pipeweaver_ipc::commands::{APICommandResponse, Application, AudioConfiguration, PhysicalDevice};
-use pipeweaver_pipewire::{ApplicationNode, DeviceNode, MediaClass, NodeTarget, PipewireMessage, PipewireReceiver, PipewireRunner};
+use pipeweaver_ipc::commands::{
+    APICommandResponse, Application, AudioConfiguration, PhysicalDevice,
+};
+use pipeweaver_pipewire::{
+    ApplicationNode, DeviceNode, MediaClass, NodeTarget, PipewireMessage, PipewireReceiver,
+    PipewireRunner,
+};
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::{AppTarget, DeviceType, Mix};
 use std::collections::HashMap;
@@ -122,8 +129,10 @@ impl PipewireManager {
                 },
             },
             applications: {
-                let mut sources: HashMap<String, HashMap<String, Vec<Application>>> = HashMap::new();
-                let mut targets: HashMap<String, HashMap<String, Vec<Application>>> = HashMap::new();
+                let mut sources: HashMap<String, HashMap<String, Vec<Application>>> =
+                    HashMap::new();
+                let mut targets: HashMap<String, HashMap<String, Vec<Application>>> =
+                    HashMap::new();
 
                 for (id, application) in &self.application_nodes {
                     let app_type = get_application_type(application.node_class);
@@ -143,15 +152,12 @@ impl PipewireManager {
                         target: match application.media_target {
                             None => None,
                             Some(None) => None,
-                            Some(Some(target)) => {
-                                match target {
-                                    NodeTarget::Node(id) => Some(AppTarget::Managed(id)),
-                                    NodeTarget::UnmanagedNode(id) => Some(AppTarget::Unmanaged(id)),
-                                }
-                            }
+                            Some(Some(target)) => match target {
+                                NodeTarget::Node(id) => Some(AppTarget::Managed(id)),
+                                NodeTarget::UnmanagedNode(id) => Some(AppTarget::Unmanaged(id)),
+                            },
                         },
                     };
-
 
                     if let Some(process) = map.get_mut(&application.process_name) {
                         if let Some(title) = process.get_mut(&application.name) {

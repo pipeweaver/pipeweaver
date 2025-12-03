@@ -3,7 +3,7 @@ use crate::handler::pipewire::components::audio_filters::pass_through::PassThrou
 use crate::handler::pipewire::components::audio_filters::volume::VolumeFilter;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME, APP_NAME_ID};
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{FilterProperties, FilterValue, MediaClass, PipewireMessage};
 use ulid::Ulid;
