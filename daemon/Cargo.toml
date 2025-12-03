@@ -24,6 +24,9 @@ pipeweaver-profile = { path = "../profile" }
 pipeweaver-pipewire = { path = "../pipewire" }
 pipeweaver-shared = { path = "../shared" }
 
+### Logging
+file-rotate = "0.8.0"
+
 ### Enum Handling
 enum-map = { workspace = true }
 strum = { workspace = true }

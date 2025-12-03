@@ -11,9 +11,13 @@ use crate::servers::ipc_server::{bind_socket, spawn_ipc_server, ErrorState};
 use crate::stop::Stop;
 use anyhow::{anyhow, bail, Context, Result};
 use directories::ProjectDirs;
+use file_rotate::compression::Compression;
+use file_rotate::suffix::AppendCount;
+use file_rotate::{ContentLimit, FileRotate};
 use log::{error, info, LevelFilter};
 use pipeweaver_ipc::commands::HttpSettings;
-use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
+use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger};
+use std::fs::create_dir_all;
 use tokio::sync::{broadcast, mpsc};
 use tokio::{join, task};
 
@@ -31,6 +35,12 @@ async fn main() -> Result<()> {
     let dirs = ProjectDirs::from("io", "github", APP_NAME_ID)
         .ok_or(anyhow!("Unable to locate project directory"))?;
 
+
+    // Set up Logging
+    let mut log_targets: Vec<Box<dyn SharedLogger>> = vec![];
+    let log_dir = dirs.data_dir().join("logs");
+    create_dir_all(&log_dir).context("Could not create logs directory")?;
+
     // We need to ignore a couple of packages log output so create a builder.
     let mut log_config = ConfigBuilder::new();
 
@@ -44,14 +54,31 @@ async fn main() -> Result<()> {
     log_config.add_filter_ignore_str("actix_server::builder");
     log_config.add_filter_ignore_str("zbus");
 
-    CombinedLogger::init(vec![TermLogger::new(
+
+    let log_file = log_dir.join("pipeweaver.log");
+    println!("Logging to file: {log_file:?}");
+
+    let file_rotate = FileRotate::new(
+        log_file,
+        AppendCount::new(5),
+        ContentLimit::Bytes(1024 * 1024 * 2),
+        Compression::OnRotate(1),
+        #[cfg(unix)]
+        None,
+    );
+    log_targets.push(WriteLogger::new(
+        LevelFilter::Debug,
+        log_config.build(),
+        file_rotate,
+    ));
+    log_targets.push(TermLogger::new(
         LevelFilter::Debug,
         log_config.build(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
-    )])
-        .context("Could not configure the logger")?;
+    ));
 
+    CombinedLogger::init(log_targets)?;
     info!("Starting {} v{} - {}", APP_NAME, VERSION, HASH);
 
     let shutdown = Stop::new();
