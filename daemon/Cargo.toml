@@ -58,3 +58,39 @@ image = "0.25.6"
 ksni = "0.3.1"
 open = "5.3.2"
 which = "8.0.0"
+
+## Ok, Build Stuff Time :D
+[package.metadata.deb]
+name = "pipeweaver"
+assets = [
+    ["../target/release/pipeweaver-daemon", "usr/bin/", "755"],
+    ["../daemon/resources/icons/pipeweaver.png", "usr/share/icons/hicolor/48x48/apps/", "644"],
+    ["../daemon/resources/icons/pipeweaver-large.png", "usr/share/pixmaps/pipeweaver.png", "644"],
+    ["../daemon/resources/icons/pipeweaver.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["../daemon/resources/desktop/pipeweaver.desktop", "usr/share/applications/", "644"],
+]
+
+section = "sound"
+priority = "optional"
+depends = "$auto"
+extended-description = """\
+A tool for audio control and routing via Pipewire
+"""
+revision = "1"
+
+[package.metadata.generate-rpm]
+name = "pipeweaver"
+assets = [
+    { source = "../target/release/pipeweaver-daemon", dest = "/usr/bin/pipeweaver-daemon", mode = "0755" },
+    { source = "../daemon/resources/icons/pipeweaver.png", dest = "/usr/share/icons/hicolor/48x48/apps/pipeweaver.png", mode = "0644" },
+    { source = "../daemon/resources/icons/pipeweaver-large.png", dest = "/usr/share/pixmaps/pipeweaver.png", mode = "0644" },
+    { source = "../daemon/resources/icons/pipeweaver.svg", dest = "/usr/share/icons/hicolor/scalable/apps/pipeweaver.svg", mode = "0644" },
+    { source = "../daemon/resources/desktop/pipeweaver.desktop", dest = "/usr/share/applications/pipeweaver.desktop", mode = "0644" },
+]
+
+# Because we build under Ubuntu in CI, generate-rpm is unable to calculate the dependencies required (no access
+# to rpm / yum), so we need to disable the auto and specify dependencies manually.
+auto-req = "no"
+
+[package.metadata.generate-rpm.requires]
+pipewire = ">= 1.0.5"   # Should be Fedora 40+

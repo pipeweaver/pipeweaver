@@ -1,0 +1,35 @@
+#!/bin/bash
+
+set -e
+D="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+# Note that this requires both cargo-deb and cargo-generate-rpm which can be installed with
+# 'cargo install cargo-deb cargo-generate-rpm'
+
+if ! command -V cargo-deb > /dev/null 2>&1; then
+    echo "cargo-deb command missing" >&2
+    exit 1
+fi
+
+if ! command -V cargo-generate-rpm > /dev/null 2>&1; then
+    echo "cargo-generate-rpm command missing" >&2
+    exit 1
+fi
+
+# Neither 'cargo deb' or 'cargo generate-rpm' seem to provide a way to specify an asset that is created at build time.
+# To work around this, we force a release build, copy out the shell completions produced from that build, put it into
+# a predictable location and then build the packages, which knows where to look.
+cargo build --release --all-features
+
+strip target/release/pipeweaver-daemon
+
+DEPLOY_DIR=deployment/deb
+OUT_DIR_DAEMON="$("$D"/cargo-out-dir target/release/ daemon-stamp)"
+mkdir -p "$DEPLOY_DIR"
+
+# Now, first build the .deb file (We don't need to recompile the code here)..
+cargo deb -p pipeweaver-daemon --no-build
+
+# Then the RPM
+cargo generate-rpm -p daemon
+
