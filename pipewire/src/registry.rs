@@ -1,6 +1,6 @@
+use crate::NodeTarget;
 use crate::default_device::DefaultDefinition;
 use crate::store::{Store, TargetType};
-use crate::NodeTarget;
 use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
 use log::debug;
@@ -17,8 +17,8 @@ use pipewire::node::{Node, NodeChangeMask, NodeListener};
 use pipewire::registry::Listener;
 use pipewire::registry::Registry;
 use pipewire::spa::param::ParamType;
-use pipewire::spa::pod::deserialize::PodDeserializer;
 use pipewire::spa::pod::Value::Bool;
+use pipewire::spa::pod::deserialize::PodDeserializer;
 use pipewire::spa::pod::{Value, ValueArray};
 use pipewire::spa::sys::{SPA_PARAM_Props, SPA_PROP_channelVolumes, SPA_PROP_mute};
 use pipewire::spa::utils::dict::DictRef;

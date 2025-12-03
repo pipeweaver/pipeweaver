@@ -1,12 +1,12 @@
+use crate::APP_NAME_ID;
 use crate::handler::messaging::DaemonMessage;
-use crate::handler::pipewire::manager::{run_pipewire_manager, PipewireManagerConfig};
+use crate::handler::pipewire::manager::{PipewireManagerConfig, run_pipewire_manager};
 use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfiguration, SetMetering};
 use crate::servers::http_server::{MeterEvent, PatchEvent};
 use crate::stop::Stop;
-use crate::APP_NAME_ID;
 use crate::{APP_DAEMON_NAME, APP_ID};
 use anyhow::Result;
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use ashpd::desktop::background::Background;
 use ini::Ini;
 use json_patch::diff;
@@ -15,7 +15,7 @@ use pipeweaver_ipc::commands::{
     APICommand, APICommandResponse, AudioConfiguration, DaemonCommand, DaemonResponse, DaemonStatus,
 };
 use pipeweaver_profile::Profile;
-use std::fs::{create_dir_all, File};
+use std::fs::{File, create_dir_all};
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::time::Duration;

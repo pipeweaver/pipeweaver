@@ -1,6 +1,6 @@
 mod default;
 
-use enum_map::{enum_map, EnumMap};
+use enum_map::{EnumMap, enum_map};
 use pipeweaver_shared::{Colour, DeviceType, Mix, MuteState, MuteTarget, OrderGroup};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};

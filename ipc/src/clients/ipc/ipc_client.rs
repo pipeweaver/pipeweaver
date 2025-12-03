@@ -1,7 +1,7 @@
 use crate::client::Client;
 use crate::clients::ipc::ipc_socket::Socket;
 use crate::commands::{APICommand, DaemonRequest, DaemonResponse, DaemonStatus, HttpSettings};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 
 #[derive(Debug)]
