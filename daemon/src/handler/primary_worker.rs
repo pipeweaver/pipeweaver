@@ -1,12 +1,12 @@
-use crate::APP_NAME_ID;
 use crate::handler::messaging::DaemonMessage;
-use crate::handler::pipewire::manager::{PipewireManagerConfig, run_pipewire_manager};
+use crate::handler::pipewire::manager::{run_pipewire_manager, PipewireManagerConfig};
 use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfiguration, SetMetering};
 use crate::servers::http_server::{MeterEvent, PatchEvent};
 use crate::stop::Stop;
+use crate::APP_NAME_ID;
 use crate::{APP_DAEMON_NAME, APP_ID};
 use anyhow::Result;
-use anyhow::{Context, bail};
+use anyhow::{bail, Context};
 use ashpd::desktop::background::Background;
 use ini::Ini;
 use json_patch::diff;
@@ -15,7 +15,7 @@ use pipeweaver_ipc::commands::{
     APICommand, APICommandResponse, AudioConfiguration, DaemonCommand, DaemonResponse, DaemonStatus,
 };
 use pipeweaver_profile::Profile;
-use std::fs::{File, create_dir_all};
+use std::fs::{create_dir_all, File};
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -418,6 +418,12 @@ pub fn get_autostart_file() -> Result<PathBuf> {
     } else {
         bail!("Unable to obtain XDG Config Directory")
     };
+
+    // Create the Autostart directory if it doesn't exist
+    if !PathBuf::from(format!("{config_dir}/autostart")).exists() {
+        create_dir_all(format!("{config_dir}/autostart"))?;
+    }
+
     Ok(PathBuf::from(format!(
         "{config_dir}/autostart/{APP_ID}.{APP_NAME_ID}.desktop"
     )))
