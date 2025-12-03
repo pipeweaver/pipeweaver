@@ -10,7 +10,7 @@ jobs:
       - name: "Install Dependencies"
         run: |
           sudo apt-get update
-          sudo apt-get install pkg-config libpipewire
+          sudo apt-get install pkg-config libpipewire-0.3-dev
 
       - name: Checkout repository
         uses: actions/checkout@v4
