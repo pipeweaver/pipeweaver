@@ -1,8 +1,8 @@
 use crate::registry::PipewireRegistry;
 use crate::store::{FilterStore, LinkStore, LinkStoreMap, NodeStore, PortLocation, Store};
 use crate::{
-    FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties,
-    PipewireInternalMessage, PipewireReceiver, registry,
+    registry, FilterHandler, FilterProperties, FilterValue, LinkType,
+    NodeProperties, PipewireInternalMessage, PipewireReceiver,
 };
 use crate::{MediaClass, PWReceiver};
 use anyhow::Result;
@@ -24,16 +24,16 @@ use pipewire::proxy::ProxyT;
 use pipewire::registry::Registry;
 use pipewire::spa::pod::builder::Builder;
 use pipewire::spa::pod::deserialize::PodDeserializer;
-use pipewire::spa::pod::{Pod, Property, Value, ValueArray, object};
+use pipewire::spa::pod::{object, Pod, Property, Value, ValueArray};
 use pipewire::spa::sys::{
-    SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR, SPA_FORMAT_AUDIO_position,
+    spa_process_latency_build, spa_process_latency_info, SPA_FORMAT_AUDIO_position,
     SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_PARAM_Props, SPA_PROP_channelVolumes,
-    SPA_PROP_mute, SPA_TYPE_OBJECT_ParamProcessLatency, spa_process_latency_build,
-    spa_process_latency_info,
+    SPA_PROP_mute, SPA_TYPE_OBJECT_ParamProcessLatency, SPA_AUDIO_CHANNEL_FL,
+    SPA_AUDIO_CHANNEL_FR,
 };
 use pipewire::spa::utils::Direction;
 
-use enum_map::{EnumMap, enum_map};
+use enum_map::{enum_map, EnumMap};
 use oneshot::Sender;
 use parking_lot::RwLock;
 use pipewire::spa::param::ParamType;
@@ -162,15 +162,17 @@ impl PipewireManager {
 
         debug!("[{}] Registering Proxy Listener", properties.node_id);
         let proxy_id = properties.node_id;
-        let proxy_store = self.store.clone();
+        let proxy_store = Rc::downgrade(&self.store);
         let proxy_listener = proxy
             .upcast_ref()
             .add_listener_local()
             .bound(move |id| {
                 debug!("[{}] Pipewire NodeID assigned: {}", proxy_id, id);
-                proxy_store
-                    .borrow_mut()
-                    .managed_node_set_pw_id(proxy_id, id);
+                if let Some(proxy_store) = proxy_store.upgrade() {
+                    proxy_store
+                        .borrow_mut()
+                        .managed_node_set_pw_id(proxy_id, id);
+                }
             })
             .removed(|| {
                 debug!("Removed..");
@@ -179,8 +181,8 @@ impl PipewireManager {
 
         debug!("[{}] Registering Node Listener", properties.node_id);
         let listener_id = properties.node_id;
-        let listener_info_store = self.store.clone();
-        let listener_param_store = self.store.clone();
+        let listener_info_store = Rc::downgrade(&self.store);
+        let listener_param_store = Rc::downgrade(&self.store);
         let listener = proxy
             .add_listener_local()
             .info(move |info| {
@@ -194,9 +196,9 @@ impl PipewireManager {
                             "[{}] Ports have appeared, requesting configuration",
                             listener_id
                         );
-                        listener_info_store
-                            .borrow()
-                            .managed_node_request_ports(listener_id);
+                        if let Some(store) = listener_info_store.upgrade() {
+                            store.borrow().managed_node_request_ports(listener_id);
+                        }
                     }
                 }
             })
@@ -223,7 +225,10 @@ impl PipewireManager {
 
                                 if let Some(prop) = prop {
                                     // Fucking hell, I hate how deep this is getting
-                                    if let Value::ValueArray(ValueArray::Id(array)) = &prop.value {
+                                    if let Value::ValueArray(ValueArray::Id(array)) = &prop.value
+                                        && let Some(listener_param_store) =
+                                        listener_param_store.upgrade()
+                                    {
                                         let mut store = listener_param_store.borrow_mut();
                                         for (index, value) in array.iter().enumerate() {
                                             let index = index as u32;
@@ -263,15 +268,18 @@ impl PipewireManager {
                                     .unwrap();
 
                                 let volume = (max.cbrt() * 100.0).round() as u8;
-                                listener_param_store
-                                    .borrow_mut()
-                                    .on_volume_change(listener_id, volume);
+                                if let Some(listener_param_store) = listener_param_store.upgrade() {
+                                    listener_param_store
+                                        .borrow_mut()
+                                        .on_volume_change(listener_id, volume);
+                                }
                             }
 
                             let prop = object.properties.iter().find(|p| p.key == SPA_PROP_mute);
 
                             if let Some(prop) = prop
                                 && let Value::Bool(enabled) = &prop.value
+                                && let Some(listener_param_store) = listener_param_store.upgrade()
                             {
                                 listener_param_store
                                     .borrow_mut()
@@ -404,16 +412,18 @@ impl PipewireManager {
         debug!("[{}] Registering Filter Listener", props.filter_id);
         let listener_input_ports = input_ports.clone();
         let listener_output_ports = output_ports.clone();
-        let listener_state_store = self.store.clone();
+        let listener_state_store = Rc::downgrade(&self.store);
         let listener_id = props.filter_id;
         let listener = filter
             .add_local_listener_with_user_data(data_inner)
             .state_changed(move |filter, _data, old, _new| {
                 if old == FilterState::Connecting {
                     debug!("[{}] Filter Connected", listener_id);
-                    listener_state_store
-                        .borrow_mut()
-                        .managed_filter_set_pw_id(listener_id, filter.node_id());
+                    if let Some(listener_state_store) = listener_state_store.upgrade() {
+                        listener_state_store
+                            .borrow_mut()
+                            .managed_filter_set_pw_id(listener_id, filter.node_id());
+                    }
                 }
             })
             .process(move |filter, data, position| {
@@ -625,7 +635,7 @@ impl PipewireManager {
         dest_node: u32,
         dest_port: u32,
     ) -> Result<(Link, LinkListener)> {
-        let listener_info_store = self.store.clone();
+        let listener_info_store = Rc::downgrade(&self.store);
         let link = self
             .core
             .create_object::<Link>(
@@ -653,9 +663,13 @@ impl PipewireManager {
             .info(move |link| {
                 if let LinkState::Active = link.state() {
                     // We're alive, let the store know
-                    listener_info_store
-                        .borrow_mut()
-                        .managed_link_ready(parent_id, id, link.id());
+                    if let Some(listener_info_store) = listener_info_store.upgrade() {
+                        listener_info_store.borrow_mut().managed_link_ready(
+                            parent_id,
+                            id,
+                            link.id(),
+                        );
+                    }
                 }
             })
             .register();
@@ -727,6 +741,12 @@ impl PipewireManager {
 
     fn set_node_mute(&mut self, id: Ulid, mute: bool) -> Result<()> {
         self.store.borrow_mut().set_mute(id, mute)
+    }
+}
+
+impl Drop for PipewireManager {
+    fn drop(&mut self) {
+        debug!("Dropping Pipewire Manager, cleaning up resources");
     }
 }
 
