@@ -56,8 +56,11 @@ mime_guess = "2.0.5"
 include_dir = "0.7.4"
 
 ### Tray Handling
+# We use a custom fork of ksni. If the tray service isn't available at startup, the tray icon will never spawn. This
+# fork fixes that, and allows cleaner fallthrough, allowing it to retry when the service appears.
+ksni = { git = "https://github.com/FrostyCoolSlug/ksni.git" }
+
 image = "0.25.6"
-ksni = "0.3.1"
 open = "5.3.2"
 which = "8.0.0"
 
