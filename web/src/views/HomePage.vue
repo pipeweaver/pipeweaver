@@ -55,7 +55,6 @@ async function switchTab(tab) {
       </div>
     </div>
   </div>
-  <Settings/>
 </template>
 
 <style scoped>
