@@ -1,22 +1,25 @@
-use crate::APP_NAME_ID;
 use crate::handler::messaging::DaemonMessage;
-use crate::handler::pipewire::manager::{PipewireManagerConfig, run_pipewire_manager};
+use crate::handler::pipewire::manager::{run_pipewire_manager, PipewireManagerConfig};
 use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfiguration, SetMetering};
 use crate::servers::http_server::{MeterEvent, PatchEvent};
 use crate::stop::Stop;
-use anyhow::Context;
+use crate::APP_NAME_ID;
+use crate::{APP_DAEMON_NAME, APP_ID};
+use anyhow::{bail, Context};
 use anyhow::Result;
+use ashpd::desktop::background::Background;
+use ini::Ini;
 use json_patch::diff;
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{
     APICommand, APICommandResponse, AudioConfiguration, DaemonCommand, DaemonResponse, DaemonStatus,
 };
 use pipeweaver_profile::Profile;
-use std::fs;
-use std::fs::{File, create_dir_all};
+use std::fs::{create_dir_all, File};
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::time::Duration;
+use std::{env, fs};
 use tokio::sync::broadcast::Sender;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::sleep;
@@ -167,8 +170,7 @@ impl PrimaryWorker {
                     DaemonCommand::OpenInterface => {
                         if let Some(app_path) = get_ui_app_path() {
                             use std::process::{Command, Stdio};
-
-                            let tmp_dir = std::env::temp_dir();
+                            let tmp_dir = env::temp_dir();
 
                             info!(
                                 "[DaemonCommand] Launching UI App at {}",
@@ -201,6 +203,9 @@ impl PrimaryWorker {
                         }
                     }
                     DaemonCommand::ResetAudio => reset = true,
+                    DaemonCommand::SetAutoStart(enabled) => {
+                        let _ = set_autostart(enabled).await;
+                    }
                 }
                 let _ = tx.send(DaemonResponse::Ok);
                 update = true;
@@ -247,6 +252,11 @@ impl PrimaryWorker {
         };
 
         status.audio = config;
+
+        status.config.auto_start = has_autostart().unwrap_or_else(|e| {
+            warn!("Unable to obtain autostart status: {}", e);
+            false
+        });
 
         let previous = serde_json::to_value(&self.last_status).unwrap();
         let new = serde_json::to_value(&status).unwrap();
@@ -334,6 +344,84 @@ pub fn get_ui_app_path() -> Option<PathBuf> {
     }
 
     path
+}
+
+async fn set_autostart(enabled: bool) -> Result<()> {
+    if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
+        println!("Running inside Flatpak, using Background Portal");
+
+        let reason = "Run Pipeweaver on Startup";
+        let request = Background::request()
+            .identifier(None)
+            .reason(reason)
+            .auto_start(enabled)
+            .dbus_activatable(false)
+            .command::<Vec<_>, String>(vec![
+                String::from(APP_DAEMON_NAME),
+                String::from("--startup"),
+            ]);
+
+        debug!("Requesting Background Access");
+
+        match request.send().await.and_then(|r| r.response()) {
+            Ok(response) => {
+                debug!("{response:?}");
+            }
+            Err(e) => {
+                bail!("Failed to request autostart run: {e}");
+            }
+        };
+        Ok(())
+    } else {
+        debug!("Running Outside Flatpak, manually handling");
+        match get_autostart_file() {
+            Ok(path) => {
+                if path.exists() {
+                    fs::remove_file(path.clone())?;
+                }
+                if enabled {
+                    let exe = env::current_exe()?;
+
+                    let mut conf = Ini::new();
+                    let exe = exe.to_string_lossy().to_string();
+
+                    conf.with_section(Some("Desktop Entry"))
+                        .set("Type", "Application")
+                        .set("Name", "Pipeweaver")
+                        .set("Comment", "Audio Control and Routing")
+                        .set("Exec", format!("{exe:?} --startup"))
+                        .set("Terminal", "false");
+
+                    conf.write_to_file(path)?;
+                }
+            }
+            Err(e) => {
+                bail!("Failed to obtain autostart file path: {e}");
+            }
+        }
+
+        Ok(())
+    }
+}
+
+fn has_autostart() -> Result<bool> {
+    let autostart_file = get_autostart_file()?;
+
+    debug!("Checking: {autostart_file:?}");
+    Ok(autostart_file.exists())
+}
+
+pub fn get_autostart_file() -> Result<PathBuf> {
+    let config_dir = if let Ok(config) = env::var("XDG_CONFIG_HOME") {
+        config
+    } else if let Ok(home) = env::var("HOME") {
+        format!("{home}/.config")
+    } else {
+        bail!("Unable to obtain XDG Config Directory")
+    };
+    Ok(PathBuf::from(format!(
+        "{config_dir}/autostart/{APP_ID}.{APP_NAME_ID}.desktop"
+    )))
 }
 
 pub enum MessageResult {

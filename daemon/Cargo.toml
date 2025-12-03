@@ -24,6 +24,10 @@ pipeweaver-profile = { path = "../profile" }
 pipeweaver-pipewire = { path = "../pipewire" }
 pipeweaver-shared = { path = "../shared" }
 
+### Portal / Autostart Handling
+ashpd = "0.12.0"
+rust-ini = "0.21.3"
+
 ### Logging
 file-rotate = "0.8.0"
 

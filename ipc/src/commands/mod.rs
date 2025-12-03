@@ -44,6 +44,7 @@ pub struct WebsocketResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DaemonCommand {
+    SetAutoStart(bool),
     SetMetering(bool),
     OpenInterface,
     ResetAudio,
@@ -115,6 +116,7 @@ pub struct AudioConfiguration {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct DaemonConfig {
     pub http_settings: HttpSettings,
+    pub auto_start: bool,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]

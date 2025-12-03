@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Pipeweaver
+Comment=Audio Control and Routing
+Path=/usr/bin
+Exec=/usr/bin/pipeweaver
+Icon=pipeweaver
+Terminal=false
+Categories=Utility

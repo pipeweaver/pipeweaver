@@ -28,6 +28,7 @@ const HASH: &str = env!("GIT_HASH");
 const APP_ID: &str = "io.github.pipeweaver";
 const APP_NAME: &str = "PipeWeaver";
 const APP_NAME_ID: &str = "pipeweaver";
+const APP_DAEMON_NAME: &str = "pipeweaver-daemon";
 const ICON: &[u8] = include_bytes!("../resources/icons/pipeweaver-large.png");
 
 #[tokio::main]
