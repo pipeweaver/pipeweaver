@@ -1,5 +1,7 @@
 [package]
 name = "pipeweaver-daemon"
+description = "A tool for audio control and routing via Pipewire"
+
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
