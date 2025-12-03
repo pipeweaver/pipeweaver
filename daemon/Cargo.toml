@@ -1,12 +1,13 @@
 [package]
 name = "pipeweaver-daemon"
-version = "0.1.0"
-edition = "2024"
-build = "build.rs"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
-authors = ["Craig McLure <craig@mclure.net>"]
-repository = "https://github.com/pipeweaver/pipeweaver"
-license = "MIT"
+build = "build.rs"
 
 [dependencies]
 ### Inherited Dependencies ###

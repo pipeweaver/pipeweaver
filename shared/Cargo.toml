@@ -1,11 +1,11 @@
 [package]
 name = "pipeweaver-shared"
-version = "0.1.0"
-edition = "2024"
-
-authors = ["Craig McLure <craig@mclure.net>"]
-repository = "https://github.com/pipeweaver/pipeweaver"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
 serde = { workspace = true }
