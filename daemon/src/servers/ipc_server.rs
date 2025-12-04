@@ -1,6 +1,6 @@
-use crate::handler::packet::{Messenger, handle_packet};
+use crate::handler::packet::{handle_packet, Messenger};
 use crate::servers::http_server::PatchEvent;
-use crate::{APP_NAME, APP_NAME_ID, Stop};
+use crate::{Stop, APP_NAME, APP_NAME_ID};
 use anyhow::{Error, Result};
 use directories::BaseDirs;
 use interprocess::local_socket::tokio::prelude::{LocalSocketListener, LocalSocketStream};
@@ -138,7 +138,7 @@ async fn handle_connection(
             }
             Some(msg) = socket.read() => {
                 match msg {
-                    Ok(msg) => match handle_packet(msg, usb_tx.clone()).await {
+                    Ok(msg) => match handle_packet(msg, &usb_tx).await {
                         Ok(response) => {
                             if let Err(e) = socket.send(response).await {
                                 warn!("Couldn't reply to {:?}: {}", socket.address(), e);

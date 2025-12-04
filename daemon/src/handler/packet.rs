@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 
@@ -9,7 +9,7 @@ pub type Messenger = Sender<DaemonMessage>;
 type Response = Result<DaemonResponse>;
 
 /// This is pretty similar to the GoXLR Utility, as very little really needs to change here.
-pub async fn handle_packet(request: DaemonRequest, sender: Messenger) -> Response {
+pub async fn handle_packet(request: DaemonRequest, sender: &Messenger) -> Response {
     // Ok, we just match the request, and send it off where it needs to go..
     match request {
         DaemonRequest::Ping => Ok(DaemonResponse::Ok),

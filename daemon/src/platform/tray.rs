@@ -3,7 +3,7 @@ use anyhow::Result;
 
 use image::GenericImageView;
 
-use crate::handler::packet::{Messenger, handle_packet};
+use crate::handler::packet::{handle_packet, Messenger};
 use crate::stop::Stop;
 use ksni::menu::StandardItem;
 use ksni::{Category, Icon, MenuItem, Status, ToolTip, Tray, TrayMethods};
@@ -32,7 +32,7 @@ pub async fn spawn_tray(mut shutdown: Stop, sender: Messenger) -> Result<()> {
                     TrayMessages::Activate => {
                         debug!("Activate Triggered");
                         let message = DaemonRequest::Daemon(DaemonCommand::OpenInterface);
-                        handle_packet(message, sender.clone()).await?;
+                        handle_packet(message, &sender).await?;
                     },
                     TrayMessages::Quit => {
                         debug!("Quit Triggered");
@@ -124,7 +124,7 @@ impl Tray for TrayIcon {
                 }),
                 ..Default::default()
             }
-            .into(),
+                .into(),
             MenuItem::Separator,
             StandardItem {
                 label: String::from("Quit"),
@@ -133,7 +133,7 @@ impl Tray for TrayIcon {
                 }),
                 ..Default::default()
             }
-            .into(),
+                .into(),
         ]
     }
 }
