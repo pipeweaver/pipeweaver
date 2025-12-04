@@ -8,14 +8,14 @@ use crate::handler::messaging::DaemonMessage;
 use crate::handler::primary_worker::start_primary_worker;
 use crate::platform::{spawn_runtime, spawn_tray};
 use crate::servers::http_server::spawn_http_server;
-use crate::servers::ipc_server::{bind_socket, spawn_ipc_server, ErrorState};
+use crate::servers::ipc_server::{ErrorState, bind_socket, spawn_ipc_server};
 use crate::stop::Stop;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use directories::ProjectDirs;
 use file_rotate::compression::Compression;
 use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
-use log::{error, info, LevelFilter};
+use log::{LevelFilter, error, info};
 use pipeweaver_ipc::commands::{DaemonCommand, HttpSettings};
 use simplelog::{
     ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,

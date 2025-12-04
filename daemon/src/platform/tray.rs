@@ -3,7 +3,7 @@ use anyhow::Result;
 
 use image::GenericImageView;
 
-use crate::handler::packet::{handle_packet, Messenger};
+use crate::handler::packet::{Messenger, handle_packet};
 use crate::stop::Stop;
 use ksni::menu::StandardItem;
 use ksni::{Category, Icon, MenuItem, Status, ToolTip, Tray, TrayMethods};
@@ -124,7 +124,7 @@ impl Tray for TrayIcon {
                 }),
                 ..Default::default()
             }
-                .into(),
+            .into(),
             MenuItem::Separator,
             StandardItem {
                 label: String::from("Quit"),
@@ -133,7 +133,7 @@ impl Tray for TrayIcon {
                 }),
                 ..Default::default()
             }
-                .into(),
+            .into(),
         ]
     }
 }
