@@ -126,7 +126,7 @@ async fn websocket(
                         id: u64::MAX,
                         data: DaemonResponse::Patch(patch.data),
                     });
-                    if let Err(e) = send_response(message, &mut session).await {
+                    if let Err(e) = send_message(&message, &mut session).await {
                         break e;
                     }
                 }
@@ -189,7 +189,7 @@ async fn websocket(
                                             })
                                         }
                                     };
-                                    if let Err(e) = send_response(response, &mut session).await {
+                                    if let Err(e) = send_message(&response, &mut session).await {
                                         break e;
                                     }
                                 }
@@ -208,7 +208,7 @@ async fn websocket(
                                                     id: request_id,
                                                     data: DaemonResponse::Err(error.to_string()),
                                                 });
-                                                if let Err(e) = send_response(response, &mut session).await {
+                                                if let Err(e) = send_message(&response, &mut session).await {
                                                     break e;
                                                 }
                                             } else {
@@ -283,7 +283,7 @@ async fn websocket_meter(
         let close_reason = loop {
             tokio::select! {
                 Ok(event) = meter_rx.recv() => {
-                    if let Err(e) = send_meter(event, &mut session).await {
+                    if let Err(e) = send_message(&event, &mut session).await {
                         break e;
                     }
                 }
@@ -361,12 +361,15 @@ async fn get_devices(app_data: Data<RwLock<AppData>>) -> HttpResponse {
     HttpResponse::InternalServerError().finish()
 }
 
-/// Serialises and sends a WsResponse to a Session
-async fn send_response(res: WsResponse, session: &mut Session) -> Result<(), Option<CloseReason>> {
-    match serde_json::to_string(&res) {
+/// Serialises a serialisable into a JSON mess, and send to websocket
+async fn send_message<T>(value: &T, session: &mut Session) -> Result<(), Option<CloseReason>>
+where
+    T: Serialize,
+{
+    match serde_json::to_string(value) {
         Ok(text) => {
             if let Err(e) = session.text(text).await {
-                error!("Failed to send response: {}", e);
+                error!("Failed to send message: {}", e);
                 return Err(Some(CloseReason {
                     code: CloseCode::Error,
                     description: Some(e.to_string()),
@@ -374,29 +377,7 @@ async fn send_response(res: WsResponse, session: &mut Session) -> Result<(), Opt
             }
         }
         Err(e) => {
-            error!("Failed to serialize response: {}", e);
-            return Err(Some(CloseReason {
-                code: CloseCode::Error,
-                description: Some(format!("Serialization Error: {}", e)),
-            }));
-        }
-    }
-    Ok(())
-}
-
-async fn send_meter(res: MeterEvent, session: &mut Session) -> Result<(), Option<CloseReason>> {
-    match serde_json::to_string(&res) {
-        Ok(text) => {
-            if let Err(e) = session.text(text).await {
-                error!("Failed to send meter event: {}", e);
-                return Err(Some(CloseReason {
-                    code: CloseCode::Error,
-                    description: Some(e.to_string()),
-                }));
-            }
-        }
-        Err(e) => {
-            error!("Failed to serialize meter event: {}", e);
+            error!("Failed to serialize message: {}", e);
             return Err(Some(CloseReason {
                 code: CloseCode::Error,
                 description: Some(format!("Serialization Error: {}", e)),

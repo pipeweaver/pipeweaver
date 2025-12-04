@@ -48,7 +48,7 @@ simplelog = "0.12.2"
 tokio = { version = "1.41.1", features = ["rt-multi-thread", "sync", "macros"] }
 
 ### HTTP Server ###
-actix-web = { version = "4.9.0", default-features = false, features = ["macros", "compress-brotli", "compress-gzip"] }
+actix-web = { version = "4.9.0", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "ws"] }
 actix-ws = "0.3.0"
 actix-cors = "0.7.0"
 futures-lite = "2.6.1"
