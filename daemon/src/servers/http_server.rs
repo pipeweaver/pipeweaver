@@ -1,15 +1,15 @@
-use crate::handler::packet::{handle_packet, Messenger};
 use crate::APP_NAME;
+use crate::handler::packet::{Messenger, handle_packet};
 use actix_cors::Cors;
 use actix_web::dev::ServerHandle;
 use actix_web::http::header::ContentType;
 use actix_web::middleware::Condition;
 use actix_web::web::Data;
-use actix_web::{get, post, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{App, HttpRequest, HttpResponse, HttpServer, get, post, web};
 use actix_ws::{AggregatedMessage, CloseCode, CloseReason, Session};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use futures_lite::StreamExt;
-use include_dir::{include_dir, Dir};
+use include_dir::{Dir, include_dir};
 use json_patch::Patch;
 use log::{debug, error, info, warn};
 use mime_guess::MimeGuess;
@@ -19,11 +19,11 @@ use pipeweaver_ipc::commands::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use tokio::sync::RwLock;
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::oneshot::Sender;
-use tokio::sync::RwLock;
 use ulid::Ulid;
 
 const WEB_CONTENT: Dir = include_dir!("./daemon/web-content/");
@@ -81,7 +81,7 @@ pub async fn spawn_http_server(
             .service(websocket_meter)
             .default_service(web::to(default))
     })
-        .bind((settings.bind_address.clone(), settings.port));
+    .bind((settings.bind_address.clone(), settings.port));
 
     if let Err(e) = server {
         warn!("Error Running HTTP Server: {:#?}", e);
