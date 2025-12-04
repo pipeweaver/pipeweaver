@@ -22,27 +22,27 @@ repository = "https://github.com/pipeweaver/pipeweaver"
 
 [workspace.dependencies]
 ### Logging ###
-log = "0.4.25"
+log = "0.4.29"
 
 ### Error Handling ###
-anyhow = "1.0.95"
+anyhow = "1.0.100"
 
 ### Serialisation / Deserialisation ###
-serde = { version = "1.0.217", features = ["derive"] }
-serde_json = "1.0.138"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
 
 ### Enum Helpers..
-strum = { version = "0.27.0" }
-strum_macros = "0.27.0"
+strum = { version = "0.27.2" }
+strum_macros = "0.27.2"
 enum-map = { version = "2.7.3", features = ["serde"] }
 
 ### JSON Patching ###
 json-patch = "4.1.0"
 
 ### IPC Communication ###
-interprocess = { version = "2.2.1", features = ["tokio"] }
+interprocess = { version = "2.2.3", features = ["tokio"] }
 
 ### Device Identification ###
-ulid = { version = "1.2.0", features = ["serde"] }
+ulid = { version = "1.2.1", features = ["serde"] }
 
 

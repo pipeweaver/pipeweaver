@@ -21,10 +21,10 @@ ulid = { workspace = true }
 
 enum-map = { workspace = true }
 
-async-trait = "0.1.86"
+async-trait = "0.1.89"
 futures = "0.3.31"
-tokio-util = { version = "0.7.13", features = ["codec", "compat"] }
+tokio-util = { version = "0.7.17", features = ["codec", "compat"] }
 tokio-serde = { version = "0.9.0", features = ["bincode", "json"] }
 
 # Used for Web Requests
-reqwest = { version = "0.12.12", default-features = false, features = ["json"] }
+reqwest = { version = "0.12.24", default-features = false, features = ["json"] }

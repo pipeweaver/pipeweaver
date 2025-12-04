@@ -48,9 +48,9 @@ simplelog = "0.12.2"
 tokio = { version = "1.41.1", features = ["rt-multi-thread", "sync", "macros"] }
 
 ### HTTP Server ###
-actix-web = { version = "4.9.0", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "ws"] }
+actix-web = { version = "4.12.1", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "ws"] }
 actix-ws = "0.3.0"
-actix-cors = "0.7.0"
+actix-cors = "0.7.1"
 futures-lite = "2.6.1"
 mime_guess = "2.0.5"
 include_dir = "0.7.4"
@@ -60,8 +60,8 @@ include_dir = "0.7.4"
 # fork fixes that, and allows cleaner fallthrough, allowing it to retry when the service appears.
 ksni = { git = "https://github.com/FrostyCoolSlug/ksni.git" }
 
-image = "0.25.6"
-open = "5.3.2"
+image = "0.25.9"
+open = "5.3.3"
 which = "8.0.0"
 
 ## Ok, Build Stuff Time :D
