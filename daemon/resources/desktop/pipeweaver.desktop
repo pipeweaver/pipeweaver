@@ -7,3 +7,5 @@ Exec=/usr/bin/pipeweaver-daemon
 Icon=pipeweaver
 Terminal=false
 Categories=Utility
+StartupNotify=false
+X-KDE-StartupNotify=false
