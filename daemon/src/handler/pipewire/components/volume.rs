@@ -142,6 +142,8 @@ impl VolumeManager for PipewireManager {
         // Now, pull out the correct part of the profile..
         let volumes = self.get_volumes(id)?;
 
+        let volume_a = volumes.volume[Mix::A];
+
         // Set the New volume for this mix
         volumes.volume[mix] = volume;
 
@@ -169,10 +171,12 @@ impl VolumeManager for PipewireManager {
 
         // If we're linked, update the other Mix as well
         if let Some(volume) = update_other {
-            // If the original request was for B, but we're changing A, tell pipewire
             if mix == Mix::B && api {
-                let message = PipewireMessage::SetNodeVolume(id, volume);
-                let _ = self.pipewire().send_message(message);
+                // Only update Volume A if it's below 100%
+                if volume_a < 100 {
+                    let message = PipewireMessage::SetNodeVolume(id, volume);
+                    let _ = self.pipewire().send_message(message);
+                }
             }
 
             // Set the secondary volume in the profile
