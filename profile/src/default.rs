@@ -1,7 +1,7 @@
 use crate::{
-    DeviceDescription, Devices, Mix, MuteState, MuteStates,
-    PhysicalSourceDevice, PhysicalTargetDevice, Profile, SourceDevices, TargetDevices,
-    VirtualSourceDevice, VirtualTargetDevice, Volumes,
+    DeviceDescription, Devices, Mix, MuteState, MuteStates, PhysicalSourceDevice,
+    PhysicalTargetDevice, Profile, SourceDevices, TargetDevices, VirtualSourceDevice,
+    VirtualTargetDevice, Volumes,
 };
 use enum_map::enum_map;
 use pipeweaver_shared::{Colour, DeviceType, OrderGroup};
