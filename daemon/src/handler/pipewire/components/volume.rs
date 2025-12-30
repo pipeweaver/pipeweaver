@@ -34,6 +34,7 @@ pub(crate) trait VolumeManager {
 }
 
 impl VolumeManager for PipewireManager {
+    //
     async fn volumes_load(&self) -> Result<()> {
         // Need to go through the various node types, and call a volume set
         for device in &self.profile.devices.sources.physical_devices {
