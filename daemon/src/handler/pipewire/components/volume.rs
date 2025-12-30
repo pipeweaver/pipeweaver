@@ -15,6 +15,9 @@ pub(crate) trait VolumeManager {
     async fn volumes_load(&self) -> Result<()>;
     async fn load_initial_volume(&self, id: Ulid) -> Result<()>;
 
+    async fn sync_pipewire_volume(&mut self, id: Ulid);
+    async fn sync_pipewire_mute(&mut self, id: Ulid);
+
     async fn sync_all_pipewire_volumes(&mut self);
     async fn sync_all_pipewire_mutes(&mut self);
 
@@ -72,29 +75,53 @@ impl VolumeManager for PipewireManager {
         Ok(())
     }
 
+    async fn sync_pipewire_volume(&mut self, id: Ulid) {
+        if let Ok(volume) = self.get_node_volume(id, Mix::A) {
+            let message = PipewireMessage::SetNodeVolume(id, volume);
+            let _ = self.pipewire().send_message(message);
+        }
+    }
+
+    async fn sync_pipewire_mute(&mut self, id: Ulid) {
+        if let Ok(muted) = self.get_target_mute_state(id).await {
+            let message = PipewireMessage::SetNodeMute(id, muted == MuteState::Muted);
+            let _ = self.pipewire().send_message(message);
+        }
+    }
+
     async fn sync_all_pipewire_volumes(&mut self) {
-        for &id in self.source_map.keys() {
-            if let Ok(volume) = self.get_node_volume(id, Mix::A) {
-                let message = PipewireMessage::SetNodeVolume(id, volume);
-                let _ = self.pipewire().send_message(message);
-            }
+        let source_ids: Vec<Ulid> = self.source_map.keys().copied().collect();
+
+        for id in source_ids {
+            self.sync_pipewire_volume(id).await;
         }
 
-        for dev in &self.profile.devices.targets.virtual_devices {
-            if let Ok(volume) = self.get_node_volume(dev.description.id, Mix::A) {
-                let message = PipewireMessage::SetNodeVolume(dev.description.id, volume);
-                let _ = self.pipewire().send_message(message);
-            }
+        let device_ids: Vec<Ulid> = self
+            .profile
+            .devices
+            .targets
+            .virtual_devices
+            .iter()
+            .map(|dev| dev.description.id)
+            .collect();
+
+        for dev in device_ids {
+            self.sync_pipewire_volume(dev).await;
         }
     }
 
     async fn sync_all_pipewire_mutes(&mut self) {
-        for dev in &self.profile.devices.targets.virtual_devices {
-            if let Ok(muted) = self.get_target_mute_state(dev.description.id).await {
-                let message =
-                    PipewireMessage::SetNodeMute(dev.description.id, muted == MuteState::Muted);
-                let _ = self.pipewire().send_message(message);
-            }
+        let device_ids: Vec<Ulid> = self
+            .profile
+            .devices
+            .targets
+            .virtual_devices
+            .iter()
+            .map(|dev| dev.description.id)
+            .collect();
+
+        for dev in device_ids {
+            self.sync_pipewire_mute(dev).await;
         }
     }
 

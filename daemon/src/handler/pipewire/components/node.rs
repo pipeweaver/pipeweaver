@@ -185,6 +185,7 @@ impl NodeManagement for PipewireManager {
         let local_desc = description.clone();
         self.node_create(node_type, &local_desc).await?;
         self.load_initial_volume(id).await?;
+        self.sync_pipewire_volume(id).await;
 
         // Re-load the routes
         match node_type {
