@@ -18,7 +18,6 @@ pub(crate) trait FilterManagement {
 
     async fn filter_meter_create(&mut self, node: Ulid, name: String) -> Result<Ulid>;
     async fn filter_meter_create_id(&mut self, node: Ulid, name: String, id: Ulid) -> Result<()>;
-    async fn filter_meter_load(&mut self, meter: Ulid) -> Result<()>;
 
     async fn filter_volume_set(&self, id: Ulid, volume: u8) -> Result<()>;
 
@@ -58,14 +57,6 @@ impl FilterManagement for PipewireManager {
     async fn filter_meter_create_id(&mut self, node: Ulid, name: String, id: Ulid) -> Result<()> {
         let props = self.filter_meter_get_props(node, name, id);
         self.filter_pw_create(props).await
-    }
-
-    async fn filter_meter_load(&mut self, meter: Ulid) -> Result<()> {
-        let enabled = self.meter_enabled;
-        let message = PipewireMessage::SetFilterValue(meter, 0, FilterValue::Bool(enabled));
-        self.pipewire().send_message(message)?;
-
-        Ok(())
     }
 
     async fn filter_volume_set(&self, id: Ulid, volume: u8) -> Result<()> {
@@ -162,7 +153,11 @@ impl FilterManagementLocal for PipewireManager {
             app_id: APP_ID.to_string(),
             app_name: APP_NAME.to_string(),
             linger: false,
-            callback: Box::new(MeterFilter::new(node, self.meter_callback.clone())),
+            callback: Box::new(MeterFilter::new(
+                node,
+                self.meter_callback.clone(),
+                self.meter_enabled,
+            )),
 
             ready_sender: None,
         }

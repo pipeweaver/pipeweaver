@@ -26,9 +26,9 @@ pub struct MeterFilter {
 }
 
 impl MeterFilter {
-    pub(crate) fn new(node_id: Ulid, callback: mpsc::Sender<(Ulid, u8)>) -> Self {
+    pub(crate) fn new(node_id: Ulid, callback: mpsc::Sender<(Ulid, u8)>, enabled: bool) -> Self {
         Self {
-            enabled: false,
+            enabled,
 
             count: 0,
             peak: 0.0,
