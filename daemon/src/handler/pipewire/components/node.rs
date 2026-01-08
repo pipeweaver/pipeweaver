@@ -1,3 +1,4 @@
+use crate::handler::pipewire::components::application::ApplicationManagement;
 use crate::handler::pipewire::components::filters::FilterManagement;
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
@@ -190,13 +191,14 @@ impl NodeManagement for PipewireManager {
         // Re-load the routes
         match node_type {
             NodeType::PhysicalSource | NodeType::VirtualSource => {
-                self.routing_load_source(&id).await?
+                self.routing_load_source(&id).await?;
             }
             NodeType::PhysicalTarget | NodeType::VirtualTarget => {
                 self.routing_load_target(&id).await?
             }
         }
 
+        self.refresh_applications(id).await?;
         if node_type == NodeType::PhysicalSource || node_type == NodeType::PhysicalTarget {
             self.connect_for_node(id).await?;
         }

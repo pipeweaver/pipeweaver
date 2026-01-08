@@ -19,6 +19,8 @@ pub(crate) trait ApplicationManagement {
     async fn set_application_volume(&mut self, id: u32, volume: u8) -> Result<()>;
     async fn set_application_mute(&mut self, id: u32, mute: bool) -> Result<()>;
 
+    async fn refresh_applications(&mut self, target: Ulid) -> Result<()>;
+
     fn application_appeared(&mut self, node: ApplicationNode) -> Result<()>;
     fn application_target_changed(&mut self, id: u32, target: Target) -> Result<()>;
     fn application_volume_changed(&mut self, id: u32, volume: u8) -> Result<()>;
@@ -128,6 +130,22 @@ impl ApplicationManagement for PipewireManager {
         }
         let message = SetApplicationMute(id, mute);
         self.pipewire().send_message(message)?;
+        Ok(())
+    }
+
+    async fn refresh_applications(&mut self, target: Ulid) -> Result<()> {
+        // We need to find all nodes which match this target, and re-send them
+        let keys: Vec<u32> = self.application_nodes.keys().copied().collect();
+        for id in keys {
+            if let Some(target_id) = self.get_application_assignment(id)
+                && !self.application_target_ignore.contains(&id)
+                && target_id == target
+            {
+                let message = SetApplicationTarget(id, target);
+                self.pipewire().send_message(message)?;
+            }
+        }
+
         Ok(())
     }
 
