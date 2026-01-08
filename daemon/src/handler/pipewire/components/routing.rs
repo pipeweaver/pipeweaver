@@ -73,10 +73,9 @@ impl RoutingManagement for PipewireManager {
                     let mix = self.routing_get_target_mix(target).await?;
                     if let Some(target_type) = self.get_node_type(*target) {
                         if target_type == NodeType::VirtualTarget {
-                            debug!("Target Node Type: {:?}", target_type);
-                            self.link_create_filter_to_filter(map[mix], *target).await?;
-                        } else {
                             self.link_create_filter_to_node(map[mix], *target).await?;
+                        } else {
+                            self.link_create_filter_to_filter(map[mix], *target).await?;
                         }
                     }
                 }
