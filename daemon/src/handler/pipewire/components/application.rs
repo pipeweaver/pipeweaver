@@ -138,10 +138,21 @@ impl ApplicationManagement for PipewireManager {
         let keys: Vec<u32> = self.application_nodes.keys().copied().collect();
         for id in keys {
             if let Some(target_id) = self.get_application_assignment(id)
-                && !self.application_target_ignore.contains(&id)
+                && !self.application_target_ignore.contains_key(&id)
                 && target_id == target
             {
                 let message = SetApplicationTarget(id, target);
+                self.pipewire().send_message(message)?;
+            }
+        }
+
+        // Look for anything that's been manually routed to this target
+        for (id, route) in &self.application_target_ignore {
+            if let Some(target_id) = route
+                && let NodeTarget::Node(target_id) = target_id
+                && target == *target_id
+            {
+                let message = SetApplicationTarget(*id, target);
                 self.pipewire().send_message(message)?;
             }
         }
@@ -159,7 +170,7 @@ impl ApplicationManagement for PipewireManager {
         // Add this to our node list
         self.application_nodes.insert(node_id, node);
 
-        if self.application_target_ignore.contains(&node_id) {
+        if self.application_target_ignore.contains_key(&node_id) {
             debug!("Application node is ignored, we're done here.");
             return Ok(());
         }
@@ -229,21 +240,21 @@ impl ApplicationManagement for PipewireManager {
                                 if target != desired {
                                     debug!("Target is not the desired output, adding to ignore..");
                                     // This node has been manually routed somewhere else, ignore it.
-                                    if !self.application_target_ignore.contains(&id) {
+                                    self.application_target_ignore.entry(id).or_insert_with(|| {
                                         debug!("Ignoring Application Node {}", id);
-                                        self.application_target_ignore.push(id);
-                                    }
+                                        route
+                                    });
                                 } else {
                                     // This is pointing to our desired location, manage it.
                                     debug!("Node moved to Managed Location, monitoring: {}", id);
-                                    self.application_target_ignore.retain(|node| *node != id);
+                                    self.application_target_ignore.remove(&id);
                                 }
                             }
                             Some(NodeTarget::UnmanagedNode(id)) => {
-                                if !self.application_target_ignore.contains(&id) {
+                                self.application_target_ignore.entry(id).or_insert_with(|| {
                                     debug!("Ignoring Application Node {}", id);
-                                    self.application_target_ignore.push(id);
-                                }
+                                    route
+                                });
                             }
                             None => {
                                 if original.is_none() {
@@ -253,10 +264,10 @@ impl ApplicationManagement for PipewireManager {
                                     self.pipewire().send_message(message)?;
                                 } else {
                                     // We've had a previous target, so ignore this change.
-                                    if !self.application_target_ignore.contains(&id) {
+                                    self.application_target_ignore.entry(id).or_insert_with(|| {
                                         debug!("Ignoring Application Node {} - To Default", id);
-                                        self.application_target_ignore.push(id);
-                                    }
+                                        route
+                                    });
                                 }
                             }
                         }

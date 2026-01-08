@@ -63,7 +63,7 @@ pub(crate) struct PipewireManager {
 
     // A list of application nodes
     pub(crate) application_nodes: HashMap<u32, ApplicationNode>,
-    pub(crate) application_target_ignore: Vec<u32>,
+    pub(crate) application_target_ignore: HashMap<u32, Option<NodeTarget>>,
 }
 
 impl PipewireManager {
@@ -97,7 +97,7 @@ impl PipewireManager {
             device_nodes: Default::default(),
 
             application_nodes: Default::default(),
-            application_target_ignore: vec![],
+            application_target_ignore: Default::default(),
         }
     }
 
