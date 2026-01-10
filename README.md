@@ -58,12 +58,12 @@ Implemented:
 * Physical Device Mapping
 * Volumes, Muting, Routing
 * Configuration Saving and Recall
+* Tray Icon and .desktop Files
+* Custom Channel Colours
 
 Planned:
 
 * Command Line configuration tool
-* Tray Icon and .desktop Files
-* Custom Channel Colours
 * A 'Tablet Mode' interface
 * Multiple Profile Support
 * Latency Tuning
