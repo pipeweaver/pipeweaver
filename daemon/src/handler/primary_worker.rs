@@ -193,12 +193,12 @@ impl PrimaryWorker {
                                         "Unable to launch UI App: {}, falling back to browser",
                                         e
                                     );
-                                    if let Err(e) = open::that("http://localhost:14565") {
+                                    if let Err(e) = open::that_detached("http://localhost:14565") {
                                         warn!("Unable to open web interface: {}", e);
                                     }
                                 }
                             }
-                        } else if let Err(e) = open::that("http://localhost:14565") {
+                        } else if let Err(e) = open::that_detached("http://localhost:14565") {
                             warn!("Unable to open web interface: {}", e);
                         }
                     }
