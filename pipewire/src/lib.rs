@@ -6,12 +6,13 @@ mod store;
 
 use crate::manager::run_pw_main_loop;
 use anyhow::{Result, anyhow, bail};
-use log::{info, warn};
+use log::{debug, info, warn};
 use oneshot::TryRecvError;
+use std::fmt::Debug;
 use std::sync::mpsc;
 use std::thread;
 use std::thread::{JoinHandle, sleep};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use ulid::Ulid;
 
 type PWSender = pipewire::channel::Sender<PipewireInternalMessage>;
@@ -20,6 +21,7 @@ type PWReceiver = pipewire::channel::Receiver<PipewireInternalMessage>;
 type Sender = mpsc::Sender<PipewireInternalMessage>;
 type Receiver = mpsc::Receiver<PipewireInternalMessage>;
 
+#[derive(Debug)]
 pub enum PipewireMessage {
     CreateDeviceNode(NodeProperties),
     CreateFilterNode(FilterProperties),
@@ -149,6 +151,9 @@ impl PipewireRunner {
     }
 
     pub fn send_message(&self, message: PipewireMessage) -> Result<()> {
+        let start = Instant::now();
+        debug!("Sending Message to Pipewire: {:?}", message);
+
         let (tx, rx) = oneshot::channel();
 
         let message = match message {
@@ -201,7 +206,14 @@ impl PipewireRunner {
             .send(message)
             .map_err(|e| anyhow!("Unable to Send Message: {}", e))?;
 
-        rx.recv().map_err(|e| anyhow!("Error: {}", e))?
+        let resp = rx.recv().map_err(|e| anyhow!("Error: {}", e))?;
+
+        debug!(
+            "Received Response: {:?} in {}ms",
+            resp,
+            start.elapsed().as_millis()
+        );
+        resp
     }
 }
 
@@ -256,6 +268,7 @@ fn run_message_loop(receiver: Receiver, sender: PWSender) {
     info!("[PW-LIB] Message Loop Stopped");
 }
 
+#[derive(Debug)]
 pub struct NodeProperties {
     pub node_id: Ulid,
 
@@ -299,6 +312,20 @@ pub struct FilterProperties {
     pub callback: Box<dyn FilterHandler>,
 
     pub ready_sender: Option<oneshot::Sender<()>>,
+}
+impl Debug for FilterProperties {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FilterProperties")
+            .field("filter_id", &self.filter_id)
+            .field("filter_name", &self.filter_name)
+            .field("filter_nick", &self.filter_nick)
+            .field("filter_description", &self.filter_description)
+            .field("app_id", &self.app_id)
+            .field("app_name", &self.app_name)
+            .field("class", &self.class)
+            .field("linger", &self.linger)
+            .finish()
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]

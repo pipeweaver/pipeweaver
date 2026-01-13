@@ -274,7 +274,7 @@ async fn websocket_meter(
     actix_web::rt::spawn(async move {
         // Is this the first client?
         if client_counter.fetch_add(1, Ordering::SeqCst) == 0 {
-            debug!("Client Connected, starting metering...");
+            debug!("First Client Connected, starting metering...");
             let request = DaemonRequest::Daemon(SetMetering(true));
             let _ = handle_packet(request, &messenger).await;
         }
@@ -324,6 +324,7 @@ async fn websocket_meter(
             }
         };
 
+        debug!("Session Disconnected: {:?}", close_reason);
         let _ = session.close(close_reason).await;
 
         // If we're metering, and this is the last client, stop metering

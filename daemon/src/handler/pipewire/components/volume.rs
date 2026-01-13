@@ -93,7 +93,17 @@ impl VolumeManager for PipewireManager {
         let source_ids: Vec<Ulid> = self.source_map.keys().copied().collect();
 
         for id in source_ids {
-            self.sync_pipewire_volume(id).await;
+            if self
+                .profile
+                .devices
+                .sources
+                .virtual_devices
+                .iter()
+                .any(|e| e.description.id == id)
+            {
+                self.sync_pipewire_volume(id).await;
+            }
+            //self.sync_pipewire_volume(id).await;
         }
 
         let device_ids: Vec<Ulid> = self
@@ -131,11 +141,11 @@ impl VolumeManager for PipewireManager {
         let node_type = self.get_node_type(id).ok_or(anyhow!("Node Not Found"))?;
         match node_type {
             NodeType::PhysicalSource | NodeType::VirtualSource => {
-                debug!("Syncing Volume: {} - {}", id, volume);
+                debug!("Sync Volume from Pipewire: {} - {}", id, volume);
                 self.set_source_volume(id, Mix::A, volume, false).await?;
             }
             NodeType::PhysicalTarget | NodeType::VirtualTarget => {
-                debug!("Syncing Volume: {} - {}", id, volume);
+                debug!("Sync Volume from Pipewire: {} - {}", id, volume);
                 self.set_target_volume(id, volume, false).await?;
             }
         }
