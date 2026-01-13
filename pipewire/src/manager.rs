@@ -782,6 +782,24 @@ pub fn run_pw_main_loop(
             .expect("OneShot Channel is broken!");
         return;
     };
+    let _core_listener = core
+        .add_listener_local()
+        .info(|info| {
+            info!(
+                "[PipeWire] Core Info: Name: {}, Version: {}, User Name: {}, Host Name: {}",
+                info.name(),
+                info.version(),
+                info.user_name(),
+                info.host_name()
+            );
+        })
+        .error(|id, seq, res, msg| {
+            error!(
+                "[PipeWire] Core Error Occurred: {} - {} - {} - {}",
+                id, seq, res, msg
+            );
+        })
+        .register();
 
     let Ok(registry) = core.get_registry() else {
         start_tx
