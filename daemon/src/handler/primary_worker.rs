@@ -193,13 +193,11 @@ impl PrimaryWorker {
                                         "Unable to launch UI App: {}, falling back to browser",
                                         e
                                     );
-                                    if let Err(e) = open::that_detached("http://localhost:14565") {
-                                        warn!("Unable to open web interface: {}", e);
-                                    }
+                                    open::that_in_background("http://localhost:14565");
                                 }
                             }
-                        } else if let Err(e) = open::that_detached("http://localhost:14565") {
-                            warn!("Unable to open web interface: {}", e);
+                        } else {
+                            open::that_in_background("http://localhost:14565");
                         }
                     }
                     DaemonCommand::ResetAudio => reset = true,
