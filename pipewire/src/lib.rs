@@ -6,7 +6,7 @@ mod store;
 
 use crate::manager::run_pw_main_loop;
 use anyhow::{Result, anyhow, bail};
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
 use oneshot::TryRecvError;
 use std::fmt::Debug;
 use std::sync::mpsc;
@@ -152,7 +152,7 @@ impl PipewireRunner {
 
     pub fn send_message(&self, message: PipewireMessage) -> Result<()> {
         let start = Instant::now();
-        debug!("Sending Message to Pipewire: {:?}", message);
+        trace!("Sending Message to Pipewire: {:?}", message);
 
         let (tx, rx) = oneshot::channel();
 
@@ -208,7 +208,7 @@ impl PipewireRunner {
 
         let resp = rx.recv().map_err(|e| anyhow!("Error: {}", e))?;
 
-        debug!(
+        trace!(
             "Received Response: {:?} in {}ms",
             resp,
             start.elapsed().as_millis()

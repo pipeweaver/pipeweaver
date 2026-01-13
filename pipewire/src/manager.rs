@@ -794,10 +794,10 @@ pub fn run_pw_main_loop(
             );
         })
         .error(|id, seq, res, msg| {
-            error!(
-                "[PipeWire] Core Error Occurred: {} - {} - {} - {}",
-                id, seq, res, msg
-            );
+            // error!(
+            //     "[PipeWire] Core Error Occurred: {} - {} - {} - {}",
+            //     id, seq, res, msg
+            // );
         })
         .register();
 
