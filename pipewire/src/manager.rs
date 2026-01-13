@@ -793,7 +793,7 @@ pub fn run_pw_main_loop(
                 info.host_name()
             );
         })
-        .error(|id, seq, res, msg| {
+        .error(|_id, _seq, _res, _msg| {
             // error!(
             //     "[PipeWire] Core Error Occurred: {} - {} - {} - {}",
             //     id, seq, res, msg
