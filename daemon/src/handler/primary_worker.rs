@@ -1,10 +1,10 @@
-use crate::APP_NAME_ID;
 use crate::handler::messaging::DaemonMessage;
 use crate::handler::pipewire::manager::{PipewireManagerConfig, run_pipewire_manager};
 use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfiguration, SetMetering};
 use crate::servers::http_server::{MeterEvent, PatchEvent};
 use crate::stop::Stop;
 use crate::{APP_DAEMON_NAME, APP_ID};
+use crate::{APP_NAME_ID, BACKGROUND_PARAM};
 use anyhow::Result;
 use anyhow::{Context, bail};
 use ashpd::desktop::background::Background;
@@ -359,7 +359,7 @@ async fn set_autostart(enabled: bool) -> Result<()> {
             .dbus_activatable(false)
             .command::<Vec<_>, String>(vec![
                 String::from(APP_DAEMON_NAME),
-                String::from("--startup"),
+                String::from(BACKGROUND_PARAM),
             ]);
 
         debug!("Requesting Background Access");
@@ -390,7 +390,7 @@ async fn set_autostart(enabled: bool) -> Result<()> {
                         .set("Type", "Application")
                         .set("Name", "Pipeweaver")
                         .set("Comment", "Audio Control and Routing")
-                        .set("Exec", format!("{exe:?} --startup"))
+                        .set("Exec", format!("{exe:?} {BACKGROUND_PARAM}"))
                         .set("Terminal", "false");
 
                     conf.write_to_file(path)?;

@@ -28,6 +28,9 @@ use tokio::{join, task};
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const HASH: &str = env!("GIT_HASH");
 
+const BACKGROUND_PARAM: &str = "--background";
+const LEGACY_BACKGROUND_PARAM: &str = "--startup";
+
 // Definitions used during node / filter declarations
 const APP_ID: &str = "io.github.pipeweaver";
 const APP_NAME: &str = "PipeWeaver";
@@ -145,7 +148,9 @@ async fn main() -> Result<()> {
     ));
 
     let args: Vec<String> = env::args().collect();
-    let hide_initial = args.contains(&"--startup".to_string());
+    let hide_initial = args.contains(&BACKGROUND_PARAM.to_string())
+        || args.contains(&LEGACY_BACKGROUND_PARAM.to_string());
+
     if !hide_initial {
         let (tx, rx) = oneshot::channel();
         let message = DaemonMessage::RunDaemon(DaemonCommand::OpenInterface, tx);
