@@ -23,7 +23,11 @@ pub async fn spawn_tray(mut shutdown: Stop, sender: Messenger) -> Result<()> {
 
     let (icon_tx, mut icon_rx) = mpsc::channel(20);
     let icon = TrayIcon::new(icon_tx);
-    let handle = icon.spawn_without_dbus_name().await?;
+    let handle = icon
+        .disable_dbus_name(true)
+        .assume_sni_available(true)
+        .spawn()
+        .await?;
 
     loop {
         tokio::select! {
