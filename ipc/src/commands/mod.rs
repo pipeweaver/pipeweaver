@@ -45,6 +45,7 @@ pub struct WebsocketResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DaemonCommand {
     SetAutoStart(bool),
+    SetAudioQuantum(u32),
     SetMetering(bool),
     OpenInterface,
     ResetAudio,

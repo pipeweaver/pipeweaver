@@ -257,6 +257,10 @@ impl PipewireManager {
                         ManagerMessage::SetMetering(enabled) => {
                             let _ = self.set_metering(enabled).await;
                         }
+                        ManagerMessage::SetAudioQuantum(value, callback) => {
+                            self.profile.audio_quantum = value;
+                            let _ = callback.send(());
+                        }
                         ManagerMessage::Quit => {
                             info!("[Manager] Stopping");
                             break;

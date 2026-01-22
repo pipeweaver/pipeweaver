@@ -13,6 +13,9 @@ pub struct Profile {
     pub devices: Devices,
     pub routes: HashMap<Ulid, HashSet<Ulid>>,
 
+    /// The expected Quantum of the audio devices
+    pub audio_quantum: u32,
+
     #[serde(default)]
     pub application_mapping: EnumMap<DeviceType, HashMap<String, HashMap<String, Ulid>>>,
 }

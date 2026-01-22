@@ -144,6 +144,7 @@ impl Profile {
             .into_iter()
             .collect(),
 
+            audio_quantum: 1024,
             application_mapping: enum_map! {
                 DeviceType::Source => {
                     HashMap::from([

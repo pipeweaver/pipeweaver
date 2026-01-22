@@ -1,6 +1,8 @@
 use crate::handler::messaging::DaemonMessage;
 use crate::handler::pipewire::manager::{PipewireManagerConfig, run_pipewire_manager};
-use crate::handler::primary_worker::ManagerMessage::{Execute, GetAudioConfiguration, SetMetering};
+use crate::handler::primary_worker::ManagerMessage::{
+    Execute, GetAudioConfiguration, SetAudioQuantum, SetMetering,
+};
 use crate::servers::http_server::{MeterEvent, PatchEvent};
 use crate::stop::Stop;
 use crate::{APP_DAEMON_NAME, APP_ID};
@@ -166,6 +168,13 @@ impl PrimaryWorker {
                 match command {
                     DaemonCommand::SetMetering(enabled) => {
                         let _ = pw_tx.send(SetMetering(enabled)).await;
+                    }
+                    DaemonCommand::SetAudioQuantum(value) => {
+                        let (tx, rx) = oneshot::channel();
+                        let _ = pw_tx.send(SetAudioQuantum(value, tx)).await;
+                        let _ = rx.await;
+
+                        reset = true;
                     }
                     DaemonCommand::OpenInterface => {
                         if let Some(app_path) = get_ui_app_path() {
@@ -440,6 +449,7 @@ pub enum ManagerMessage {
     Execute(APICommand, oneshot::Sender<APICommandResponse>),
     GetAudioConfiguration(oneshot::Sender<AudioConfiguration>),
     SetMetering(bool),
+    SetAudioQuantum(u32, oneshot::Sender<()>),
     Quit,
 }
 
