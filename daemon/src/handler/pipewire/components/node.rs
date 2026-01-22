@@ -685,7 +685,7 @@ impl NodeManagementLocal for PipewireManager {
             linger: false,
             class,
             managed_volume,
-            buffer: 512,
+            buffer: self.profile.audio_quantum,
             rate: self.clock_rate.unwrap_or(48000),
             ready_sender: None,
         }
