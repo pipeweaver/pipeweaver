@@ -1,7 +1,7 @@
 mod default;
 
 use enum_map::{EnumMap, enum_map};
-use pipeweaver_shared::{Colour, DeviceType, Mix, MuteState, MuteTarget, OrderGroup};
+use pipeweaver_shared::{Colour, DeviceType, Mix, MuteState, MuteTarget, OrderGroup, Quantum};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use ulid::Ulid;
@@ -15,14 +15,14 @@ pub struct Profile {
 
     /// The expected Quantum of the audio devices
     #[serde(default = "default_audio_quantum")]
-    pub audio_quantum: u32,
+    pub audio_quantum: Quantum,
 
     #[serde(default)]
     pub application_mapping: EnumMap<DeviceType, HashMap<String, HashMap<String, Ulid>>>,
 }
 
-fn default_audio_quantum() -> u32 {
-    1024
+fn default_audio_quantum() -> Quantum {
+    Quantum::Quantum1024
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

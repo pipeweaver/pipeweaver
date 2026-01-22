@@ -3,6 +3,7 @@ use json_patch::Patch;
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::{
     AppDefinition, AppTarget, Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType, OrderGroup,
+    Quantum,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -45,7 +46,7 @@ pub struct WebsocketResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DaemonCommand {
     SetAutoStart(bool),
-    SetAudioQuantum(u32),
+    SetAudioQuantum(Quantum),
     SetMetering(bool),
     OpenInterface,
     ResetAudio,

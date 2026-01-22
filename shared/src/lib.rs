@@ -52,6 +52,50 @@ pub enum OrderGroup {
     Hidden,
 }
 
+#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub enum Quantum {
+    Quantum8,
+    Quantum16,
+    Quantum32,
+    Quantum64,
+    Quantum128,
+    Quantum256,
+    Quantum512,
+    #[default]
+    Quantum1024,
+}
+
+impl From<Quantum> for u32 {
+    fn from(value: Quantum) -> Self {
+        match value {
+            Quantum::Quantum8 => 8,
+            Quantum::Quantum16 => 16,
+            Quantum::Quantum32 => 32,
+            Quantum::Quantum64 => 64,
+            Quantum::Quantum128 => 128,
+            Quantum::Quantum256 => 256,
+            Quantum::Quantum512 => 512,
+            Quantum::Quantum1024 => 1024,
+        }
+    }
+}
+
+impl From<u32> for Quantum {
+    fn from(value: u32) -> Self {
+        match value {
+            8 => Quantum::Quantum8,
+            16 => Quantum::Quantum16,
+            32 => Quantum::Quantum32,
+            64 => Quantum::Quantum64,
+            128 => Quantum::Quantum128,
+            256 => Quantum::Quantum256,
+            512 => Quantum::Quantum512,
+            1024 => Quantum::Quantum1024,
+            _ => panic!("Unsupported quantum size: {}", value),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
 pub enum AppTarget {
     Managed(Ulid),

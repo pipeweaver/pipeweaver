@@ -17,6 +17,7 @@ use pipeweaver_ipc::commands::{
     APICommand, APICommandResponse, AudioConfiguration, DaemonCommand, DaemonResponse, DaemonStatus,
 };
 use pipeweaver_profile::Profile;
+use pipeweaver_shared::Quantum;
 use std::fs::{File, create_dir_all};
 use std::io::ErrorKind;
 use std::path::PathBuf;
@@ -449,7 +450,7 @@ pub enum ManagerMessage {
     Execute(APICommand, oneshot::Sender<APICommandResponse>),
     GetAudioConfiguration(oneshot::Sender<AudioConfiguration>),
     SetMetering(bool),
-    SetAudioQuantum(u32, oneshot::Sender<()>),
+    SetAudioQuantum(Quantum, oneshot::Sender<()>),
     Quit,
 }
 

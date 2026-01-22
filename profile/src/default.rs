@@ -4,7 +4,7 @@ use crate::{
     VirtualTargetDevice, Volumes,
 };
 use enum_map::enum_map;
-use pipeweaver_shared::{Colour, DeviceType, OrderGroup};
+use pipeweaver_shared::{Colour, DeviceType, OrderGroup, Quantum};
 use std::collections::{HashMap, HashSet};
 use ulid::Ulid;
 
@@ -144,7 +144,7 @@ impl Profile {
             .into_iter()
             .collect(),
 
-            audio_quantum: 1024,
+            audio_quantum: Quantum::Quantum1024,
             application_mapping: enum_map! {
                 DeviceType::Source => {
                     HashMap::from([
