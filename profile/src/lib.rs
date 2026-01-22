@@ -14,10 +14,15 @@ pub struct Profile {
     pub routes: HashMap<Ulid, HashSet<Ulid>>,
 
     /// The expected Quantum of the audio devices
+    #[serde(default = "default_audio_quantum")]
     pub audio_quantum: u32,
 
     #[serde(default)]
     pub application_mapping: EnumMap<DeviceType, HashMap<String, HashMap<String, Ulid>>>,
+}
+
+fn default_audio_quantum() -> u32 {
+    1024
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
