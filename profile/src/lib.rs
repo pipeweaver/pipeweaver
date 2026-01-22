@@ -22,7 +22,7 @@ pub struct Profile {
 }
 
 fn default_audio_quantum() -> Quantum {
-    Quantum::Quantum1024
+    Quantum::Quantum512
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

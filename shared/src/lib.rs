@@ -60,8 +60,8 @@ pub enum Quantum {
     Quantum64,
     Quantum128,
     Quantum256,
-    Quantum512,
     #[default]
+    Quantum512,
     Quantum1024,
 }
 
