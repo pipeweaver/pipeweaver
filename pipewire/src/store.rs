@@ -793,7 +793,9 @@ impl Store {
                     result = Some(NodeTarget::UnmanagedNode(id));
                 }
 
-                debug!("Node not found: {}", id);
+                if result.is_none() {
+                    debug!("Node not found: {}", id);
+                }
             }
             TargetType::Serial(Some(id)) => {
                 for node in self.managed_nodes.values() {

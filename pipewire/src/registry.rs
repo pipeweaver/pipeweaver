@@ -79,6 +79,16 @@ impl PipewireRegistry {
 
                     ObjectType::Node => {
                         if let Some(props) = global.props {
+                            // If we're receiving properties for a managed node, we just need to update
+                            // the internal serial number if it's present.
+                            if store.is_managed_node(id) {
+                                // Yes, inform the store of the new pw serial
+                                if let Some(serial) = props.get(*OBJECT_SERIAL).and_then(|s| s.parse::<u32>().ok()) {
+                                    store.managed_node_set_pw_serial(id, serial);
+                                }
+                                return;
+                            }
+
                             if let Ok(node) = RegistryDeviceNode::try_from(props) {
                                 if let Some(parent_id) = node.parent_id
                                     && let Some(device) = store.unmanaged_device_get(parent_id) {
@@ -173,13 +183,6 @@ impl PipewireRegistry {
                             } else {
                                 // We don't know what type, or props this has, so we'll fire the id and serial to the
                                 // store, and see if it wants to handle it.
-                                // TODO: This is kinda hacky, but is the only way to get the object serial after node creation
-                                if let Some(serial) = props
-                                    .get(*OBJECT_SERIAL)
-                                    .and_then(|s| s.parse::<u32>().ok())
-                                {
-                                    store.managed_node_set_pw_serial(id, serial);
-                                }
                             }
                         }
                     }
