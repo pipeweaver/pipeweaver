@@ -109,7 +109,7 @@ impl MeterFilter {
             }
 
             let mut channel_peak = 0.0_f32;
-            for &sample in channel.iter() {
+            for &sample in channel.iter().step_by(16) {
                 channel_peak = channel_peak.max(sample.abs());
             }
 
