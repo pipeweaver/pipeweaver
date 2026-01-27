@@ -142,6 +142,7 @@ impl FilterManagementLocal for PipewireManager {
 
     fn filter_meter_get_props(&self, node: Ulid, name: String, id: Ulid) -> FilterProperties {
         let description = name.to_lowercase().replace(" ", "-");
+        let rate = self.clock_rate.unwrap_or(48000);
 
         FilterProperties {
             filter_id: id,
@@ -157,6 +158,7 @@ impl FilterManagementLocal for PipewireManager {
                 node,
                 self.meter_callback.clone(),
                 self.meter_enabled,
+                rate,
             )),
 
             ready_sender: None,

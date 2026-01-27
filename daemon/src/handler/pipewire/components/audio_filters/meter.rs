@@ -6,17 +6,13 @@ use ulid::Ulid;
 const POWER_FACTOR: f32 = 3.8;
 const INV_POWER_FACTOR: f32 = 1.0 / POWER_FACTOR; // Precompute inverse
 
-// This is how we should be setup
-const SAMPLE_RATE: u32 = 48000;
-
 // The frequency we should send events upstream
 const MILLISECONDS: u32 = 100;
 
-// The number of samples which should represent a MILLISECONDS time period
-const CHUNK_SIZE: usize = ((SAMPLE_RATE / 1000) * MILLISECONDS) as usize;
-
 pub struct MeterFilter {
     enabled: bool,
+
+    chunk_size: usize,
 
     count: usize,
     peak: f32,
@@ -26,9 +22,17 @@ pub struct MeterFilter {
 }
 
 impl MeterFilter {
-    pub(crate) fn new(node_id: Ulid, callback: mpsc::Sender<(Ulid, u8)>, enabled: bool) -> Self {
+    pub(crate) fn new(
+        node_id: Ulid,
+        callback: mpsc::Sender<(Ulid, u8)>,
+        enabled: bool,
+        rate: u32,
+    ) -> Self {
+        let chunk_size = ((rate / 1000) * MILLISECONDS) as usize;
+
         Self {
             enabled,
+            chunk_size,
 
             count: 0,
             peak: 0.0,
@@ -82,7 +86,7 @@ impl FilterHandler for MeterFilter {
         self.peak = self.peak.max(peak);
         self.count += inputs[0].len();
 
-        if self.count >= CHUNK_SIZE {
+        if self.count >= self.chunk_size {
             let meter = self.calculate_meter(self.peak);
 
             // Always send meter updates every 100ms to maintain UI meter decay
@@ -90,7 +94,7 @@ impl FilterHandler for MeterFilter {
 
             // Reset our values
             self.peak = 0.0;
-            self.count -= CHUNK_SIZE;
+            self.count -= self.chunk_size;
         }
     }
 }
