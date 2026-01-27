@@ -8,9 +8,9 @@ use pipewire::client::{Client, ClientChangeMask, ClientListener};
 use pipewire::keys::{
     ACCESS, APP_NAME, APP_PROCESS_BINARY, AUDIO_CHANNEL, CLIENT_ID, DEVICE_DESCRIPTION, DEVICE_ID,
     DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FACTORY_TYPE_NAME, FACTORY_TYPE_VERSION,
-    LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_NAME, MODULE_ID,
-    NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, OBJECT_SERIAL, PORT_DIRECTION, PORT_ID,
-    PORT_MONITOR, PORT_NAME, PROTOCOL, SEC_GID, SEC_PID, SEC_UID,
+    LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT, MEDIA_CLASS, MEDIA_NAME,
+    MODULE_ID, NODE_DESCRIPTION, NODE_ID, NODE_NAME, NODE_NICK, OBJECT_SERIAL, PORT_DIRECTION,
+    PORT_ID, PORT_MONITOR, PORT_NAME, PROTOCOL, SEC_GID, SEC_PID, SEC_UID,
 };
 use pipewire::metadata::{Metadata, MetadataListener};
 use pipewire::node::{Node, NodeChangeMask, NodeListener};
@@ -80,10 +80,13 @@ impl PipewireRegistry {
                     ObjectType::Node => {
                         if let Some(props) = global.props {
                             if let Ok(node) = RegistryDeviceNode::try_from(props) {
-                                if let Some(device) = store.unmanaged_device_get(node.parent_id) {
+                                if let Some(parent_id) = node.parent_id
+                                    && let Some(device) = store.unmanaged_device_get(parent_id) {
                                     device.add_node(id);
-                                    store.unmanaged_device_node_add(id, node);
                                 }
+
+                                // All unmanaged nodes should be handled, even if they don't have a parent
+                                store.unmanaged_device_node_add(id, node);
                             } else if let Ok(mut node) = RegistryClientNode::try_from(props) {
                                 if let Some(client) = store.unmanaged_client_get(node.parent_id) {
                                     let bound: Option<Node> = registry.borrow().bind(global).ok();
@@ -210,7 +213,7 @@ impl PipewireRegistry {
                             if let Some(node_id) = node_id.and_then(|s| s.parse::<u32>().ok()) && let Some(port_id) = pid.and_then(|s| s.parse::<u32>().ok()) {
                                 if let Some(node) = store.unmanaged_device_node_get(node_id) {
                                     node.add_port(id, direction, port);
-                                    store.unmanaged_node_check(node_id);
+                                    store.unmanaged_node_update(node_id);
                                     return;
                                 }
                                 if let Some(node) = store.unmanaged_client_node_get(node_id) {
@@ -310,7 +313,7 @@ impl PipewireRegistry {
                                                 listen_store.borrow_mut().set_default_source(DefaultDefinition::Default(String::from(name)));
                                             }
 
-                                            if key == Some("default.configured.audio.sourc")
+                                            if key == Some("default.configured.audio.source")
                                                 && _type == Some("Spa:String:JSON")
                                                 && let Some(val) = value
                                                 && let Ok(json) = serde_json::from_str::<serde_json::Value>(val)
@@ -470,7 +473,10 @@ pub(crate) enum Direction {
 #[derive(Debug)]
 pub(crate) struct RegistryDeviceNode {
     pub object_serial: u32,
-    pub parent_id: u32,
+    pub parent_id: Option<u32>,
+
+    pub media_class: Option<String>,
+    pub is_usable: bool,
 
     pub nickname: Option<String>,
     pub description: Option<String>,
@@ -487,22 +493,33 @@ impl TryFrom<&DictRef> for RegistryDeviceNode {
             .get(*OBJECT_SERIAL)
             .and_then(|s| s.parse::<u32>().ok())
             .ok_or_else(|| anyhow!("OBJECT_SERIAL"))?;
-        let device = value.get(*DEVICE_ID);
+        let parent_id = value.get(*DEVICE_ID).and_then(|s| s.parse::<u32>().ok());
         let nickname = value.get(*NODE_NICK).map(|s| s.to_string());
         let description = value.get(*NODE_DESCRIPTION).map(|s| s.to_string());
         let name = value.get(*NODE_NAME).map(|s| s.to_string());
+        let media_class = value.get(*MEDIA_CLASS).map(|s| s.to_string());
 
-        if let Some(device_id) = device.and_then(|s| s.parse::<u32>().ok()) {
-            return Ok(Self {
-                object_serial,
-                parent_id: device_id,
-                nickname,
-                description,
-                name,
-                ports: Default::default(),
-            });
+        // We need to match the media type here, it's only a device if it's a Sink or Source
+        if let Some(media_class) = &media_class {
+            if !media_class.starts_with("Audio/Source") && !media_class.starts_with("Audio/Sink") {
+                bail!("Not an Audio Device Node");
+            }
+        } else {
+            bail!("Missing Media Class");
         }
-        bail!("Device ID Missing");
+
+        Ok(Self {
+            object_serial,
+            parent_id,
+
+            media_class,
+            is_usable: false,
+
+            nickname,
+            description,
+            name,
+            ports: Default::default(),
+        })
     }
 }
 

@@ -82,6 +82,7 @@ pub enum PipewireReceiver {
     DefaultChanged(MediaClass, NodeTarget),
 
     DeviceAdded(DeviceNode),
+    DeviceUsable(u32, bool),
     DeviceRemoved(u32),
 
     ApplicationAdded(ApplicationNode),
@@ -379,6 +380,8 @@ pub struct FilterProperty {
 pub struct DeviceNode {
     pub node_id: u32,
     pub node_class: MediaClass,
+
+    pub is_usable: bool,
 
     pub name: Option<String>,
     pub nickname: Option<String>,

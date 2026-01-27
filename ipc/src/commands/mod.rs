@@ -137,6 +137,7 @@ pub struct PhysicalDevice {
     pub node_id: u32,
     pub name: Option<String>,
     pub description: Option<String>,
+    pub is_usable: bool,
 }
 
 /// This will be extended over time, for now we'll just include the node id and the name.

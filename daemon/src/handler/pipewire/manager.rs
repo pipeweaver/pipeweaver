@@ -327,16 +327,26 @@ impl PipewireManager {
                                 continue;
                             }
 
-                            // We need the name, and a message callback for when we're done
+                            // While device information is being populated, a device can rapidly
+                            // switch between 'usable' and 'not usable'. To prevent incorrectly
+                            // attempting to use a device, we'll put it on a 500ms timer before
+                            // we actually process it, so it can first settle.
+
                             let done = device_ready_tx.clone();
 
-                            // Spawn up a simple task that simply waits a second
+                            // Spawn up a simple task that simply waits 500ms
                             let handle = tokio::spawn(async move {
                                 sleep(Duration::from_millis(500)).await;
                                 let _ = done.send(node.node_id).await;
                             });
                             device_timers.insert(node.node_id, handle);
                             discovered_devices.insert(node.node_id, node);
+                        }
+                        PipewireReceiver::DeviceUsable(id, usable) => {
+                            // Simply update the usable state if we're waiting for this device.
+                            if let Some(dev) = discovered_devices.get_mut(&id) {
+                                dev.is_usable = usable;
+                            }
                         }
                         PipewireReceiver::DeviceRemoved(id) => {
                             if let Some(handle) = device_timers.remove(&id) {
@@ -488,9 +498,8 @@ impl PipewireManager {
                     initial_ready = true;
                 }
                 Some(node_id) = device_ready_rx.recv() => {
-                    // A device has been sat here for 500ms without being removed
+                    // A device has been sat here for 500ms, lets do the processing.
                     if let Some(device) = discovered_devices.remove(&node_id) {
-
                         debug!("Device Found: {:?}, Type: {:?}", device.description, device.node_class);
                         device_timers.remove(&node_id);
 
@@ -498,19 +507,27 @@ impl PipewireManager {
                         let node = PhysicalDevice {
                             node_id: device.node_id,
                             name: device.name.clone(),
-                            description: device.description.clone()
+                            description: device.description.clone(),
+                            is_usable: device.is_usable,
                         };
 
-                        let sender = self.worker_sender.clone();
-                        match device.node_class {
-                            MediaClass::Source => {
-                                let _ = self.source_device_added(node, sender).await;
-                            }
-                            MediaClass::Sink => {
-                                let _ = self.target_device_added(node, sender).await;
-                            }
-                            MediaClass::Duplex => {
+                        let (is_source, is_target) = match device.node_class {
+                            MediaClass::Source => (true, false),
+                            MediaClass::Sink => (false, true),
+                            MediaClass::Duplex => (true, true),
+                        };
+
+                        if is_source {
+                            self.node_list[DeviceType::Source].push(node.clone());
+                            if node.is_usable {
+                                let sender = self.worker_sender.clone();
                                 let _ = self.source_device_added(node.clone(), sender.clone()).await;
+                            }
+                        }
+                        if is_target {
+                            self.node_list[DeviceType::Target].push(node.clone());
+                            if node.is_usable {
+                                let sender = self.worker_sender.clone();
                                 let _ = self.target_device_added(node, sender).await;
                             }
                         }

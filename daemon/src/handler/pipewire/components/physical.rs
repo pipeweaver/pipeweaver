@@ -80,6 +80,10 @@ impl PhysicalDevices for PipewireManager {
         match node_type {
             NodeType::PhysicalSource => {
                 for device in &self.node_list[DeviceType::Source] {
+                    if !device.is_usable {
+                        continue;
+                    }
+
                     // Try and match this against our node, check by Name first
                     for paired in &devices {
                         // Check by Name First
@@ -92,6 +96,10 @@ impl PhysicalDevices for PipewireManager {
             }
             NodeType::PhysicalTarget => {
                 for device in &self.node_list[DeviceType::Target] {
+                    if !device.is_usable {
+                        continue;
+                    }
+
                     // Try and match this against our node, check by Name first
                     for paired in &devices {
                         // Check by Name First
@@ -113,8 +121,6 @@ impl PhysicalDevices for PipewireManager {
         node: PhysicalDevice,
         sender: Sender<WorkerMessage>,
     ) -> Result<()> {
-        self.node_list[DeviceType::Source].push(node.clone());
-
         // We need to check through our profile to see if we can find this device
         let devices = self.profile.devices.sources.physical_devices.clone();
         'start: for (dev_i, device) in devices.iter().enumerate() {
@@ -196,8 +202,6 @@ impl PhysicalDevices for PipewireManager {
         node: PhysicalDevice,
         sender: Sender<WorkerMessage>,
     ) -> Result<()> {
-        self.node_list[DeviceType::Target].push(node.clone());
-
         // Same as source node above, so read the comments there :)
         let devices = self.profile.devices.targets.physical_devices.clone();
         'start: for (dev_i, device) in devices.iter().enumerate() {
@@ -341,6 +345,10 @@ impl PhysicalDevices for PipewireManager {
 
         // Find the Pipewire Node
         let node = self.device_nodes.get(&node_id).ok_or(pw_error)?.clone();
+        if !node.is_usable {
+            bail!("Pipewire Node is not usable");
+        }
+
         match node_type {
             NodeType::PhysicalSource => {
                 let device = self.get_physical_source_mut(id).ok_or(error)?;

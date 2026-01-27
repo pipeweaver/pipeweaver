@@ -164,11 +164,11 @@ export function getNamesForDevices(devices) {
 }
 
 export function getSourcePhysicalDevices() {
-  return store.getAudio().devices.Source;
+  return store.getAudio().devices.Source.filter(device => device.is_usable);
 }
 
 export function getTargetPhysicalDevices() {
-  return store.getAudio().devices.Target;
+  return store.getAudio().devices.Target.filter(device => device.is_usable);
 }
 
 

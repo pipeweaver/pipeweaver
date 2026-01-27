@@ -69,7 +69,7 @@ pub struct Store {
     unmanaged_links: HashMap<u32, RegistryLink>,
 
     // Usable Nodes are unmanaged device / client nodes with a stereo setup
-    usable_device_nodes: Vec<u32>,
+    handled_device_nodes: Vec<u32>,
     usable_client_nodes: Vec<u32>,
 
     callback_tx: mpsc::Sender<PipewireReceiver>,
@@ -98,7 +98,7 @@ impl Store {
 
             unmanaged_links: HashMap::new(),
 
-            usable_device_nodes: vec![],
+            handled_device_nodes: vec![],
             usable_client_nodes: vec![],
 
             callback_tx,
@@ -573,6 +573,7 @@ impl Store {
 
     // ----- UNMANAGED DEVICE NODES -----
     pub fn unmanaged_device_node_add(&mut self, id: u32, node: RegistryDeviceNode) {
+        debug!("Checking: {:?}", node);
         if self.is_managed_node(id) {
             return;
         }
@@ -587,7 +588,9 @@ impl Store {
         }
 
         self.unmanaged_device_nodes.insert(id, node);
-        self.unmanaged_node_check(id);
+        self.unmanaged_node_add(id);
+
+        //self.unmanaged_node_update(id);
     }
 
     pub fn unmanaged_device_node_get(&mut self, id: u32) -> Option<&mut RegistryDeviceNode> {
@@ -596,9 +599,9 @@ impl Store {
 
     pub fn unmanaged_device_node_remove(&mut self, id: u32) {
         // Need to flag upstream if the node has gone away
-        if self.usable_device_nodes.contains(&id) {
+        if self.handled_device_nodes.contains(&id) {
             let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
-            self.usable_device_nodes.retain(|v| v != &id);
+            self.handled_device_nodes.retain(|v| v != &id);
         }
 
         self.unmanaged_device_nodes.remove(&id);
@@ -615,29 +618,52 @@ impl Store {
         }
     }
 
-    pub fn unmanaged_node_check(&mut self, id: u32) {
+    /// When an unmanaged node comes in, we need to send it off across to the manager to be
+    /// listed. I should probably move this into `unmanaged_device_node_add` :D
+    pub fn unmanaged_node_add(&mut self, id: u32) {
         if let Some(node) = self.unmanaged_device_nodes.get(&id) {
-            let is_usable = self.is_usable_unmanaged_device_node(id);
-            if let Some(media_type) = is_usable
-                && !self.usable_device_nodes.contains(&id)
-            {
-                self.usable_device_nodes.push(id);
-                let node = DeviceNode {
-                    node_id: id,
-                    node_class: media_type,
-                    name: node.name.clone(),
-                    nickname: node.nickname.clone(),
-                    description: node.description.clone(),
+            debug!("Node Arrived: {:?}", node);
+            // We need a media class, otherwise we can't use this node
+            if let Some(media_class) = &node.media_class {
+                // Map the media class to our internal enum
+                let media_class = match media_class {
+                    s if s.starts_with("Audio/Sink") => Some(MediaClass::Sink),
+                    s if s.starts_with("Audio/Source") => Some(MediaClass::Source),
+                    s if s.starts_with("Audio/Duplex") => Some(MediaClass::Duplex),
+                    _ => {
+                        warn!("Unrecognized Media Class: {}", media_class);
+                        None
+                    }
                 };
 
-                let _ = self.callback_tx.send(PipewireReceiver::DeviceAdded(node));
-                return;
-            }
+                if let Some(media_class) = media_class {
+                    // Create the virtual node and send it upstream
+                    let node = DeviceNode {
+                        node_id: id,
+                        node_class: media_class,
+                        is_usable: false,
+                        name: node.name.clone(),
+                        nickname: node.nickname.clone(),
+                        description: node.description.clone(),
+                    };
 
-            if is_usable.is_none() && self.usable_device_nodes.contains(&id) {
-                self.usable_device_nodes.retain(|value| value != &id);
-                let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
+                    let _ = self.callback_tx.send(PipewireReceiver::DeviceAdded(node));
+                }
             }
+        }
+    }
+
+    /// This is called whenever the port status changes, we need to check whether this is a
+    /// regular stereo node or not, so we can report it as usable.
+    pub fn unmanaged_node_update(&mut self, id: u32) {
+        let is_usable = self.is_usable_unmanaged_device_node(id).is_some();
+
+        if let Some(node) = self.unmanaged_device_nodes.get_mut(&id)
+            && node.is_usable != is_usable
+        {
+            node.is_usable = is_usable;
+            let message = PipewireReceiver::DeviceUsable(id, is_usable);
+            let _ = self.callback_tx.send(message);
         }
     }
 
