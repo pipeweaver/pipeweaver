@@ -309,10 +309,10 @@ impl PipewireManager {
                         PipewireReceiver::DefaultChanged(class, target) => {
                             match class {
                                 MediaClass::Source => {
-                                    self.default_target = Some(target);
+                                    self.default_source = Some(target);
                                 }
                                 MediaClass::Sink => {
-                                    self.default_source = Some(target);
+                                    self.default_target = Some(target);
                                 }
                                 _ => error!("Invalid MediaClass for Default")
                             }

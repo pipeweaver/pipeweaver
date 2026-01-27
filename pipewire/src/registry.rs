@@ -82,7 +82,6 @@ impl PipewireRegistry {
                             // If we're receiving properties for a managed node, we just need to update
                             // the internal serial number if it's present.
                             if store.is_managed_node(id) {
-                                // Yes, inform the store of the new pw serial
                                 if let Some(serial) = props.get(*OBJECT_SERIAL).and_then(|s| s.parse::<u32>().ok()) {
                                     store.managed_node_set_pw_serial(id, serial);
                                 }
