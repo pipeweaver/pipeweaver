@@ -11,6 +11,10 @@ homepage.workspace = true
 
 build = "build.rs"
 
+[features]
+default = []
+lv2 = ["lilv-sys"]
+
 [dependencies]
 ### Inherited Dependencies ###
 anyhow = { workspace = true }
@@ -63,6 +67,9 @@ ksni = "0.3.3"
 image = "0.25.9"
 open = "5.3.3"
 which = "8.0.0"
+
+### LV2 Support?
+lilv-sys = { version = "0.2.1", optional = true }
 
 ## Ok, Build Stuff Time :D
 [package.metadata.deb]
