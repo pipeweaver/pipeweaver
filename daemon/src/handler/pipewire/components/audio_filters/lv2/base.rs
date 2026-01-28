@@ -439,12 +439,6 @@ impl LV2PluginBase {
     }
 
     /// Process audio samples
-    ///
-    /// This implementation tries to minimize overhead:
-    /// - For contiguous, properly-sized buffers: zero-copy (just reconnect ports)
-    /// - For mismatched sizes: uses internal buffers (one copy operation)
-    ///
-    /// Port reconnection overhead is minimal compared to copying audio data.
     #[inline]
     pub fn process(&mut self, mut inputs: Vec<&mut [f32]>, mut outputs: Vec<&mut [f32]>) {
         // Validate port counts
