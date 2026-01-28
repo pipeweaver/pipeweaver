@@ -77,6 +77,8 @@ impl FilterHandler for DelayFilter {
     }
 
     fn get_property(&self, id: u32) -> FilterProperty {
+        // Future Me Problem, I should be able to populate Min / Max / Enum from the LV2 plugin metadata
+
         match id {
             PROP_ENABLED => FilterProperty {
                 id,
