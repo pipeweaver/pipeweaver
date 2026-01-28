@@ -6,6 +6,8 @@ const POWER_FACTOR: f32 = 3.8;
 const ZERO_BUFFER_SIZE: usize = 4096;
 static ZERO_BUFFER: [f32; ZERO_BUFFER_SIZE] = [0.0; ZERO_BUFFER_SIZE];
 
+const PROP_VOLUME: u32 = 0;
+
 pub struct VolumeFilter {
     volume: u8,
     volume_inner: f32,
@@ -67,19 +69,20 @@ impl VolumeFilter {
 
 impl FilterHandler for VolumeFilter {
     fn get_properties(&self) -> Vec<FilterProperty> {
-        vec![FilterProperty {
-            id: 0,
-            name: "Volume".into(),
-            value: FilterValue::UInt8(self.volume),
-        }]
+        vec![self.get_property(PROP_VOLUME)]
     }
 
     fn get_property(&self, id: u32) -> FilterProperty {
         match id {
-            0 => FilterProperty {
-                id: 0,
+            PROP_VOLUME => FilterProperty {
+                id: PROP_VOLUME,
                 name: "Volume".into(),
                 value: FilterValue::UInt8(self.volume),
+
+                min: 0.0,
+                max: 100.0,
+
+                enum_def: None,
             },
             _ => panic!("Attempted to lookup non-existent property!"),
         }

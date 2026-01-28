@@ -22,6 +22,7 @@ pub(crate) trait FilterManagement {
     async fn filter_volume_set(&self, id: Ulid, volume: u8) -> Result<()>;
 
     async fn filter_remove(&mut self, id: Ulid) -> Result<()>;
+    async fn filter_debug_create(&mut self, props: FilterProperties) -> Result<()>;
 }
 
 impl FilterManagement for PipewireManager {
@@ -73,6 +74,10 @@ impl FilterManagement for PipewireManager {
 
     async fn filter_remove(&mut self, id: Ulid) -> Result<()> {
         self.filter_pw_remove(id).await
+    }
+
+    async fn filter_debug_create(&mut self, props: FilterProperties) -> Result<()> {
+        self.filter_pw_create(props).await
     }
 }
 

@@ -17,6 +17,15 @@ impl LoadProfile for PipewireManager {
         self.profile_load_volumes().await?;
         self.profile_apply_routing().await?;
 
+        #[cfg(feature = "lv2")]
+        {
+            use crate::handler::pipewire::components::audio_filters::lv2::filters::delay::filter_get_delay_props;
+            use crate::handler::pipewire::components::filters::FilterManagement;
+            use ulid::Ulid;
+            let props = filter_get_delay_props(String::from("Test"), Ulid::new());
+            self.filter_debug_create(props).await?;
+        }
+
         Ok(())
     }
 }

@@ -9,6 +9,8 @@ const INV_POWER_FACTOR: f32 = 1.0 / POWER_FACTOR; // Precompute inverse
 // The frequency we should send events upstream
 const MILLISECONDS: u32 = 100;
 
+const PROP_ENABLED: u32 = 0;
+
 pub struct MeterFilter {
     enabled: bool,
 
@@ -45,19 +47,20 @@ impl MeterFilter {
 
 impl FilterHandler for MeterFilter {
     fn get_properties(&self) -> Vec<FilterProperty> {
-        vec![FilterProperty {
-            id: 0,
-            name: "Enabled".into(),
-            value: FilterValue::Bool(self.enabled),
-        }]
+        vec![self.get_property(0)]
     }
 
     fn get_property(&self, id: u32) -> FilterProperty {
         match id {
-            0 => FilterProperty {
-                id: 0,
-                name: "Volume".into(),
+            PROP_ENABLED => FilterProperty {
+                id: PROP_ENABLED,
+                name: "Enabled".into(),
                 value: FilterValue::Bool(self.enabled),
+
+                min: 0.0,
+                max: 1.0,
+
+                enum_def: None,
             },
             _ => panic!("Attempted to lookup non-existent property!"),
         }
@@ -65,7 +68,7 @@ impl FilterHandler for MeterFilter {
 
     fn set_property(&mut self, id: u32, value: FilterValue) {
         match id {
-            0 => {
+            PROP_ENABLED => {
                 if let FilterValue::Bool(value) = value {
                     self.enabled = value;
                 } else {

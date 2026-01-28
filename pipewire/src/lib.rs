@@ -8,6 +8,7 @@ use crate::manager::run_pw_main_loop;
 use anyhow::{Result, anyhow, bail};
 use log::{info, trace, warn};
 use oneshot::TryRecvError;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::mpsc;
 use std::thread;
@@ -368,12 +369,18 @@ pub enum FilterValue {
     UInt32(u32),
     String(String),
     Bool(bool),
+    Enum(String, u32),
 }
 
 pub struct FilterProperty {
     pub id: u32,
     pub name: String,
     pub value: FilterValue,
+
+    pub min: f32,
+    pub max: f32,
+
+    pub enum_def: Option<HashMap<String, u32>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

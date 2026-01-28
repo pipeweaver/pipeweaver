@@ -6,6 +6,7 @@ use log::warn;
 use pipeweaver_pipewire::{
     FilterHandler, FilterProperties, FilterProperty, FilterValue, MediaClass,
 };
+use std::collections::HashMap;
 use ulid::Ulid;
 
 // Plugin URI for LSP comp_delay_x2_stereo
@@ -67,31 +68,11 @@ impl DelayFilter {
 impl FilterHandler for DelayFilter {
     fn get_properties(&self) -> Vec<FilterProperty> {
         vec![
-            FilterProperty {
-                id: PROP_ENABLED,
-                name: "Enabled".into(),
-                value: FilterValue::Bool(self.enabled),
-            },
-            FilterProperty {
-                id: PROP_MODE_LEFT,
-                name: "Mode Left".into(),
-                value: FilterValue::Int32(self.mode_left),
-            },
-            FilterProperty {
-                id: PROP_MODE_RIGHT,
-                name: "Mode Right".into(),
-                value: FilterValue::Int32(self.mode_right),
-            },
-            FilterProperty {
-                id: PROP_TIME_LEFT,
-                name: "Time Left".into(),
-                value: FilterValue::Float32(self.time_left),
-            },
-            FilterProperty {
-                id: PROP_TIME_RIGHT,
-                name: "Time Right".into(),
-                value: FilterValue::Float32(self.time_right),
-            },
+            self.get_property(PROP_ENABLED),
+            self.get_property(PROP_MODE_LEFT),
+            self.get_property(PROP_MODE_RIGHT),
+            self.get_property(PROP_TIME_LEFT),
+            self.get_property(PROP_TIME_RIGHT),
         ]
     }
 
@@ -101,26 +82,49 @@ impl FilterHandler for DelayFilter {
                 id,
                 name: "Enabled".into(),
                 value: FilterValue::Bool(self.enabled),
+                min: 0.0,
+                max: 0.0,
+                enum_def: None,
             },
             PROP_MODE_LEFT => FilterProperty {
                 id,
                 name: "Mode Left".into(),
                 value: FilterValue::Int32(self.mode_left),
+                min: 0.0,
+                max: 2.0,
+                enum_def: Some(HashMap::from([
+                    ("Samples".into(), 0),
+                    ("Distance".into(), 1),
+                    ("Time".into(), 2),
+                ])),
             },
             PROP_MODE_RIGHT => FilterProperty {
                 id,
                 name: "Mode Right".into(),
                 value: FilterValue::Int32(self.mode_right),
+                min: 0.0,
+                max: 2.0,
+                enum_def: Some(HashMap::from([
+                    ("Samples".into(), 0),
+                    ("Distance".into(), 1),
+                    ("Time".into(), 2),
+                ])),
             },
             PROP_TIME_LEFT => FilterProperty {
                 id,
                 name: "Time Left".into(),
                 value: FilterValue::Float32(self.time_left),
+                min: 0.0,
+                max: 1000.0,
+                enum_def: None,
             },
             PROP_TIME_RIGHT => FilterProperty {
                 id,
                 name: "Time Right".into(),
                 value: FilterValue::Float32(self.time_right),
+                min: 0.0,
+                max: 1000.0,
+                enum_def: None,
             },
             _ => panic!("Attempted to get non-existent property"),
         }
