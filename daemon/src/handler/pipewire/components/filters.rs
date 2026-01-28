@@ -1,6 +1,6 @@
-use crate::handler::pipewire::components::audio_filters::meter::MeterFilter;
-use crate::handler::pipewire::components::audio_filters::pass_through::PassThroughFilter;
-use crate::handler::pipewire::components::audio_filters::volume::VolumeFilter;
+use crate::handler::pipewire::components::audio_filters::internal::meter::MeterFilter;
+use crate::handler::pipewire::components::audio_filters::internal::pass_through::PassThroughFilter;
+use crate::handler::pipewire::components::audio_filters::internal::volume::VolumeFilter;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use anyhow::{Result, bail};

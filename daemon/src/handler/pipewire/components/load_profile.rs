@@ -1,14 +1,11 @@
-use crate::handler::pipewire::components::audio_filters::lv2::filters::generic::filter_get_generic_lv2_props;
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::Result;
 use log::debug;
-use pipeweaver_pipewire::FilterValue;
 use pipeweaver_profile::DeviceDescription;
 use pipeweaver_shared::{NodeType, OrderGroup};
-use std::collections::HashMap;
 
 pub(crate) trait LoadProfile {
     async fn load_profile(&mut self) -> Result<()>;
@@ -22,7 +19,10 @@ impl LoadProfile for PipewireManager {
 
         #[cfg(feature = "lv2")]
         {
+            use crate::handler::pipewire::components::audio_filters::lv2::filters::generic::filter_get_generic_lv2_props;
             use crate::handler::pipewire::components::filters::FilterManagement;
+            use pipeweaver_pipewire::FilterValue;
+            use std::collections::HashMap;
             use ulid::Ulid;
 
             let uri = "http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo";
