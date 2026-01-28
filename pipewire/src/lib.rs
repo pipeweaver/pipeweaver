@@ -375,6 +375,7 @@ pub enum FilterValue {
 pub struct FilterProperty {
     pub id: u32,
     pub name: String,
+    pub symbol: String,
     pub value: FilterValue,
 
     pub min: f32,

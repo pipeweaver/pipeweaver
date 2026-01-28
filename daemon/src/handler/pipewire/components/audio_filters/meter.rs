@@ -55,6 +55,7 @@ impl FilterHandler for MeterFilter {
             PROP_ENABLED => FilterProperty {
                 id: PROP_ENABLED,
                 name: "Enabled".into(),
+                symbol: "enabled".into(),
                 value: FilterValue::Bool(self.enabled),
 
                 min: 0.0,

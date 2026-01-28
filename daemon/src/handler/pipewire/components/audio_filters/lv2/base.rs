@@ -3,13 +3,13 @@ use lilv_sys::{
     lilv_instance_connect_port, lilv_instance_deactivate, lilv_instance_free, lilv_instance_run,
     lilv_new_uri, lilv_node_as_float, lilv_node_as_int, lilv_node_as_string, lilv_node_free,
     lilv_nodes_begin, lilv_nodes_free, lilv_nodes_get, lilv_nodes_get_first, lilv_nodes_is_end,
-    lilv_nodes_next, lilv_nodes_size, lilv_plugin_get_num_ports, lilv_plugin_get_port_by_index,
-    lilv_plugin_instantiate, lilv_plugins_get_by_uri, lilv_port_get_name, lilv_port_get_range,
-    lilv_port_get_symbol, lilv_port_get_value, lilv_port_has_property, lilv_port_is_a,
-    lilv_world_find_nodes, lilv_world_free, lilv_world_get_all_plugins, lilv_world_load_all,
-    lilv_world_new,
+    lilv_nodes_next, lilv_nodes_size, lilv_plugin_get_name, lilv_plugin_get_num_ports,
+    lilv_plugin_get_port_by_index, lilv_plugin_instantiate, lilv_plugins_get_by_uri,
+    lilv_port_get_name, lilv_port_get_range, lilv_port_get_symbol, lilv_port_get_value,
+    lilv_port_has_property, lilv_port_is_a, lilv_world_find_nodes, lilv_world_free,
+    lilv_world_get_all_plugins, lilv_world_load_all, lilv_world_new,
 };
-use log::debug;
+use log::{debug, warn};
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::fmt::Debug;
@@ -92,6 +92,47 @@ const LV2_ENUM_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#enumeration\0";
 const LV2_SCALE_POINT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#scalePoint\0";
 const LV2_RDF_LABEL: &[u8] = b"http://www.w3.org/2000/01/rdf-schema#label\0";
 const LV2_RDF_VALUE: &[u8] = b"http://www.w3.org/1999/02/22-rdf-syntax-ns#value\0";
+
+/// Get the human-readable name of an LV2 plugin by its URI
+/// Returns None if the plugin is not found
+pub fn get_plugin_name(plugin_uri: &str) -> Option<String> {
+    unsafe {
+        let world_guard = get_world().lock().ok()?;
+        let world = world_guard.get_world();
+        let plugins = world_guard.get_plugins();
+
+        if world.is_null() {
+            return None;
+        }
+
+        let uri_cstr = CString::new(plugin_uri).ok()?;
+        let uri_node = lilv_new_uri(world, uri_cstr.as_ptr());
+
+        if uri_node.is_null() {
+            return None;
+        }
+
+        let plugin = lilv_plugins_get_by_uri(plugins, uri_node);
+
+        let result = if !plugin.is_null() {
+            let name_node = lilv_plugin_get_name(plugin);
+            if !name_node.is_null() {
+                let name = CStr::from_ptr(lilv_node_as_string(name_node))
+                    .to_string_lossy()
+                    .to_string();
+                lilv_node_free(name_node);
+                Some(name)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        lilv_node_free(uri_node);
+        result
+    }
+}
 
 /// A simple LV2 Plugin wrapper
 pub struct LV2PluginBase {
@@ -435,6 +476,19 @@ impl LV2PluginBase {
             Ok(())
         } else {
             Err(format!("Unknown control port: {}", symbol))
+        }
+    }
+
+    /// Set a control port using a typed value with warning logging and callback.
+    pub fn set_typed_prop<T, F>(&mut self, symbol: &str, value: T, update: F)
+    where
+        T: ControlConvert + Debug + Clone,
+        F: FnOnce(T),
+    {
+        if let Err(e) = self.set_control_typed(symbol, value.clone()) {
+            warn!("Failed to set '{}' -> {:?}: {}", symbol, value, e);
+        } else {
+            update(value);
         }
     }
 

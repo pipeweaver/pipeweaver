@@ -1,6 +1,4 @@
-use crate::handler::pipewire::components::audio_filters::lv2::base::{
-    ControlConvert, LV2PluginBase,
-};
+use crate::handler::pipewire::components::audio_filters::lv2::base::LV2PluginBase;
 use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use log::warn;
 use pipeweaver_pipewire::{
@@ -32,7 +30,7 @@ macro_rules! prop_if_chains {
         $(
             if $id_ident == $pid {
                 if let &$variant(__val) = $vref {
-                    $self_ident.set_typed_prop::<$ty>($key, __val, |s, v| s.$field = v);
+                    $self_ident.plugin.set_typed_prop::<$ty, _>($key, __val, |v| $self_ident.$field = v);
                     return;
                 }
             }
@@ -49,20 +47,6 @@ pub struct DelayFilter {
     mode_right: i32,
     time_left: f32,
     time_right: f32,
-}
-
-impl DelayFilter {
-    // TODO: This should probably go into LV2PluginBase so it can be reused by other filters.
-    fn set_typed_prop<T>(&mut self, key: &str, value: T, update: impl Fn(&mut Self, T))
-    where
-        T: ControlConvert + std::fmt::Debug + Clone,
-    {
-        let v_clone = value.clone();
-        match self.plugin.set_control_typed::<T>(key, v_clone) {
-            Ok(()) => update(self, value),
-            Err(e) => warn!("Failed to set '{}' -> {:?}: {}", key, value, e),
-        }
-    }
 }
 
 impl FilterHandler for DelayFilter {
@@ -83,6 +67,7 @@ impl FilterHandler for DelayFilter {
             PROP_ENABLED => FilterProperty {
                 id,
                 name: "Enabled".into(),
+                symbol: "enabled".into(),
                 value: FilterValue::Bool(self.enabled),
                 min: 0.0,
                 max: 0.0,
@@ -91,6 +76,7 @@ impl FilterHandler for DelayFilter {
             PROP_MODE_LEFT => FilterProperty {
                 id,
                 name: "Mode Left".into(),
+                symbol: "mode_l".into(),
                 value: FilterValue::Int32(self.mode_left),
                 min: 0.0,
                 max: 2.0,
@@ -103,6 +89,7 @@ impl FilterHandler for DelayFilter {
             PROP_MODE_RIGHT => FilterProperty {
                 id,
                 name: "Mode Right".into(),
+                symbol: "mode_r".into(),
                 value: FilterValue::Int32(self.mode_right),
                 min: 0.0,
                 max: 2.0,
@@ -115,6 +102,7 @@ impl FilterHandler for DelayFilter {
             PROP_TIME_LEFT => FilterProperty {
                 id,
                 name: "Time Left".into(),
+                symbol: "time_l".into(),
                 value: FilterValue::Float32(self.time_left),
                 min: 0.0,
                 max: 1000.0,
@@ -123,6 +111,7 @@ impl FilterHandler for DelayFilter {
             PROP_TIME_RIGHT => FilterProperty {
                 id,
                 name: "Time Right".into(),
+                symbol: "time_r".into(),
                 value: FilterValue::Float32(self.time_right),
                 min: 0.0,
                 max: 1000.0,
@@ -176,11 +165,16 @@ impl DelayFilter {
 
         // Apply the defaults to the plugin controls
         let d = defaults;
-        s.set_typed_prop(PORT_ENABLED, d.enabled, |s, v| s.enabled = v);
-        s.set_typed_prop(PORT_MODE_LEFT, d.mode_left, |s, v| s.mode_left = v);
-        s.set_typed_prop(PORT_MODE_RIGHT, d.mode_right, |s, v| s.mode_right = v);
-        s.set_typed_prop(PORT_TIME_LEFT, d.time_left, |s, v| s.time_left = v);
-        s.set_typed_prop(PORT_TIME_RIGHT, d.time_right, |s, v| s.time_right = v);
+        s.plugin
+            .set_typed_prop(PORT_ENABLED, d.enabled, |v| s.enabled = v);
+        s.plugin
+            .set_typed_prop(PORT_MODE_LEFT, d.mode_left, |v| s.mode_left = v);
+        s.plugin
+            .set_typed_prop(PORT_MODE_RIGHT, d.mode_right, |v| s.mode_right = v);
+        s.plugin
+            .set_typed_prop(PORT_TIME_LEFT, d.time_left, |v| s.time_left = v);
+        s.plugin
+            .set_typed_prop(PORT_TIME_RIGHT, d.time_right, |v| s.time_right = v);
 
         s
     }

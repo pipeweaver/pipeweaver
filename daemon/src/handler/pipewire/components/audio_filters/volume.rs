@@ -77,6 +77,7 @@ impl FilterHandler for VolumeFilter {
             PROP_VOLUME => FilterProperty {
                 id: PROP_VOLUME,
                 name: "Volume".into(),
+                symbol: "volume".into(),
                 value: FilterValue::UInt8(self.volume),
 
                 min: 0.0,
