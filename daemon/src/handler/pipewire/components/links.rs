@@ -138,7 +138,7 @@ trait LinkManagementLocal {
 impl LinkManagementLocal for PipewireManager {
     async fn create_link(&self, source: LinkType, target: LinkType) -> Result<()> {
         let (send, recv) = oneshot::channel();
-        let message = PipewireMessage::CreateDeviceLink(source, target, Some(send));
+        let message = PipewireMessage::CreateDeviceLink(source, target, send);
         self.pipewire().send_message(message)?;
         recv.await?;
 

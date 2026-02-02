@@ -516,7 +516,7 @@ impl PipewireManager {
         &mut self,
         source: LinkType,
         dest: LinkType,
-        sender: Option<Sender<()>>,
+        sender: Sender<()>,
     ) -> Result<()> {
         let parent_id = Ulid::new();
         let mut port_map: EnumMap<PortLocation, Option<LinkStoreMap>> = Default::default();
@@ -552,7 +552,7 @@ impl PipewireManager {
             source,
             destination: dest,
             links: port_map,
-            ready_sender: sender,
+            ready_sender: Some(sender),
         };
 
         self.store.borrow_mut().managed_link_add(parent_id, group);
