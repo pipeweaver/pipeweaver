@@ -33,7 +33,7 @@ pub enum PipewireMessage {
     RemoveDeviceLink(LinkType, LinkType),
 
     GetFilterParameters(Ulid, oneshot::Sender<Result<Vec<FilterProperty>>>),
-    SetFilterValue(Ulid, u32, FilterValue),
+    SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<String>>),
 
     SetNodeVolume(Ulid, u8),
     SetNodeMute(Ulid, bool),
@@ -63,7 +63,7 @@ pub enum PipewireInternalMessage {
     RemoveDeviceLink(LinkType, LinkType, oneshot::Sender<Result<()>>),
 
     GetFilterParameters(Ulid, oneshot::Sender<Result<Vec<FilterProperty>>>),
-    SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<()>>),
+    SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<String>>),
 
     SetNodeVolume(Ulid, u8, oneshot::Sender<Result<()>>),
     SetNodeMute(Ulid, bool, oneshot::Sender<Result<()>>),
@@ -160,7 +160,10 @@ impl PipewireRunner {
         trace!("Sending Message to Pipewire: {:?}", message);
 
         // Check if this is a message that handles its own response channel
-        let uses_own_channel = matches!(message, PipewireMessage::GetFilterParameters(..));
+        let uses_own_channel = matches!(
+            message,
+            PipewireMessage::GetFilterParameters(..) | PipewireMessage::SetFilterValue(..)
+        );
         let (tx, rx) = oneshot::channel();
 
         let message = match message {
@@ -185,10 +188,10 @@ impl PipewireRunner {
             PipewireMessage::DestroyUnmanagedLinks(id) => {
                 PipewireInternalMessage::DestroyUnmanagedLinks(id, tx)
             }
-            PipewireMessage::GetFilterParameters(id, result_tx) => {
-                PipewireInternalMessage::GetFilterParameters(id, result_tx)
+            PipewireMessage::GetFilterParameters(id, tx) => {
+                PipewireInternalMessage::GetFilterParameters(id, tx)
             }
-            PipewireMessage::SetFilterValue(id, prop, value) => {
+            PipewireMessage::SetFilterValue(id, prop, value, tx) => {
                 PipewireInternalMessage::SetFilterValue(id, prop, value, tx)
             }
             PipewireMessage::SetNodeVolume(id, volume) => {
@@ -366,7 +369,7 @@ pub type FilterCallback = dyn FnMut(Vec<&mut [f32]>, Vec<&mut [f32]>) + Send;
 pub trait FilterHandler: Send + 'static {
     fn get_properties(&self) -> Vec<FilterProperty>;
     fn get_property(&self, id: u32) -> FilterProperty;
-    fn set_property(&mut self, id: u32, value: FilterValue);
+    fn set_property(&mut self, id: u32, value: FilterValue) -> Result<String>;
 
     fn process_samples(&mut self, inputs: Vec<&mut [f32]>, outputs: Vec<&mut [f32]>);
 }

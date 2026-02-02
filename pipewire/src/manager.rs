@@ -504,12 +504,11 @@ impl PipewireManager {
         self.store.borrow().managed_filter_get_parameters(id)
     }
 
-    pub fn set_filter_value(&mut self, id: Ulid, key: u32, value: FilterValue) -> Result<()> {
+    pub fn set_filter_value(&mut self, id: Ulid, key: u32, value: FilterValue) -> Result<String> {
         // We need to grab the filter from the store, and pass the value set..
         self.store
             .borrow_mut()
-            .managed_filter_set_parameter(id, key, value);
-        Ok(())
+            .managed_filter_set_parameter(id, key, value)
     }
 
     pub fn create_link(

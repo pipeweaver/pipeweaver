@@ -1,5 +1,6 @@
 use crate::handler::pipewire::components::audio_filters::lv2::base::LV2PluginBase;
 use crate::{APP_ID, APP_NAME, APP_NAME_ID};
+use anyhow::{Result, bail};
 use log::{debug, warn};
 use pipeweaver_pipewire::{
     FilterHandler, FilterProperties, FilterProperty, FilterValue, MediaClass,
@@ -59,11 +60,10 @@ impl FilterHandler for GenericLV2Filter {
         }
     }
 
-    fn set_property(&mut self, id: u32, value: FilterValue) {
+    fn set_property(&mut self, id: u32, value: FilterValue) -> Result<String> {
         // Again, ID to find the control port index
         if id as usize >= self.property_to_port.len() {
-            warn!("Attempted to set property with invalid id: {}", id);
-            return;
+            bail!("Attempted to set property with invalid id: {}", id);
         }
 
         let port_index = self.property_to_port[id as usize];
@@ -72,11 +72,11 @@ impl FilterHandler for GenericLV2Filter {
         let port = match &self.plugin.control_ports[port_index as usize] {
             Some(p) => p,
             None => {
-                warn!(
+                bail!(
                     "Property {} maps to non-control port index {}",
-                    id, port_index
+                    id,
+                    port_index
                 );
-                return;
             }
         };
 
@@ -85,8 +85,8 @@ impl FilterHandler for GenericLV2Filter {
         let is_toggled = port.is_toggled;
         let is_enum = port.is_enum.is_some();
 
-        // Keep a reference to the symbol for debug messages
-        let symbol = &port.symbol;
+        // Clone the Symbol for return, and errors
+        let symbol = port.symbol.clone();
 
         // Run the value check
         match value {
@@ -94,30 +94,31 @@ impl FilterHandler for GenericLV2Filter {
                 if is_toggled {
                     self.plugin.set_control_by_index_typed(port_index, v);
                 } else {
-                    warn!("Attempted to set non-toggled port {} with bool", symbol);
+                    bail!("Attempted to set non-toggled port {} with bool", symbol);
                 }
             }
             FilterValue::Int32(v) => {
                 if is_integer || is_enum {
                     self.plugin.set_control_by_index_typed(port_index, v);
                 } else {
-                    warn!("Attempted to set non-integer port {} with int32", symbol);
+                    bail!("Attempted to set non-integer port {} with int32", symbol);
                 }
             }
             FilterValue::Float32(v) => {
                 if !is_integer && !is_toggled {
                     self.plugin.set_control_by_index_typed(port_index, v);
                 } else {
-                    warn!(
+                    bail!(
                         "Attempted to set integer/toggle port {} with float32",
                         symbol
                     );
                 }
             }
             _ => {
-                warn!("Unsupported FilterValue variant for port {}", symbol);
+                bail!("Unsupported FilterValue variant for port {}", symbol);
             }
         }
+        Ok(symbol.clone())
     }
 
     fn process_samples(&mut self, inputs: Vec<&mut [f32]>, outputs: Vec<&mut [f32]>) {
@@ -171,7 +172,7 @@ impl GenericLV2Filter {
         // .set_property which handles shit like type checking.
         for (symbol, value) in defaults {
             if let Some(id) = filter.symbol_to_property_id(&symbol) {
-                filter.set_property(id, value);
+                let _ = filter.set_property(id, value);
             } else {
                 warn!("Default provided for unknown port symbol: '{}'", symbol);
             }

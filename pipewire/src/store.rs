@@ -476,16 +476,30 @@ impl Store {
         }
     }
 
-    pub fn managed_filter_set_parameter(&mut self, id: Ulid, key: u32, value: FilterValue) {
-        let filter = self.managed_filters.get_mut(&id).expect("Broke!");
-        filter.data.write().callback.set_property(key, value);
+    pub fn managed_filter_set_parameter(
+        &mut self,
+        id: Ulid,
+        key: u32,
+        value: FilterValue,
+    ) -> Result<String> {
+        // Find the filter
+        let filter = self
+            .managed_filters
+            .get_mut(&id)
+            .ok_or(anyhow!("Filter Not Found"))?;
+
+        // Set the Property
+        filter.data.write().callback.set_property(key, value)
     }
 
     pub fn managed_filter_get_parameters(&self, id: Ulid) -> Result<Vec<FilterProperty>> {
+        // Find the filter
         let filter = self
             .managed_filters
             .get(&id)
             .ok_or(anyhow!("Filter Missing"))?;
+
+        // Send the Properties
         Ok(filter.data.read().callback.get_properties())
     }
 

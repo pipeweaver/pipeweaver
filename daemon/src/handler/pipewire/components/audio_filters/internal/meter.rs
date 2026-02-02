@@ -1,3 +1,4 @@
+use anyhow::{Result, bail};
 use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
 use tokio::sync::mpsc;
 use ulid::Ulid;
@@ -67,16 +68,17 @@ impl FilterHandler for MeterFilter {
         }
     }
 
-    fn set_property(&mut self, id: u32, value: FilterValue) {
+    fn set_property(&mut self, id: u32, value: FilterValue) -> Result<String> {
         match id {
             PROP_ENABLED => {
                 if let FilterValue::Bool(value) = value {
                     self.enabled = value;
+                    Ok("enabled".into())
                 } else {
-                    panic!("Attempted to Toggle Meter without Bool type");
+                    bail!("Attempted to Toggle Meter without Bool type");
                 }
             }
-            _ => panic!("Attempted to set non-existent property!"),
+            _ => bail!("Attempted to set non-existent property!"),
         }
     }
 

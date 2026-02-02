@@ -1,3 +1,4 @@
+use anyhow::{Result, bail};
 use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
 
 pub struct PassThroughFilter {}
@@ -17,8 +18,8 @@ impl FilterHandler for PassThroughFilter {
         panic!("Attempted to get non-existent property");
     }
 
-    fn set_property(&mut self, _: u32, _: FilterValue) {
-        panic!("Attempted to set non-existent property");
+    fn set_property(&mut self, _: u32, _: FilterValue) -> Result<String> {
+        bail!("Attempted to set non-existent property");
     }
 
     fn process_samples(&mut self, inputs: Vec<&mut [f32]>, mut outputs: Vec<&mut [f32]>) {

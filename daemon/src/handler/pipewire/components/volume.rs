@@ -6,7 +6,7 @@ use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{Result, anyhow, bail};
 use log::debug;
-use pipeweaver_pipewire::{FilterValue, PipewireMessage};
+use pipeweaver_pipewire::{FilterValue, PipewireMessage, oneshot};
 use pipeweaver_profile::Volumes;
 use pipeweaver_shared::{Mix, MuteState, NodeType};
 use ulid::Ulid;
@@ -289,8 +289,10 @@ impl VolumeManager for PipewireManager {
         }
 
         for (&node, &meter) in &self.meter_map {
-            let message = PipewireMessage::SetFilterValue(meter, 0, FilterValue::Bool(enabled));
+            let (tx, rx) = oneshot::channel();
+            let message = PipewireMessage::SetFilterValue(meter, 0, FilterValue::Bool(enabled), tx);
             self.pipewire().send_message(message)?;
+            rx.recv()??;
 
             let node_type = match self.get_node_type(node) {
                 Some(node_type) => node_type,

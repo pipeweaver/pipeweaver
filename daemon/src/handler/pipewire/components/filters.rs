@@ -65,9 +65,18 @@ impl FilterManagement for PipewireManager {
             bail!("Volume must be between 0 and 100");
         }
 
+        // Establish the custom channel
+        let (tx, rx) = oneshot::channel();
+
+        // Define the Value
         let value = FilterValue::UInt8(volume);
-        let message = PipewireMessage::SetFilterValue(id, 0, value);
+
+        // Send the Message
+        let message = PipewireMessage::SetFilterValue(id, 0, value, tx);
         let _ = self.pipewire().send_message(message);
+
+        // Wait for a response (we don't need to handle the value here)
+        rx.recv()??;
 
         Ok(())
     }

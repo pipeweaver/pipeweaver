@@ -1,3 +1,4 @@
+use anyhow::{Result, bail};
 use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
 
 const POWER_FACTOR: f32 = 3.8;
@@ -89,7 +90,7 @@ impl FilterHandler for VolumeFilter {
         }
     }
 
-    fn set_property(&mut self, id: u32, value: FilterValue) {
+    fn set_property(&mut self, id: u32, value: FilterValue) -> Result<String> {
         match id {
             0 => {
                 if let FilterValue::UInt8(value) = value {
@@ -97,11 +98,12 @@ impl FilterHandler for VolumeFilter {
                     let (volume, volume_inner) = Self::calculate_volume(value);
                     self.volume = volume;
                     self.volume_inner = volume_inner;
+                    Ok("volume".into())
                 } else {
-                    panic!("Attempted to Set Volume as non-percentage");
+                    bail!("Attempted to Set Volume as non-percentage");
                 }
             }
-            _ => panic!("Attempted to set non-existent property!"),
+            _ => bail!("Attempted to set non-existent property!"),
         }
     }
 
