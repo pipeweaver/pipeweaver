@@ -1,6 +1,6 @@
 use enum_map::EnumMap;
 use json_patch::Patch;
-use pipeweaver_profile::{Filter, Profile};
+use pipeweaver_profile::{Filter, FilterConfig, Profile};
 use pipeweaver_shared::{
     AppDefinition, AppTarget, Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType, OrderGroup,
     Quantum,
@@ -113,6 +113,7 @@ pub struct DaemonStatus {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AudioConfiguration {
     pub profile: Profile,
+    pub filter_config: HashMap<Ulid, FilterConfig>,
     pub devices: EnumMap<DeviceType, Vec<PhysicalDevice>>,
     pub defaults: EnumMap<DeviceType, Option<AppTarget>>,
     pub applications: EnumMap<DeviceType, HashMap<String, HashMap<String, Vec<Application>>>>,

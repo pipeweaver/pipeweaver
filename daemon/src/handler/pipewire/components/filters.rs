@@ -125,6 +125,14 @@ impl FilterManagement for PipewireManager {
 
                 // Add this to the Profile
                 self.add_filter_to_profile(target, filter)?;
+
+                // Grab the filter parameters
+                let (tx, rx) = oneshot::channel();
+                let message = PipewireMessage::GetFilterParameters(id, tx);
+                self.pipewire().send_message(message)?;
+
+                let params = rx.recv()??;
+                self.filter_config.insert(id, params);
             }
         }
         Ok(())
