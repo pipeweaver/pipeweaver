@@ -22,6 +22,7 @@ impl LoadProfile for PipewireManager {
             use crate::handler::pipewire::components::audio_filters::lv2::filters::generic::filter_get_generic_lv2_props;
             use crate::handler::pipewire::components::filters::FilterManagement;
             use pipeweaver_pipewire::FilterValue;
+            use pipeweaver_pipewire::{PipewireMessage, oneshot};
             use std::collections::HashMap;
             use ulid::Ulid;
 
@@ -36,9 +37,16 @@ impl LoadProfile for PipewireManager {
             defaults.insert("time_r".into(), FilterValue::Float32(1000.));
 
             let props = filter_get_generic_lv2_props(uri, name, Ulid::new(), defaults);
+            let id = props.filter_id;
 
             //let props = filter_get_delay_props(String::from("Test"), Ulid::new());
             self.filter_debug_create(props).await?;
+
+            // Ok, lets try and fetch the properties for this filter...
+            let (tx, rx) = oneshot::channel();
+            let message = PipewireMessage::GetFilterParameters(id, tx);
+            self.pipewire().send_message(message)?;
+            debug!("{:?}", rx.recv()?);
         }
 
         Ok(())
