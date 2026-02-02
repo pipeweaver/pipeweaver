@@ -32,6 +32,7 @@ pub enum PipewireMessage {
     RemoveFilterNode(Ulid),
     RemoveDeviceLink(LinkType, LinkType),
 
+    GetFilterParameters(Ulid, oneshot::Sender<Result<Vec<FilterProperty>>>),
     SetFilterValue(Ulid, u32, FilterValue),
 
     SetNodeVolume(Ulid, u8),
@@ -158,6 +159,8 @@ impl PipewireRunner {
         let start = Instant::now();
         trace!("Sending Message to Pipewire: {:?}", message);
 
+        // Check if this is a message that handles its own response channel
+        let uses_own_channel = matches!(message, PipewireMessage::GetFilterParameters(..));
         let (tx, rx) = oneshot::channel();
 
         let message = match message {
@@ -181,6 +184,9 @@ impl PipewireRunner {
             }
             PipewireMessage::DestroyUnmanagedLinks(id) => {
                 PipewireInternalMessage::DestroyUnmanagedLinks(id, tx)
+            }
+            PipewireMessage::GetFilterParameters(id, result_tx) => {
+                PipewireInternalMessage::GetFilterParameters(id, result_tx)
             }
             PipewireMessage::SetFilterValue(id, prop, value) => {
                 PipewireInternalMessage::SetFilterValue(id, prop, value, tx)
@@ -210,14 +216,18 @@ impl PipewireRunner {
             .send(message)
             .map_err(|e| anyhow!("Unable to Send Message: {}", e))?;
 
-        let resp = rx.recv().map_err(|e| anyhow!("Error: {}", e))?;
+        // Only wait for response if the message doesn't handle its own channel
+        if !uses_own_channel {
+            let resp = rx.recv().map_err(|e| anyhow!("Error: {}", e))?;
+            let stop = start.elapsed().as_millis();
 
-        trace!(
-            "Received Response: {:?} in {}ms",
-            resp,
-            start.elapsed().as_millis()
-        );
-        resp
+            trace!("Received Response: {:?} in {}ms", resp, stop);
+            resp
+        } else {
+            let stop = start.elapsed().as_millis();
+            trace!("Message sent (uses own response channel) in {}ms", stop);
+            Ok(())
+        }
     }
 }
 
@@ -374,6 +384,7 @@ pub enum FilterValue {
     Enum(String, u32),
 }
 
+#[derive(Debug)]
 pub struct FilterProperty {
     pub id: u32,
     pub name: String,
