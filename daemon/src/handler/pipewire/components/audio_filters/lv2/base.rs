@@ -4,10 +4,12 @@ use lilv_sys::{
     lilv_new_uri, lilv_node_as_float, lilv_node_as_int, lilv_node_as_string, lilv_node_free,
     lilv_nodes_begin, lilv_nodes_free, lilv_nodes_get, lilv_nodes_get_first, lilv_nodes_is_end,
     lilv_nodes_next, lilv_nodes_size, lilv_plugin_get_name, lilv_plugin_get_num_ports,
-    lilv_plugin_get_port_by_index, lilv_plugin_instantiate, lilv_plugins_get_by_uri,
-    lilv_port_get_name, lilv_port_get_range, lilv_port_get_symbol, lilv_port_get_value,
-    lilv_port_has_property, lilv_port_is_a, lilv_world_find_nodes, lilv_world_free,
-    lilv_world_get_all_plugins, lilv_world_load_all, lilv_world_new,
+    lilv_plugin_get_num_ports_of_class, lilv_plugin_get_port_by_index, lilv_plugin_get_uri,
+    lilv_plugin_instantiate, lilv_plugins_begin, lilv_plugins_get, lilv_plugins_get_by_uri,
+    lilv_plugins_is_end, lilv_plugins_next, lilv_port_get_name, lilv_port_get_range,
+    lilv_port_get_symbol, lilv_port_get_value, lilv_port_has_property, lilv_port_is_a,
+    lilv_world_find_nodes, lilv_world_free, lilv_world_get_all_plugins, lilv_world_load_all,
+    lilv_world_new,
 };
 use log::{debug, warn};
 use std::collections::HashMap;
@@ -17,9 +19,32 @@ use std::os::raw::c_void;
 use std::ptr;
 use std::sync::{Arc, Mutex, OnceLock};
 
+// URI constants
+const LV2_AUDIO_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#AudioPort\0";
+const LV2_CONTROL_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#ControlPort\0";
+const LV2_INPUT_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#InputPort\0";
+const LV2_OUTPUT_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#OutputPort\0";
+const LV2_INTEGER_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#integer\0";
+const LV2_TOGGLED_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#toggled\0";
+const LV2_ENUM_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#enumeration\0";
+
+const LV2_SCALE_POINT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#scalePoint\0";
+const LV2_RDF_LABEL: &[u8] = b"http://www.w3.org/2000/01/rdf-schema#label\0";
+const LV2_RDF_VALUE: &[u8] = b"http://www.w3.org/1999/02/22-rdf-syntax-ns#value\0";
+const LV2_RDF_TYPE: &[u8] = b"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\0";
+
+// Port Groups extension URIs
+const LV2_PORT_GROUP_URI: &[u8] = b"http://lv2plug.in/ns/ext/port-groups#group\0";
+const LV2_STEREO_GROUP_URI: &[u8] = b"http://lv2plug.in/ns/ext/port-groups#StereoGroup\0";
+const LV2_MONO_GROUP_URI: &[u8] = b"http://lv2plug.in/ns/ext/port-groups#MonoGroup\0";
+const LV2_SIDECHAIN_GROUP_URI: &[u8] = b"http://lv2plug.in/ns/ext/port-groups#SideChainGroup\0";
+
+// String slice versions of URIs for comparison (without null terminator)
+const LV2_STEREO_GROUP_URI_STR: &str = "http://lv2plug.in/ns/ext/port-groups#StereoGroup";
+const LV2_SIDECHAIN_GROUP_URI_STR: &str = "http://lv2plug.in/ns/ext/port-groups#SideChainGroup";
+
 // Shared LV2 world (initialized once, shared by all plugins)
 static LV2_WORLD: OnceLock<Arc<Mutex<LV2World>>> = OnceLock::new();
-
 fn get_world() -> &'static Arc<Mutex<LV2World>> {
     LV2_WORLD.get_or_init(|| Arc::new(Mutex::new(LV2World::new())))
 }
@@ -27,6 +52,93 @@ fn get_world() -> &'static Arc<Mutex<LV2World>> {
 struct LV2World {
     world: *mut LilvWorld,
     plugins: *const LilvPlugins,
+
+    /// A full list of all LV2 plugins by URI
+    plugin_list: Vec<String>,
+
+    /// Pre-allocated URI nodes, in a previous revision I was generating these on-the-fly and
+    /// dropping them when I was done with them, but there's no reason to do that, the nodes can
+    /// be kept cached for the duration of the World.
+    uri_nodes: UriNodes,
+}
+
+/// Pre-allocated URI nodes for common LV2 predicates and classes
+/// These are created once and reused throughout the lifetime of LV2World
+struct UriNodes {
+    // Core port types
+    audio_port: *mut LilvNode,
+    control_port: *mut LilvNode,
+    input_port: *mut LilvNode,
+    output_port: *mut LilvNode,
+
+    // Port properties
+    integer: *mut LilvNode,
+    toggled: *mut LilvNode,
+    enumeration: *mut LilvNode,
+
+    // Scale points
+    scale_point: *mut LilvNode,
+
+    // RDF predicates
+    rdf_type: *mut LilvNode,
+    rdf_label: *mut LilvNode,
+    rdf_value: *mut LilvNode,
+
+    // Port groups
+    port_group: *mut LilvNode,
+    stereo_group: *mut LilvNode,
+    mono_group: *mut LilvNode,
+    sidechain_group: *mut LilvNode,
+}
+
+impl UriNodes {
+    unsafe fn new(world: *mut LilvWorld) -> Self {
+        // SAFETY: All lilv_new_uri calls are within unsafe block as required by Rust 2024
+        Self {
+            audio_port: unsafe { lilv_new_uri(world, LV2_AUDIO_PORT_URI.as_ptr() as *const i8) },
+            control_port: unsafe {
+                lilv_new_uri(world, LV2_CONTROL_PORT_URI.as_ptr() as *const i8)
+            },
+            input_port: unsafe { lilv_new_uri(world, LV2_INPUT_PORT_URI.as_ptr() as *const i8) },
+            output_port: unsafe { lilv_new_uri(world, LV2_OUTPUT_PORT_URI.as_ptr() as *const i8) },
+            integer: unsafe { lilv_new_uri(world, LV2_INTEGER_URI.as_ptr() as *const i8) },
+            toggled: unsafe { lilv_new_uri(world, LV2_TOGGLED_URI.as_ptr() as *const i8) },
+            enumeration: unsafe { lilv_new_uri(world, LV2_ENUM_URI.as_ptr() as *const i8) },
+            scale_point: unsafe { lilv_new_uri(world, LV2_SCALE_POINT_URI.as_ptr() as *const i8) },
+            rdf_type: unsafe { lilv_new_uri(world, LV2_RDF_TYPE.as_ptr() as *const i8) },
+            rdf_label: unsafe { lilv_new_uri(world, LV2_RDF_LABEL.as_ptr() as *const i8) },
+            rdf_value: unsafe { lilv_new_uri(world, LV2_RDF_VALUE.as_ptr() as *const i8) },
+            port_group: unsafe { lilv_new_uri(world, LV2_PORT_GROUP_URI.as_ptr() as *const i8) },
+            stereo_group: unsafe {
+                lilv_new_uri(world, LV2_STEREO_GROUP_URI.as_ptr() as *const i8)
+            },
+            mono_group: unsafe { lilv_new_uri(world, LV2_MONO_GROUP_URI.as_ptr() as *const i8) },
+            sidechain_group: unsafe {
+                lilv_new_uri(world, LV2_SIDECHAIN_GROUP_URI.as_ptr() as *const i8)
+            },
+        }
+    }
+
+    unsafe fn free(&mut self) {
+        // SAFETY: All lilv_node_free calls are within unsafe blocks as required by Rust 2024
+        unsafe {
+            lilv_node_free(self.audio_port);
+            lilv_node_free(self.control_port);
+            lilv_node_free(self.input_port);
+            lilv_node_free(self.output_port);
+            lilv_node_free(self.integer);
+            lilv_node_free(self.toggled);
+            lilv_node_free(self.enumeration);
+            lilv_node_free(self.scale_point);
+            lilv_node_free(self.rdf_type);
+            lilv_node_free(self.rdf_label);
+            lilv_node_free(self.rdf_value);
+            lilv_node_free(self.port_group);
+            lilv_node_free(self.stereo_group);
+            lilv_node_free(self.mono_group);
+            lilv_node_free(self.sidechain_group);
+        }
+    }
 }
 
 impl LV2World {
@@ -38,7 +150,228 @@ impl LV2World {
             }
             let plugins = lilv_world_get_all_plugins(world);
 
-            Self { world, plugins }
+            // Pre-allocate all URI nodes once
+            let uri_nodes = UriNodes::new(world);
+
+            // Get the Full Plugin List
+            let plugin_list = Self::get_plugin_list(plugins);
+
+            Self {
+                world,
+                plugins,
+                plugin_list,
+                uri_nodes,
+            }
+        }
+    }
+
+    pub fn get_plugin_list(plugins: *const LilvPlugins) -> Vec<String> {
+        let mut plugin_uris: Vec<String> = Vec::new();
+        unsafe {
+            let mut iter = lilv_plugins_begin(plugins);
+            while !lilv_plugins_is_end(plugins, iter) {
+                let plugin = lilv_plugins_get(plugins, iter);
+                if !plugin.is_null() {
+                    let uri_node = lilv_plugin_get_uri(plugin);
+                    if !uri_node.is_null() {
+                        let uri_cstr = lilv_node_as_string(uri_node);
+                        let uri = CStr::from_ptr(uri_cstr).to_string_lossy().to_string();
+                        plugin_uris.push(uri);
+                    }
+                }
+                iter = lilv_plugins_next(plugins, iter);
+            }
+        }
+        plugin_uris
+    }
+
+    pub fn validate_plugin(&self, uri: &str) -> bool {
+        // Fast Fail, check if plugin URI is in the known list
+        if !self.plugin_list.contains(&uri.to_string()) {
+            return false;
+        }
+
+        unsafe {
+            let uri_cstr = match CString::new(uri) {
+                Ok(s) => s,
+                Err(_) => return false,
+            };
+
+            let uri_node = lilv_new_uri(self.world, uri_cstr.as_ptr());
+            if uri_node.is_null() {
+                return false;
+            }
+
+            let plugin = lilv_plugins_get_by_uri(self.plugins, uri_node);
+            lilv_node_free(uri_node);
+
+            if plugin.is_null() {
+                return false;
+            }
+
+            // Get plugin name for logging
+            let plugin_name = {
+                let name_node = lilv_plugin_get_name(plugin);
+                if !name_node.is_null() {
+                    let name_cstr = lilv_node_as_string(name_node);
+                    CStr::from_ptr(name_cstr).to_string_lossy().to_string()
+                } else {
+                    "Unknown".to_string()
+                }
+            };
+
+            // Use lilv_plugin_get_num_ports_of_class for quick check
+            let audio_input_count = lilv_plugin_get_num_ports_of_class(
+                plugin,
+                self.uri_nodes.audio_port,
+                self.uri_nodes.input_port,
+                ptr::null::<LilvNode>(),
+            );
+            let audio_output_count = lilv_plugin_get_num_ports_of_class(
+                plugin,
+                self.uri_nodes.audio_port,
+                self.uri_nodes.output_port,
+                ptr::null::<LilvNode>(),
+            );
+
+            // We're going to try to fast fail here, if neither the input or outputs are stereo,
+            // we can reject the plugin outright without further analysis.
+            //
+            // Note: We need to consider that some plugins may have sidechain inputs/outputs, which
+            // will be reviewed after. So 3 or 4 channel inputs are acceptable at this stage.
+            if !(2..=4).contains(&audio_input_count) || audio_output_count != 2 {
+                let reason = if audio_input_count == 0 {
+                    "no audio inputs (generator/instrument)"
+                } else if audio_input_count == 1 {
+                    "mono input (requires stereo)"
+                } else if audio_input_count > 4 {
+                    "multi-channel input (>4 inputs)"
+                } else if audio_output_count == 0 {
+                    "no audio outputs (analyzer)"
+                } else if audio_output_count == 1 {
+                    "mono output (requires stereo)"
+                } else if audio_output_count > 2 {
+                    "multi-channel output (>2 outputs)"
+                } else {
+                    "unknown reason"
+                };
+
+                debug!(
+                    "LV2 Plugin REJECTED: '{}' ({}i/{}o) - {}",
+                    plugin_name, audio_input_count, audio_output_count, reason
+                );
+                return false;
+            }
+
+            // Now do detailed analysis with sidechain detection
+            let num_ports = lilv_plugin_get_num_ports(plugin);
+            let mut main_input_count = 0;
+            let mut main_output_count = 0;
+
+            for port_idx in 0..num_ports {
+                let port = lilv_plugin_get_port_by_index(plugin, port_idx);
+                if !port.is_null() {
+                    let is_audio = lilv_port_is_a(plugin, port, self.uri_nodes.audio_port);
+                    let is_input = lilv_port_is_a(plugin, port, self.uri_nodes.input_port);
+                    let is_output = lilv_port_is_a(plugin, port, self.uri_nodes.output_port);
+
+                    if is_audio {
+                        let group_nodes =
+                            lilv_port_get_value(plugin, port, self.uri_nodes.port_group);
+
+                        let is_sidechain = if lilv_nodes_size(group_nodes) > 0 {
+                            let group_node = lilv_nodes_get_first(group_nodes);
+                            let uri_cstr = lilv_node_as_string(group_node);
+                            let group_uri = CStr::from_ptr(uri_cstr);
+
+                            // Query RDF to check if it's a sidechain group
+                            let group_uri_node = lilv_new_uri(self.world, group_uri.as_ptr());
+                            let mut is_sc = false;
+
+                            if !group_uri_node.is_null() {
+                                let type_nodes = lilv_world_find_nodes(
+                                    self.world,
+                                    group_uri_node,
+                                    self.uri_nodes.rdf_type,
+                                    ptr::null(),
+                                );
+
+                                let mut iter = lilv_nodes_begin(type_nodes);
+                                while !lilv_nodes_is_end(type_nodes, iter) {
+                                    let type_node = lilv_nodes_get(type_nodes, iter);
+                                    let type_uri_cstr = lilv_node_as_string(type_node);
+                                    let type_uri = CStr::from_ptr(type_uri_cstr).to_string_lossy();
+
+                                    if type_uri == LV2_SIDECHAIN_GROUP_URI_STR {
+                                        is_sc = true;
+                                        break;
+                                    }
+
+                                    iter = lilv_nodes_next(type_nodes, iter);
+                                }
+                                lilv_nodes_free(type_nodes);
+                                lilv_node_free(group_uri_node);
+                            }
+
+                            is_sc
+                        } else {
+                            false
+                        };
+
+                        lilv_nodes_free(group_nodes);
+
+                        // Count main (non-sidechain) ports
+                        if !is_sidechain {
+                            if is_input {
+                                main_input_count += 1;
+                                if main_input_count > 2 {
+                                    debug!(
+                                        "LV2 Plugin REJECTED: '{}' ({}i/{}o) - multi-channel input (>2 inputs)",
+                                        plugin_name, main_input_count, main_output_count
+                                    );
+                                    return false;
+                                }
+                            } else if is_output {
+                                main_output_count += 1;
+                                if main_output_count > 2 {
+                                    debug!(
+                                        "LV2 Plugin REJECTED: '{}' ({}i/{}o) - multi-channel output (>2 outputs)",
+                                        plugin_name, main_input_count, main_output_count
+                                    );
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Accept if exactly 2 main inputs and 2 main outputs
+            if main_input_count == 2 && main_output_count == 2 {
+                debug!(
+                    "LV2 Plugin ACCEPTED: '{}' ({}i/{}o) -> {}",
+                    plugin_name, main_input_count, main_output_count, uri
+                );
+                true
+            } else {
+                let reason = if main_input_count == 0 {
+                    "no main audio inputs"
+                } else if main_input_count == 1 {
+                    "mono input (requires stereo)"
+                } else if main_output_count == 0 {
+                    "no main audio outputs"
+                } else if main_output_count == 1 {
+                    "mono output (requires stereo)"
+                } else {
+                    "incorrect main port configuration"
+                };
+
+                debug!(
+                    "LV2 Plugin REJECTED: '{}' ({}i/{}o) - {}",
+                    plugin_name, main_input_count, main_output_count, reason
+                );
+                false
+            }
         }
     }
 
@@ -50,11 +383,16 @@ impl LV2World {
     }
 }
 
+// SAFETY: LV2World is Send because we throw the current usage off to Pipewire which will
+// make all the calls on its own thread. LilvWorld and related objects are not thread-safe.
 unsafe impl Send for LV2World {}
 
 impl Drop for LV2World {
     fn drop(&mut self) {
         unsafe {
+            // Free URI nodes first (they depend on world being valid)
+            self.uri_nodes.free();
+
             if !self.world.is_null() {
                 lilv_world_free(self.world);
                 self.world = ptr::null_mut();
@@ -80,19 +418,6 @@ pub struct PortInfo {
     pub is_input: bool,
 }
 
-// URI constants
-const LV2_AUDIO_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#AudioPort\0";
-const LV2_CONTROL_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#ControlPort\0";
-const LV2_INPUT_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#InputPort\0";
-const LV2_OUTPUT_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#OutputPort\0";
-const LV2_INTEGER_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#integer\0";
-const LV2_TOGGLED_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#toggled\0";
-const LV2_ENUM_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#enumeration\0";
-
-const LV2_SCALE_POINT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#scalePoint\0";
-const LV2_RDF_LABEL: &[u8] = b"http://www.w3.org/2000/01/rdf-schema#label\0";
-const LV2_RDF_VALUE: &[u8] = b"http://www.w3.org/1999/02/22-rdf-syntax-ns#value\0";
-
 /// Get the human-readable name of an LV2 plugin by its URI
 /// Returns None if the plugin is not found
 pub fn get_plugin_name(plugin_uri: &str) -> Option<String> {
@@ -115,13 +440,14 @@ pub fn get_plugin_name(plugin_uri: &str) -> Option<String> {
         let plugin = lilv_plugins_get_by_uri(plugins, uri_node);
 
         let result = if !plugin.is_null() {
+            // NOTE: lilv_plugin_get_name() returns a plugin-owned node - DO NOT FREE IT
             let name_node = lilv_plugin_get_name(plugin);
             if !name_node.is_null() {
-                let name = CStr::from_ptr(lilv_node_as_string(name_node))
-                    .to_string_lossy()
-                    .to_string();
-                lilv_node_free(name_node);
-                Some(name)
+                Some(
+                    CStr::from_ptr(lilv_node_as_string(name_node))
+                        .to_string_lossy()
+                        .to_string(),
+                )
             } else {
                 None
             }
@@ -162,15 +488,20 @@ impl LV2PluginBase {
     pub fn new(plugin_uri: &str, rate: u32, max_block_size: usize) -> Result<Self, String> {
         unsafe {
             // Get shared world (initializes on first call)
-            let (world, plugins) = {
-                let world_guard = get_world()
-                    .lock()
-                    .map_err(|e| format!("Failed to lock world: {}", e))?;
-                (world_guard.get_world(), world_guard.get_plugins())
-            };
+            let world_guard = get_world()
+                .lock()
+                .map_err(|e| format!("Failed to lock world: {}", e))?;
+
+            let world = world_guard.get_world();
+            let plugins = world_guard.get_plugins();
+            let uri_nodes = &world_guard.uri_nodes;
 
             if world.is_null() {
                 return Err("Failed to access LV2 world".to_string());
+            }
+
+            if !world_guard.validate_plugin(plugin_uri) {
+                return Err(format!("Plugin '{}' failed validation", plugin_uri));
             }
 
             let uri_cstr = CString::new(plugin_uri).map_err(|e| format!("Invalid URI: {}", e))?;
@@ -185,20 +516,6 @@ impl LV2PluginBase {
                 lilv_node_free(uri_node);
                 return Err(format!("Plugin not found: {}", plugin_uri));
             }
-
-            // Create port class nodes
-            let audio_class = lilv_new_uri(world, LV2_AUDIO_PORT_URI.as_ptr() as *const i8);
-            let control_class = lilv_new_uri(world, LV2_CONTROL_PORT_URI.as_ptr() as *const i8);
-            let input_class = lilv_new_uri(world, LV2_INPUT_PORT_URI.as_ptr() as *const i8);
-            let output_class = lilv_new_uri(world, LV2_OUTPUT_PORT_URI.as_ptr() as *const i8);
-            let integer_class = lilv_new_uri(world, LV2_INTEGER_URI.as_ptr() as *const i8);
-            let toggled_class = lilv_new_uri(world, LV2_TOGGLED_URI.as_ptr() as *const i8);
-
-            // Enum Stuff
-            let enum_class = lilv_new_uri(world, LV2_ENUM_URI.as_ptr() as *const i8);
-            let scale_point_class = lilv_new_uri(world, LV2_SCALE_POINT_URI.as_ptr() as *const i8);
-            let rdf_label = lilv_new_uri(world, LV2_RDF_LABEL.as_ptr() as *const i8);
-            let rdf_value = lilv_new_uri(world, LV2_RDF_VALUE.as_ptr() as *const i8);
 
             // Scan ports
             let num_ports = lilv_plugin_get_num_ports(plugin);
@@ -215,10 +532,10 @@ impl LV2PluginBase {
                     continue;
                 }
 
-                let is_audio = lilv_port_is_a(plugin, port, audio_class);
-                let is_control = lilv_port_is_a(plugin, port, control_class);
-                let is_input = lilv_port_is_a(plugin, port, input_class);
-                let is_output = lilv_port_is_a(plugin, port, output_class);
+                let is_audio = lilv_port_is_a(plugin, port, uri_nodes.audio_port);
+                let is_control = lilv_port_is_a(plugin, port, uri_nodes.control_port);
+                let is_input = lilv_port_is_a(plugin, port, uri_nodes.input_port);
+                let is_output = lilv_port_is_a(plugin, port, uri_nodes.output_port);
 
                 if is_audio {
                     if is_input {
@@ -227,15 +544,12 @@ impl LV2PluginBase {
                         audio_output_ports.push(port_idx);
                     }
                 } else if is_control {
+                    // Reference Note: DONT FREE THIS!
                     let symbol_node = lilv_port_get_symbol(plugin, port);
                     let symbol = if !symbol_node.is_null() {
-                        let s = CStr::from_ptr(lilv_node_as_string(symbol_node))
+                        CStr::from_ptr(lilv_node_as_string(symbol_node))
                             .to_string_lossy()
-                            .to_string();
-
-                        // Free the symbol
-                        lilv_node_free(symbol_node as *mut LilvNode);
-                        s
+                            .to_string()
                     } else {
                         format!("control_{}", port_idx)
                     };
@@ -281,21 +595,25 @@ impl LV2PluginBase {
                         1.0
                     };
 
-                    let is_integer = lilv_port_has_property(plugin, port, integer_class);
-                    let is_toggled = lilv_port_has_property(plugin, port, toggled_class);
-                    let is_enum = lilv_port_has_property(plugin, port, enum_class);
+                    let is_integer = lilv_port_has_property(plugin, port, uri_nodes.integer);
+                    let is_toggled = lilv_port_has_property(plugin, port, uri_nodes.toggled);
+                    let is_enum = lilv_port_has_property(plugin, port, uri_nodes.enumeration);
 
                     let is_enum = if is_enum {
                         let mut result = HashMap::new();
-                        let scale_points = lilv_port_get_value(plugin, port, scale_point_class);
+                        let scale_points = lilv_port_get_value(plugin, port, uri_nodes.scale_point);
 
                         let mut iter = lilv_nodes_begin(scale_points);
                         while !lilv_nodes_is_end(scale_points, iter) {
                             let scale_point = lilv_nodes_get(scale_points, iter);
 
                             // Get the label (human-readable name)
-                            let labels =
-                                lilv_world_find_nodes(world, scale_point, rdf_label, ptr::null());
+                            let labels = lilv_world_find_nodes(
+                                world,
+                                scale_point,
+                                uri_nodes.rdf_label,
+                                ptr::null(),
+                            );
 
                             if lilv_nodes_size(labels) > 0 {
                                 let label_node = lilv_nodes_get_first(labels);
@@ -306,7 +624,7 @@ impl LV2PluginBase {
                                 let values = lilv_world_find_nodes(
                                     world,
                                     scale_point,
-                                    rdf_value,
+                                    uri_nodes.rdf_value,
                                     ptr::null(),
                                 );
 
@@ -349,17 +667,6 @@ impl LV2PluginBase {
                     control_ports.insert(symbol, port_info);
                 }
             }
-
-            lilv_node_free(audio_class);
-            lilv_node_free(control_class);
-            lilv_node_free(input_class);
-            lilv_node_free(output_class);
-            lilv_node_free(integer_class);
-            lilv_node_free(toggled_class);
-            lilv_node_free(enum_class);
-            lilv_node_free(scale_point_class);
-            lilv_node_free(rdf_label);
-            lilv_node_free(rdf_value);
 
             let instance = lilv_plugin_instantiate(plugin, rate as f64, ptr::null());
             if instance.is_null() {
