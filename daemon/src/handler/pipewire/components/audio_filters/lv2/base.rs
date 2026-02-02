@@ -470,10 +470,14 @@ pub struct LV2PluginBase {
     // Port mappings
     audio_input_ports: Vec<u32>,
     audio_output_ports: Vec<u32>,
-    pub control_ports: HashMap<String, PortInfo>,
 
-    // Control port values
-    // TODO: Can't remember why I made this, Revisit later.
+    // Control ports indexed by port_index (may have gaps for audio ports)
+    pub control_ports: Vec<Option<PortInfo>>,
+
+    // Symbol to port index mapping (public for reverse lookups)
+    pub symbol_to_port: HashMap<String, u32>,
+
+    // Control port values, these point directly to the LV2 internal values
     control_values: Vec<f32>,
     num_ports: u32,
 
@@ -521,7 +525,10 @@ impl LV2PluginBase {
             let num_ports = lilv_plugin_get_num_ports(plugin);
             let mut audio_input_ports = Vec::new();
             let mut audio_output_ports = Vec::new();
-            let mut control_ports = HashMap::new();
+
+            // Pre-allocate control ports Vec with None entries (indexed by port_index)
+            let mut control_ports: Vec<Option<PortInfo>> = vec![None; num_ports as usize];
+            let mut symbol_to_port = HashMap::new();
 
             // Pre-allocate control values vec for stable pointers (elements never move)
             let mut control_values = vec![0.0f32; num_ports as usize];
@@ -664,7 +671,8 @@ impl LV2PluginBase {
                     debug!("LV2 Control Port Found: {:?}", port_info);
 
                     control_values[port_idx as usize] = default;
-                    control_ports.insert(symbol, port_info);
+                    control_ports[port_idx as usize] = Some(port_info);
+                    symbol_to_port.insert(symbol, port_idx);
                 }
             }
 
@@ -681,6 +689,7 @@ impl LV2PluginBase {
                 audio_input_ports,
                 audio_output_ports,
                 control_ports,
+                symbol_to_port,
                 control_values,
                 num_ports,
 
@@ -689,7 +698,7 @@ impl LV2PluginBase {
                 max_block_size,
             };
 
-            // Connect control ports once during initialization
+            // Connect all control ports once during initialization (both inputs and outputs)
             plugin_base.connect_control_ports();
 
             lilv_instance_activate(instance);
@@ -698,66 +707,47 @@ impl LV2PluginBase {
         }
     }
 
-    /// Connect control ports to their buffers (called once during initialization)
-    /// Audio ports are connected per-process call for zero-copy operation
+    /// Connect all control ports to their buffers (called once during initialization)
     fn connect_control_ports(&mut self) {
         unsafe {
-            // Connect control ports to stable Vec addresses. Only connect control inputs;
-            // control outputs are written by the plugin and should not be connected to host storage.
-            for port in self.control_ports.values() {
-                if port.is_input {
-                    let value_ptr = &self.control_values[port.index as usize] as *const f32;
-                    lilv_instance_connect_port(self.instance, port.index, value_ptr as *mut c_void);
-                }
-            }
-        }
-    }
-
-    /// Connect control output ports to host-side buffers so the host can read plugin-written values.
-    /// This is optional and should be used when you want to observe plugin output controls.
-    pub fn connect_control_outputs(&mut self) {
-        unsafe {
-            for port in self.control_ports.values() {
-                if !port.is_input {
-                    let value_ptr = &self.control_values[port.index as usize] as *const f32;
-                    lilv_instance_connect_port(self.instance, port.index, value_ptr as *mut c_void);
-                }
+            for port in self.control_ports.iter().flatten() {
+                let value_ptr = &self.control_values[port.index as usize] as *const f32;
+                lilv_instance_connect_port(self.instance, port.index, value_ptr as *mut c_void);
             }
         }
     }
 
     /// Read the current values of control output ports.
-    /// Returns a HashMap mapping symbol -> value. Only includes ports marked as outputs.
+    /// TODO: Possibly allow individual lookups? For now this is fine.
     pub fn read_control_outputs(&self) -> HashMap<String, f32> {
         let mut map = HashMap::new();
-        for (sym, port) in &self.control_ports {
-            if !port.is_input {
-                // safe to read from control_values since it's host-owned storage
-                if let Some(v) = self.get_control_by_symbol(sym) {
-                    map.insert(sym.clone(), v);
-                }
+        for port_opt in &self.control_ports {
+            if let Some(port) = port_opt
+                && !port.is_input
+                && let Some(v) = self.get_control_by_index(port.index)
+            {
+                map.insert(port.symbol.clone(), v);
             }
         }
         map
     }
 
-    /// Disconnect control output ports by setting their instance pointer to null.
-    /// This is defensive and ensures the plugin can't write into freed host memory if we drop buffers.
-    pub fn disconnect_control_outputs(&mut self) {
-        unsafe {
-            for port in self.control_ports.values() {
-                if !port.is_input {
-                    lilv_instance_connect_port(self.instance, port.index, ptr::null_mut());
-                }
-            }
-        }
-    }
-
     /// Get control port value by symbol
     pub fn get_control_by_symbol(&self, symbol: &str) -> Option<f32> {
-        self.control_ports
+        self.symbol_to_port
             .get(symbol)
-            .map(|port| self.control_values[port.index as usize])
+            .and_then(|&port_idx| self.get_control_by_index(port_idx))
+    }
+
+    /// Get control port value by direct port index (faster than symbol lookup)
+    #[inline]
+    pub fn get_control_by_index(&self, port_index: u32) -> Option<f32> {
+        let idx = port_index as usize;
+        if idx < self.control_values.len() {
+            Some(self.control_values[idx])
+        } else {
+            None
+        }
     }
 
     /// Trait-based typed getter/setter support for control ports.
@@ -773,16 +763,40 @@ impl LV2PluginBase {
         symbol: &str,
         value: T,
     ) -> Result<(), String> {
-        if let Some(port) = self.control_ports.get(symbol) {
+        if let Some(&port_idx) = self.symbol_to_port.get(symbol) {
+            if let Some(port) = &self.control_ports[port_idx as usize] {
+                let mut vf = value.to_f32();
+                if port.is_integer {
+                    vf = vf.round();
+                }
+                vf = vf.max(port.min).min(port.max);
+                self.control_values[port_idx as usize] = vf;
+                Ok(())
+            } else {
+                Err(format!("Port index {} has no port info", port_idx))
+            }
+        } else {
+            Err(format!("Unknown control port: {}", symbol))
+        }
+    }
+
+    /// Set a control port by direct port index with type conversion and validation
+    /// Looks up port metadata internally for validation
+    #[inline]
+    pub fn set_control_by_index_typed<T: ControlConvert + Debug>(&mut self, id: u32, value: T) {
+        let idx = id as usize;
+        if idx >= self.control_ports.len() {
+            return;
+        }
+
+        // Set the value (with rounding/clamping as needed) directly into our control_values
+        if let Some(port) = &self.control_ports[idx] {
             let mut vf = value.to_f32();
             if port.is_integer {
                 vf = vf.round();
             }
             vf = vf.max(port.min).min(port.max);
-            self.control_values[port.index as usize] = vf;
-            Ok(())
-        } else {
-            Err(format!("Unknown control port: {}", symbol))
+            self.control_values[idx] = vf;
         }
     }
 

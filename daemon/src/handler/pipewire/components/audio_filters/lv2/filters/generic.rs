@@ -1,6 +1,4 @@
-use crate::handler::pipewire::components::audio_filters::lv2::base::{
-    ControlConvert, LV2PluginBase,
-};
+use crate::handler::pipewire::components::audio_filters::lv2::base::LV2PluginBase;
 use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use log::{debug, warn};
 use pipeweaver_pipewire::{
@@ -9,69 +7,36 @@ use pipeweaver_pipewire::{
 use std::collections::HashMap;
 use ulid::Ulid;
 
-// This is a helper enum to determine port types, they abstractly map to FilterValue variants
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PortType {
-    Bool,
-    Int,
-    Float,
-}
-
 /// A generic LV2 filter that can handle any LV2 plugin by dynamically discovering its control ports.
 pub struct GenericLV2Filter {
     plugin: LV2PluginBase,
 
-    // Runtime storage for control port values
-    // Maps property_id -> current value
-    control_values: HashMap<u32, f32>,
-
-    // Maps property_id -> port symbol for quick lookup
-    id_to_symbol: HashMap<u32, String>,
-
-    // Maps port symbol -> property_id for reverse lookup
-    symbol_to_id: HashMap<String, u32>,
-}
-
-impl GenericLV2Filter {
-    #[inline]
-    fn set_and_cache<T>(&mut self, symbol: &str, id: u32, value: T)
-    where
-        T: ControlConvert + std::fmt::Debug + Clone,
-    {
-        self.plugin.set_typed_prop(symbol, value, |val| {
-            self.control_values.insert(id, val.to_f32());
-        });
-    }
+    // Maps property_id -> port_index for quick lookups in the PluginBase
+    property_to_port: Vec<u32>,
 }
 
 impl FilterHandler for GenericLV2Filter {
     fn get_properties(&self) -> Vec<FilterProperty> {
-        let mut props = Vec::new();
+        let mut props = Vec::with_capacity(self.property_to_port.len());
 
         // Iterate through all control ports in order of property ID
-        let mut ids: Vec<_> = self.id_to_symbol.keys().copied().collect();
-        ids.sort();
-
-        for id in ids {
-            props.push(self.get_property(id));
+        for id in 0..self.property_to_port.len() {
+            props.push(self.get_property(id as u32));
         }
 
         props
     }
 
     fn get_property(&self, id: u32) -> FilterProperty {
-        let symbol = self.id_to_symbol.get(&id).expect("Invalid property ID");
-
-        let port = self
-            .plugin
-            .control_ports
-            .get(symbol)
-            .expect("Port not found for symbol");
+        // Use the ID to look up the corresponding control port index
+        let port_index = self.property_to_port[id as usize];
+        let port = self.plugin.control_ports[port_index as usize]
+            .as_ref()
+            .expect("Property maps to non-control port");
 
         let current_value = self
-            .control_values
-            .get(&id)
-            .copied()
+            .plugin
+            .get_control_by_index(port_index)
             .unwrap_or(port.default);
 
         // Determine the appropriate FilterValue variant based on port metadata
@@ -86,7 +51,7 @@ impl FilterHandler for GenericLV2Filter {
         FilterProperty {
             id,
             name: port.name.clone(),
-            symbol: symbol.clone(),
+            symbol: port.symbol.clone(),
             value,
             min: port.min,
             max: port.max,
@@ -95,53 +60,53 @@ impl FilterHandler for GenericLV2Filter {
     }
 
     fn set_property(&mut self, id: u32, value: FilterValue) {
-        // Look up symbol and port info first, we can use this for later handling
-        let (symbol, port_type) = match self.id_to_symbol.get(&id) {
-            Some(s) => {
-                let symbol = s.clone();
-                match self.plugin.control_ports.get(&symbol) {
-                    Some(p) => {
-                        // Determine port type from metadata
-                        let port_type = if p.is_toggled {
-                            PortType::Bool
-                        } else if p.is_integer || p.is_enum.is_some() {
-                            PortType::Int
-                        } else {
-                            PortType::Float
-                        };
-                        (symbol, port_type)
-                    }
-                    None => {
-                        warn!("Port not found for symbol: {}", symbol);
-                        return;
-                    }
-                }
-            }
+        // Again, ID to find the control port index
+        if id as usize >= self.property_to_port.len() {
+            warn!("Attempted to set property with invalid id: {}", id);
+            return;
+        }
+
+        let port_index = self.property_to_port[id as usize];
+
+        // Get port info (no duplication - reading from plugin's control_ports)
+        let port = match &self.plugin.control_ports[port_index as usize] {
+            Some(p) => p,
             None => {
-                warn!("Attempted to set property with unknown id: {}", id);
+                warn!(
+                    "Property {} maps to non-control port index {}",
+                    id, port_index
+                );
                 return;
             }
         };
 
-        // Now we can safely mutably borrow self since symbol is owned
+        // Extract metadata so we can type-check the internal value
+        let is_integer = port.is_integer;
+        let is_toggled = port.is_toggled;
+        let is_enum = port.is_enum.is_some();
+
+        // Keep a reference to the symbol for debug messages
+        let symbol = &port.symbol;
+
+        // Run the value check
         match value {
             FilterValue::Bool(v) => {
-                if matches!(port_type, PortType::Bool) {
-                    self.set_and_cache(&symbol, id, v);
+                if is_toggled {
+                    self.plugin.set_control_by_index_typed(port_index, v);
                 } else {
                     warn!("Attempted to set non-toggled port {} with bool", symbol);
                 }
             }
             FilterValue::Int32(v) => {
-                if matches!(port_type, PortType::Int) {
-                    self.set_and_cache(&symbol, id, v);
+                if is_integer || is_enum {
+                    self.plugin.set_control_by_index_typed(port_index, v);
                 } else {
                     warn!("Attempted to set non-integer port {} with int32", symbol);
                 }
             }
             FilterValue::Float32(v) => {
-                if matches!(port_type, PortType::Float) {
-                    self.set_and_cache(&symbol, id, v);
+                if !is_integer && !is_toggled {
+                    self.plugin.set_control_by_index_typed(port_index, v);
                 } else {
                     warn!(
                         "Attempted to set integer/toggle port {} with float32",
@@ -161,8 +126,17 @@ impl FilterHandler for GenericLV2Filter {
 }
 
 impl GenericLV2Filter {
-    // Creates a general filter, I'm not sure if this needs to have an Option for defaults,
-    // we could simply accept a bare hashmap and handle that instead.
+    /// Helper: Convert symbol to property_id using the plugin's symbol_to_port mapping
+    fn symbol_to_property_id(&self, symbol: &str) -> Option<u32> {
+        let port_index = self.plugin.symbol_to_port.get(symbol)?;
+
+        self.property_to_port
+            .iter()
+            .position(|&idx| idx == *port_index)
+            .map(|pos| pos as u32)
+    }
+
+    // Creates a general filter, defaults can be an empty HashMap if we don't want to override values
     pub fn new(
         plugin_uri: &str,
         rate: u32,
@@ -171,36 +145,32 @@ impl GenericLV2Filter {
     ) -> Result<Self, String> {
         let plugin = LV2PluginBase::new(plugin_uri, rate, block_size)?;
 
-        // Build bidirectional mappings between property IDs and port symbols
-        // We assign property IDs sequentially based on the order of control ports
-        let mut id_to_symbol = HashMap::new();
-        let mut symbol_to_id = HashMap::new();
-        let mut control_values = HashMap::new();
+        let mut property_to_port = Vec::new();
 
-        // Sort control ports by index to ensure consistent property ID assignment
-        let mut ports: Vec<_> = plugin.control_ports.iter().collect();
-        ports.sort_by_key(|(_, port)| port.index);
+        // Collect control ports and sort by port index for consistent property ID assignment
+        let mut control_port_indices: Vec<u32> = plugin
+            .control_ports
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, opt)| opt.as_ref().map(|_| idx as u32))
+            .collect();
+        control_port_indices.sort();
 
-        for (property_id, (symbol, port)) in ports.iter().enumerate() {
-            let property_id = property_id as u32;
-            id_to_symbol.insert(property_id, symbol.to_string());
-            symbol_to_id.insert(symbol.to_string(), property_id);
-
-            // Read the default from the plugin, or use the port default if unavailable
-            let current_value = plugin.get_control_by_symbol(symbol).unwrap_or(port.default);
-            control_values.insert(property_id, current_value);
+        // Build the property_id -> port_index mapping
+        for port_idx in control_port_indices {
+            property_to_port.push(port_idx);
         }
 
         let mut filter = Self {
             plugin,
-            control_values,
-            id_to_symbol,
-            symbol_to_id,
+            property_to_port,
         };
 
-        // Apply defaults if provided
+        // Apply defaults if provided, this performs a symbol -> property_id -> port_index lookup,
+        // it's a little excessive, but is only done on initialization, and allows us to just call
+        // .set_property which handles shit like type checking.
         for (symbol, value) in defaults {
-            if let Some(&id) = filter.symbol_to_id.get(&symbol) {
+            if let Some(id) = filter.symbol_to_property_id(&symbol) {
                 filter.set_property(id, value);
             } else {
                 warn!("Default provided for unknown port symbol: '{}'", symbol);
