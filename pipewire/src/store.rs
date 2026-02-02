@@ -5,7 +5,8 @@ use crate::registry::{
     RegistryDeviceNode, RegistryFactory, RegistryLink,
 };
 use crate::{
-    ApplicationNode, DeviceNode, FilterValue, LinkType, MediaClass, NodeTarget, PipewireReceiver,
+    ApplicationNode, DeviceNode, FilterProperty, FilterValue, LinkType, MediaClass, NodeTarget,
+    PipewireReceiver,
 };
 use anyhow::Result;
 use anyhow::{anyhow, bail};
@@ -478,6 +479,14 @@ impl Store {
     pub fn managed_filter_set_parameter(&mut self, id: Ulid, key: u32, value: FilterValue) {
         let filter = self.managed_filters.get_mut(&id).expect("Broke!");
         filter.data.write().callback.set_property(key, value);
+    }
+
+    pub fn managed_filter_get_parameters(&self, id: Ulid) -> Result<Vec<FilterProperty>> {
+        let filter = self
+            .managed_filters
+            .get(&id)
+            .ok_or(anyhow!("Filter Missing"))?;
+        Ok(filter.data.read().callback.get_properties())
     }
 
     // ----- MANAGED LINKS -----

@@ -1,7 +1,7 @@
 use crate::registry::PipewireRegistry;
 use crate::store::{FilterStore, LinkStore, LinkStoreMap, NodeStore, PortLocation, Store};
 use crate::{
-    FilterHandler, FilterProperties, FilterValue, LinkType, NodeProperties,
+    FilterHandler, FilterProperties, FilterProperty, FilterValue, LinkType, NodeProperties,
     PipewireInternalMessage, PipewireReceiver, registry,
 };
 use crate::{MediaClass, PWReceiver};
@@ -500,6 +500,10 @@ impl PipewireManager {
         Ok(())
     }
 
+    pub fn get_filter_values(&mut self, id: Ulid) -> Result<Vec<FilterProperty>> {
+        self.store.borrow().managed_filter_get_parameters(id)
+    }
+
     pub fn set_filter_value(&mut self, id: Ulid, key: u32, value: FilterValue) -> Result<()> {
         // We need to grab the filter from the store, and pass the value set..
         self.store
@@ -849,6 +853,10 @@ pub fn run_pw_main_loop(
 
             PipewireInternalMessage::DestroyUnmanagedLinks(id, result) => {
                 let _ = result.send(manager.borrow_mut().remove_all_unmanaged_links(id));
+            }
+
+            PipewireInternalMessage::GetFilterParameters(id, result) => {
+                let _ = result.send(manager.borrow_mut().get_filter_values(id));
             }
 
             PipewireInternalMessage::SetFilterValue(id, key, value, result) => {

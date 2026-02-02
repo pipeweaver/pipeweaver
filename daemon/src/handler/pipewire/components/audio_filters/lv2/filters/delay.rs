@@ -81,9 +81,9 @@ impl FilterHandler for DelayFilter {
                 min: 0.0,
                 max: 2.0,
                 enum_def: Some(HashMap::from([
-                    ("Samples".into(), 0),
-                    ("Distance".into(), 1),
-                    ("Time".into(), 2),
+                    (0, "Samples".into()),
+                    (1, "Distance".into()),
+                    (2, "Time".into()),
                 ])),
             },
             PROP_MODE_RIGHT => FilterProperty {
@@ -94,9 +94,9 @@ impl FilterHandler for DelayFilter {
                 min: 0.0,
                 max: 2.0,
                 enum_def: Some(HashMap::from([
-                    ("Samples".into(), 0),
-                    ("Distance".into(), 1),
-                    ("Time".into(), 2),
+                    (0, "Samples".into()),
+                    (1, "Distance".into()),
+                    (2, "Time".into()),
                 ])),
             },
             PROP_TIME_LEFT => FilterProperty {

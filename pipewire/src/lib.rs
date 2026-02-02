@@ -61,7 +61,9 @@ pub enum PipewireInternalMessage {
     RemoveFilterNode(Ulid, oneshot::Sender<Result<()>>),
     RemoveDeviceLink(LinkType, LinkType, oneshot::Sender<Result<()>>),
 
+    GetFilterParameters(Ulid, oneshot::Sender<Result<Vec<FilterProperty>>>),
     SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<()>>),
+
     SetNodeVolume(Ulid, u8, oneshot::Sender<Result<()>>),
     SetNodeMute(Ulid, bool, oneshot::Sender<Result<()>>),
     SetApplicationVolume(u32, u8, oneshot::Sender<Result<()>>),
@@ -381,7 +383,7 @@ pub struct FilterProperty {
     pub min: f32,
     pub max: f32,
 
-    pub enum_def: Option<HashMap<String, u32>>,
+    pub enum_def: Option<HashMap<u32, String>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

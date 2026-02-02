@@ -412,7 +412,7 @@ pub struct PortInfo {
     pub default: f32,
     pub is_integer: bool,
     pub is_toggled: bool,
-    pub is_enum: Option<HashMap<String, u32>>,
+    pub is_enum: Option<HashMap<u32, String>>,
 
     // Whether this port is an input (host provides a value) or output (plugin writes)
     pub is_input: bool,
@@ -632,7 +632,7 @@ impl LV2PluginBase {
                                     let value_node = lilv_nodes_get_first(values);
                                     let value = lilv_node_as_int(value_node); // or lilv_node_as_int
 
-                                    result.insert(label.to_string(), value as u32);
+                                    result.insert(value as u32, label.to_string());
                                 }
 
                                 lilv_nodes_free(values);
