@@ -8,6 +8,7 @@ use crate::manager::run_pw_main_loop;
 use anyhow::{Result, anyhow, bail};
 use log::{info, trace, warn};
 use oneshot::TryRecvError;
+use pipeweaver_shared::FilterValue;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::mpsc;
@@ -372,19 +373,6 @@ pub trait FilterHandler: Send + 'static {
     fn set_property(&mut self, id: u32, value: FilterValue) -> Result<String>;
 
     fn process_samples(&mut self, inputs: Vec<&mut [f32]>, outputs: Vec<&mut [f32]>);
-}
-
-// We need these because while *WE* know what values are coming in and out, rust doesn't
-// so gives us a wrapper around some common types that can be read out appropriately by the filter
-#[derive(Debug)]
-pub enum FilterValue {
-    Int32(i32),
-    Float32(f32),
-    UInt8(u8),
-    UInt32(u32),
-    String(String),
-    Bool(bool),
-    Enum(String, u32),
 }
 
 #[derive(Debug)]

@@ -21,8 +21,8 @@ impl LoadProfile for PipewireManager {
         {
             use crate::handler::pipewire::components::audio_filters::lv2::filters::generic::filter_get_generic_lv2_props;
             use crate::handler::pipewire::components::filters::FilterManagement;
-            use pipeweaver_pipewire::FilterValue;
             use pipeweaver_pipewire::{PipewireMessage, oneshot};
+            use pipeweaver_shared::FilterValue;
             use std::collections::HashMap;
             use ulid::Ulid;
 

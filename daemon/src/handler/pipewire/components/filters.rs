@@ -5,7 +5,8 @@ use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use anyhow::{Result, bail};
 use pipeweaver_pipewire::oneshot;
-use pipeweaver_pipewire::{FilterProperties, FilterValue, MediaClass, PipewireMessage};
+use pipeweaver_pipewire::{FilterProperties, MediaClass, PipewireMessage};
+use pipeweaver_shared::FilterValue;
 use ulid::Ulid;
 
 #[allow(unused)]

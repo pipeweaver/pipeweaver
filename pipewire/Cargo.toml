@@ -13,6 +13,9 @@ anyhow = { workspace = true }
 ulid = { workspace = true }
 log = { workspace = true }
 
+# We need the shared structure so we can handle filter values
+pipeweaver-shared = { path = "../shared" }
+
 pipewire = { git = "https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git", features = ["v0_3_45"] }
 oneshot = "0.1.11"
 

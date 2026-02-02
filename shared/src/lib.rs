@@ -125,3 +125,14 @@ impl Default for Colour {
         }
     }
 }
+
+#[derive(Debug)]
+pub enum FilterValue {
+    Int32(i32),
+    Float32(f32),
+    UInt8(u8),
+    UInt32(u32),
+    String(String),
+    Bool(bool),
+    Enum(String, u32),
+}

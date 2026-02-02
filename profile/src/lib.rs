@@ -161,3 +161,5 @@ impl Default for Volumes {
         }
     }
 }
+
+pub struct Filter {}

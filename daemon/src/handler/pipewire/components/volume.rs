@@ -6,9 +6,9 @@ use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{Result, anyhow, bail};
 use log::debug;
-use pipeweaver_pipewire::{FilterValue, PipewireMessage, oneshot};
+use pipeweaver_pipewire::{PipewireMessage, oneshot};
 use pipeweaver_profile::Volumes;
-use pipeweaver_shared::{Mix, MuteState, NodeType};
+use pipeweaver_shared::{FilterValue, Mix, MuteState, NodeType};
 use ulid::Ulid;
 
 pub(crate) trait VolumeManager {
