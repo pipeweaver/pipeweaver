@@ -344,7 +344,7 @@ export default {
 
       let maxWidth = 0;
       devices.forEach(device => {
-        const width = ctx.measureText(device.description.name).width;
+        const width = ctx.measureText(device.description.name).width + 5;
         maxWidth = Math.max(maxWidth, width);
       });
 
