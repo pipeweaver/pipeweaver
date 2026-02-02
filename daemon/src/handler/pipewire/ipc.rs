@@ -1,4 +1,5 @@
 use crate::handler::pipewire::components::application::ApplicationManagement;
+use crate::handler::pipewire::components::filters::FilterManagement;
 use crate::handler::pipewire::components::mute::MuteManager;
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
@@ -106,6 +107,10 @@ impl IPCHandler for PipewireManager {
             Cmd::SetApplicationMute(id, state) => {
                 self.set_application_mute(id, state).await.map(|_| Resp::Ok)
             }
+            Cmd::AddFilterToNode(id, filter) => self
+                .filter_custom_create(id, filter)
+                .await
+                .map(|_| Resp::Ok),
         }
     }
 }

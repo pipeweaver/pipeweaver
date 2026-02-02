@@ -19,7 +19,7 @@ impl LoadProfile for PipewireManager {
 
         #[cfg(feature = "lv2")]
         {
-            use crate::handler::pipewire::components::audio_filters::lv2::filters::generic::filter_get_generic_lv2_props;
+            use crate::handler::pipewire::components::audio_filters::lv2::filters::generic::filter_lv2;
             use crate::handler::pipewire::components::filters::FilterManagement;
             use pipeweaver_pipewire::{PipewireMessage, oneshot};
             use pipeweaver_shared::FilterValue;
@@ -36,7 +36,7 @@ impl LoadProfile for PipewireManager {
             defaults.insert("time_l".into(), FilterValue::Float32(1000.));
             defaults.insert("time_r".into(), FilterValue::Float32(1000.));
 
-            let props = filter_get_generic_lv2_props(uri, name, Ulid::new(), defaults);
+            let props = filter_lv2(uri, name, Ulid::new(), defaults);
             let id = props.filter_id;
 
             //let props = filter_get_delay_props(String::from("Test"), Ulid::new());

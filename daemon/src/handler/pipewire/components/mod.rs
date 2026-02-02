@@ -1,6 +1,6 @@
 pub(crate) mod application;
 mod audio_filters;
-mod filters;
+pub(crate) mod filters;
 pub(crate) mod links;
 pub(crate) mod load_profile;
 pub(crate) mod mute;

@@ -37,6 +37,7 @@ pub(crate) trait NodeManagement {
 
     async fn node_set_group(&mut self, id: Ulid, group: OrderGroup) -> Result<()>;
     async fn node_set_position(&mut self, id: Ulid, position: u8) -> Result<()>;
+    async fn node_get_description(&self, id: Ulid) -> Result<DeviceDescription>;
 
     async fn node_set_colour(&mut self, id: Ulid, colour: Colour) -> Result<()>;
     fn get_target_node_count(&self) -> usize;
@@ -245,6 +246,27 @@ impl NodeManagement for PipewireManager {
             order.insert(position, id);
         }
         Ok(())
+    }
+
+    async fn node_get_description(&self, id: Ulid) -> Result<DeviceDescription> {
+        let err = anyhow!("Cannot Find Node");
+        if let Some(node_type) = self.get_node_type(id) {
+            return match node_type {
+                NodeType::PhysicalSource => {
+                    Ok(self.get_physical_source(id).ok_or(err)?.description.clone())
+                }
+                NodeType::PhysicalTarget => {
+                    Ok(self.get_physical_target(id).ok_or(err)?.description.clone())
+                }
+                NodeType::VirtualSource => {
+                    Ok(self.get_virtual_source(id).ok_or(err)?.description.clone())
+                }
+                NodeType::VirtualTarget => {
+                    Ok(self.get_virtual_target(id).ok_or(err)?.description.clone())
+                }
+            };
+        }
+        bail!("Cannot Find Node");
     }
 
     async fn node_set_colour(&mut self, id: Ulid, colour: Colour) -> Result<()> {

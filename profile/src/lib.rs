@@ -76,7 +76,7 @@ pub struct VirtualSourceDevice {
     pub volumes: Volumes,
 
     #[serde(default)]
-    pub filters: Vec<Filters>,
+    pub filters: Vec<Filter>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -98,7 +98,7 @@ pub struct PhysicalSourceDevice {
     pub volumes: Volumes,
 
     #[serde(default)]
-    pub filters: Vec<Filters>,
+    pub filters: Vec<Filter>,
 
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
@@ -112,7 +112,7 @@ pub struct VirtualTargetDevice {
     pub mix: Mix,
 
     #[serde(default)]
-    pub filters: Vec<Filters>,
+    pub filters: Vec<Filter>,
 
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
@@ -126,7 +126,7 @@ pub struct PhysicalTargetDevice {
     pub mix: Mix,
 
     #[serde(default)]
-    pub filters: Vec<Filters>,
+    pub filters: Vec<Filter>,
 
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
@@ -183,17 +183,23 @@ impl Default for Volumes {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Filters {
+pub enum Filter {
     LV2(LV2Filter),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LV2Filter {
-    plugin_uri: String,
-    values: HashMap<String, FilterValue>,
+    // We'll generate a ulid if one isn't provided
+    #[serde(default = "generate_uid")]
+    pub id: Ulid,
+
+    pub plugin_uri: String,
+    pub values: HashMap<String, FilterValue>,
 
     #[serde(skip)]
     parameters: Vec<FilterProperty>,
 }
 
-pub struct Filter {}
+fn generate_uid() -> Ulid {
+    Ulid::new()
+}

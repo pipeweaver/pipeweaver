@@ -182,7 +182,7 @@ impl GenericLV2Filter {
 }
 
 /// Helper function to create FilterProperties for a generic LV2 plugin
-pub fn filter_get_generic_lv2_props(
+pub fn filter_lv2(
     plugin_uri: impl Into<String>,
     name: String,
     id: Ulid,

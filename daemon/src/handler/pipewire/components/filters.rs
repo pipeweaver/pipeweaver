@@ -1,12 +1,16 @@
 use crate::handler::pipewire::components::audio_filters::internal::meter::MeterFilter;
 use crate::handler::pipewire::components::audio_filters::internal::pass_through::PassThroughFilter;
 use crate::handler::pipewire::components::audio_filters::internal::volume::VolumeFilter;
+use crate::handler::pipewire::components::audio_filters::lv2::filters::generic::filter_lv2;
+use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME, APP_NAME_ID};
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{FilterProperties, MediaClass, PipewireMessage};
-use pipeweaver_shared::FilterValue;
+use pipeweaver_profile::Filter;
+use pipeweaver_shared::{FilterValue, NodeType};
+use std::collections::HashMap;
 use ulid::Ulid;
 
 #[allow(unused)]
@@ -24,6 +28,8 @@ pub(crate) trait FilterManagement {
 
     async fn filter_remove(&mut self, id: Ulid) -> Result<()>;
     async fn filter_debug_create(&mut self, props: FilterProperties) -> Result<()>;
+
+    async fn filter_custom_create(&mut self, target: Ulid, filter: Filter) -> Result<()>;
 }
 
 impl FilterManagement for PipewireManager {
@@ -89,6 +95,40 @@ impl FilterManagement for PipewireManager {
     async fn filter_debug_create(&mut self, props: FilterProperties) -> Result<()> {
         self.filter_pw_create(props).await
     }
+
+    async fn filter_custom_create(&mut self, target: Ulid, filter: Filter) -> Result<()> {
+        let node_desc = self.node_get_description(target).await?;
+
+        // Get the number of existing filters
+        let filter_count = self.get_filter_count(target)? + 1;
+
+        match filter.clone() {
+            Filter::LV2(lv2_filter) => {
+                // TODO: Check for LV2 feature support
+
+                // This ID should be generated automatically if a ulid isn't directly provided
+                let id = lv2_filter.id;
+                let uri = lv2_filter.plugin_uri;
+
+                // We need to pull the last segment of the URI for the name
+                let name = uri
+                    .rsplit("/")
+                    .next()
+                    .ok_or_else(|| anyhow!("Failed to get filter name from URI"))?;
+
+                let name = format!("{}-{}-{}", node_desc.name, name, filter_count);
+                let defaults = HashMap::new();
+
+                let props = filter_lv2(uri, name, id, defaults);
+
+                self.filter_pw_create(props).await?;
+
+                // Add this to the Profile
+                self.add_filter_to_profile(target, filter)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 trait FilterManagementLocal {
@@ -98,6 +138,10 @@ trait FilterManagementLocal {
     fn filter_pass_get_props(&self, name: String, id: Ulid) -> FilterProperties;
     fn filter_volume_get_props(&self, name: String, id: Ulid) -> FilterProperties;
     fn filter_meter_get_props(&self, node: Ulid, name: String, id: Ulid) -> FilterProperties;
+
+    fn get_filter_count(&mut self, target: Ulid) -> Result<usize>;
+    fn add_filter_to_profile(&mut self, target: Ulid, filter: Filter) -> Result<()>;
+    fn get_device_filters_mut(&mut self, target: Ulid) -> Result<&mut Vec<Filter>>;
 }
 
 impl FilterManagementLocal for PipewireManager {
@@ -178,5 +222,69 @@ impl FilterManagementLocal for PipewireManager {
 
             ready_sender: None,
         }
+    }
+
+    fn get_filter_count(&mut self, target: Ulid) -> Result<usize> {
+        let filters = self.get_device_filters_mut(target)?;
+        Ok(filters.len())
+    }
+    fn add_filter_to_profile(&mut self, target: Ulid, filter: Filter) -> Result<()> {
+        let filters = self.get_device_filters_mut(target)?;
+        filters.push(filter);
+        Ok(())
+    }
+
+    fn get_device_filters_mut(&mut self, target: Ulid) -> Result<&mut Vec<Filter>> {
+        let node_type = self
+            .get_node_type(target)
+            .ok_or_else(|| anyhow!("Target not Found"))?;
+
+        let device_filters = match node_type {
+            NodeType::PhysicalSource => {
+                &mut self
+                    .profile
+                    .devices
+                    .sources
+                    .physical_devices
+                    .iter_mut()
+                    .find(|e| e.description.id == target)
+                    .ok_or_else(|| anyhow!("Target not Found"))?
+                    .filters
+            }
+            NodeType::PhysicalTarget => {
+                &mut self
+                    .profile
+                    .devices
+                    .targets
+                    .physical_devices
+                    .iter_mut()
+                    .find(|e| e.description.id == target)
+                    .ok_or_else(|| anyhow!("Target not Found"))?
+                    .filters
+            }
+            NodeType::VirtualSource => {
+                &mut self
+                    .profile
+                    .devices
+                    .sources
+                    .virtual_devices
+                    .iter_mut()
+                    .find(|e| e.description.id == target)
+                    .ok_or_else(|| anyhow!("Target not Found"))?
+                    .filters
+            }
+            NodeType::VirtualTarget => {
+                &mut self
+                    .profile
+                    .devices
+                    .targets
+                    .virtual_devices
+                    .iter_mut()
+                    .find(|e| e.description.id == target)
+                    .ok_or_else(|| anyhow!("Target not Found"))?
+                    .filters
+            }
+        };
+        Ok(device_filters)
     }
 }
