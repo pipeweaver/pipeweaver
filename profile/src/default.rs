@@ -40,6 +40,7 @@ impl Profile {
                             },
                             volumes_linked: Some(1.),
                         },
+                        filters: vec![],
                         attached_devices: vec![],
                     }],
                     virtual_devices: vec![
@@ -64,6 +65,7 @@ impl Profile {
                                 },
                                 volumes_linked: Some(1.),
                             },
+                            filters: vec![],
                         },
                         VirtualSourceDevice {
                             description: DeviceDescription {
@@ -86,6 +88,7 @@ impl Profile {
                                 },
                                 volumes_linked: Some(1.),
                             },
+                            filters: vec![],
                         },
                     ],
                     device_order: enum_map! {
@@ -107,6 +110,7 @@ impl Profile {
                         mute_state: MuteState::Unmuted,
                         volume: 100,
                         mix: Mix::A,
+                        filters: vec![],
                         attached_devices: vec![],
                     }],
                     virtual_devices: vec![VirtualTargetDevice {
@@ -123,6 +127,7 @@ impl Profile {
                         volume: 100,
                         mix: Mix::A,
 
+                        filters: vec![],
                         attached_devices: Default::default(),
                     }],
 

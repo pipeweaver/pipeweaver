@@ -1,7 +1,10 @@
 mod default;
 
 use enum_map::{EnumMap, enum_map};
-use pipeweaver_shared::{Colour, DeviceType, Mix, MuteState, MuteTarget, OrderGroup, Quantum};
+use pipeweaver_shared::{
+    Colour, DeviceType, FilterProperty, FilterValue, Mix, MuteState, MuteTarget, OrderGroup,
+    Quantum,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use ulid::Ulid;
@@ -71,6 +74,9 @@ pub struct VirtualSourceDevice {
     pub description: DeviceDescription,
     pub mute_states: MuteStates,
     pub volumes: Volumes,
+
+    #[serde(default)]
+    pub filters: Vec<Filters>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +97,9 @@ pub struct PhysicalSourceDevice {
     pub mute_states: MuteStates,
     pub volumes: Volumes,
 
+    #[serde(default)]
+    pub filters: Vec<Filters>,
+
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
 
@@ -101,6 +110,9 @@ pub struct VirtualTargetDevice {
     pub mute_state: MuteState,
     pub volume: u8,
     pub mix: Mix,
+
+    #[serde(default)]
+    pub filters: Vec<Filters>,
 
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
@@ -113,17 +125,23 @@ pub struct PhysicalTargetDevice {
     pub volume: u8,
     pub mix: Mix,
 
+    #[serde(default)]
+    pub filters: Vec<Filters>,
+
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 }
 
 impl Default for PhysicalTargetDevice {
     fn default() -> Self {
         Self {
-            description: Default::default(),
             volume: 100,
+
+            description: Default::default(),
 
             mute_state: Default::default(),
             mix: Default::default(),
+
+            filters: Default::default(),
 
             attached_devices: Default::default(),
         }
@@ -138,6 +156,8 @@ impl Default for VirtualTargetDevice {
 
             mute_state: Default::default(),
             mix: Default::default(),
+
+            filters: Default::default(),
 
             attached_devices: Default::default(),
         }
@@ -160,6 +180,20 @@ impl Default for Volumes {
             volumes_linked: Some(1.),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Filters {
+    LV2(LV2Filter),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LV2Filter {
+    plugin_uri: String,
+    values: HashMap<String, FilterValue>,
+
+    #[serde(skip)]
+    parameters: Vec<FilterProperty>,
 }
 
 pub struct Filter {}

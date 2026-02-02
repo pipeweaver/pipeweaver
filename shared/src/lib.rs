@@ -127,7 +127,7 @@ impl Default for Colour {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FilterValue {
     Int32(i32),
     Float32(f32),
@@ -138,7 +138,7 @@ pub enum FilterValue {
     Enum(String, u32),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FilterProperty {
     pub id: u32,
     pub name: String,
