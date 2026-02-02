@@ -8,8 +8,7 @@ use crate::manager::run_pw_main_loop;
 use anyhow::{Result, anyhow, bail};
 use log::{info, trace, warn};
 use oneshot::TryRecvError;
-use pipeweaver_shared::FilterValue;
-use std::collections::HashMap;
+use pipeweaver_shared::{FilterProperty, FilterValue};
 use std::fmt::Debug;
 use std::sync::mpsc;
 use std::thread;
@@ -373,19 +372,6 @@ pub trait FilterHandler: Send + 'static {
     fn set_property(&mut self, id: u32, value: FilterValue) -> Result<String>;
 
     fn process_samples(&mut self, inputs: Vec<&mut [f32]>, outputs: Vec<&mut [f32]>);
-}
-
-#[derive(Debug)]
-pub struct FilterProperty {
-    pub id: u32,
-    pub name: String,
-    pub symbol: String,
-    pub value: FilterValue,
-
-    pub min: f32,
-    pub max: f32,
-
-    pub enum_def: Option<HashMap<u32, String>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

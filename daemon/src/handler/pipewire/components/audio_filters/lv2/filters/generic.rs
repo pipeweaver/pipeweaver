@@ -2,8 +2,8 @@ use crate::handler::pipewire::components::audio_filters::lv2::base::LV2PluginBas
 use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use anyhow::{Result, bail};
 use log::{debug, warn};
-use pipeweaver_pipewire::{FilterHandler, FilterProperties, FilterProperty, MediaClass};
-use pipeweaver_shared::FilterValue;
+use pipeweaver_pipewire::{FilterHandler, FilterProperties, MediaClass};
+use pipeweaver_shared::{FilterProperty, FilterValue};
 use std::collections::HashMap;
 use ulid::Ulid;
 

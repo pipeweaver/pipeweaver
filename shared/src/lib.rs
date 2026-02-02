@@ -1,5 +1,6 @@
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::Debug;
 use strum_macros::{Display, EnumIter};
 use ulid::Ulid;
@@ -135,4 +136,17 @@ pub enum FilterValue {
     String(String),
     Bool(bool),
     Enum(String, u32),
+}
+
+#[derive(Debug)]
+pub struct FilterProperty {
+    pub id: u32,
+    pub name: String,
+    pub symbol: String,
+    pub value: FilterValue,
+
+    pub min: f32,
+    pub max: f32,
+
+    pub enum_def: Option<HashMap<u32, String>>,
 }

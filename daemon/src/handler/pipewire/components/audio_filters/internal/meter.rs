@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
-use pipeweaver_pipewire::{FilterHandler, FilterProperty};
-use pipeweaver_shared::FilterValue;
+use pipeweaver_pipewire::FilterHandler;
+use pipeweaver_shared::{FilterProperty, FilterValue};
 use tokio::sync::mpsc;
 use ulid::Ulid;
 
