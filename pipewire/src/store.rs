@@ -69,7 +69,6 @@ pub struct Store {
     unmanaged_links: HashMap<u32, RegistryLink>,
 
     // Usable Nodes are unmanaged device / client nodes with a stereo setup
-    handled_device_nodes: Vec<u32>,
     usable_client_nodes: Vec<u32>,
 
     callback_tx: mpsc::Sender<PipewireReceiver>,
@@ -98,7 +97,6 @@ impl Store {
 
             unmanaged_links: HashMap::new(),
 
-            handled_device_nodes: vec![],
             usable_client_nodes: vec![],
 
             callback_tx,
@@ -599,9 +597,8 @@ impl Store {
 
     pub fn unmanaged_device_node_remove(&mut self, id: u32) {
         // Need to flag upstream if the node has gone away
-        if self.handled_device_nodes.contains(&id) {
+        if self.unmanaged_device_nodes.contains_key(&id) {
             let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
-            self.handled_device_nodes.retain(|v| v != &id);
         }
 
         self.unmanaged_device_nodes.remove(&id);
