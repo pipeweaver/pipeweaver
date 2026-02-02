@@ -502,10 +502,6 @@ impl TryFrom<&DictRef> for RegistryDeviceNode {
         let media_class = value.get(*MEDIA_CLASS).map(|s| s.to_string());
 
         // We need to match the media type here, it's only a device if it's a Sink or Source
-        debug!(
-            "RegistryDeviceNode, Name: {:?} Media Class: {:?}",
-            nickname, media_class
-        );
         if let Some(media_class) = &media_class {
             if !media_class.starts_with("Audio/Source") && !media_class.starts_with("Audio/Sink") {
                 bail!("Not an Audio Device Node");
