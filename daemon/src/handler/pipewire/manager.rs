@@ -18,7 +18,7 @@ use pipeweaver_pipewire::{
     ApplicationNode, DeviceNode, MediaClass, NodeTarget, PipewireMessage, PipewireReceiver,
     PipewireRunner,
 };
-use pipeweaver_profile::Profile;
+use pipeweaver_profile::{FilterConfig, Profile};
 use pipeweaver_shared::{AppTarget, DeviceType, FilterProperty, Mix};
 use std::collections::HashMap;
 use std::thread;
@@ -58,7 +58,7 @@ pub(crate) struct PipewireManager {
     meter_broadcast: broadcast::Sender<MeterEvent>,
 
     // Custom filter configs
-    pub(crate) filter_config: HashMap<Ulid, Vec<FilterProperty>>,
+    pub(crate) filter_config: HashMap<Ulid, FilterConfig>,
 
     // A list of physical nodes
     pub(crate) node_list: EnumMap<DeviceType, Vec<PhysicalDevice>>,
@@ -116,7 +116,7 @@ impl PipewireManager {
     async fn get_audio_config(&self) -> AudioConfiguration {
         AudioConfiguration {
             profile: self.profile.clone(),
-            filter_config: Default::default(),
+            filter_config: self.filter_config.clone(),
             devices: self.node_list.clone(),
             defaults: enum_map! {
                 DeviceType::Source => match &self.default_source {

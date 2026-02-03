@@ -36,7 +36,7 @@ impl LoadProfile for PipewireManager {
             defaults.insert("time_l".into(), FilterValue::Float32(1000.));
             defaults.insert("time_r".into(), FilterValue::Float32(1000.));
 
-            let props = filter_lv2(uri, name, Ulid::new(), defaults);
+            let (_name, props) = filter_lv2(uri, name, Ulid::new(), defaults);
             let id = props.filter_id;
 
             //let props = filter_get_delay_props(String::from("Test"), Ulid::new());

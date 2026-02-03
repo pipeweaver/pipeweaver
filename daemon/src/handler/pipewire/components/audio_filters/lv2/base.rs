@@ -418,48 +418,6 @@ pub struct PortInfo {
     pub is_input: bool,
 }
 
-/// Get the human-readable name of an LV2 plugin by its URI
-/// Returns None if the plugin is not found
-pub fn get_plugin_name(plugin_uri: &str) -> Option<String> {
-    unsafe {
-        let world_guard = get_world().lock().ok()?;
-        let world = world_guard.get_world();
-        let plugins = world_guard.get_plugins();
-
-        if world.is_null() {
-            return None;
-        }
-
-        let uri_cstr = CString::new(plugin_uri).ok()?;
-        let uri_node = lilv_new_uri(world, uri_cstr.as_ptr());
-
-        if uri_node.is_null() {
-            return None;
-        }
-
-        let plugin = lilv_plugins_get_by_uri(plugins, uri_node);
-
-        let result = if !plugin.is_null() {
-            // NOTE: lilv_plugin_get_name() returns a plugin-owned node - DO NOT FREE IT
-            let name_node = lilv_plugin_get_name(plugin);
-            if !name_node.is_null() {
-                Some(
-                    CStr::from_ptr(lilv_node_as_string(name_node))
-                        .to_string_lossy()
-                        .to_string(),
-                )
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        lilv_node_free(uri_node);
-        result
-    }
-}
-
 /// A simple LV2 Plugin wrapper
 pub struct LV2PluginBase {
     // LV2 objects provided by Lilv
@@ -483,6 +441,7 @@ pub struct LV2PluginBase {
 
     // Config
     pub plugin_uri: String,
+    pub plugin_name: String,
     pub sample_rate: u32,
     pub max_block_size: usize,
 }
@@ -676,6 +635,17 @@ impl LV2PluginBase {
                 }
             }
 
+            // Get the plugin name
+            let plugin_name = {
+                let name_node = lilv_plugin_get_name(plugin);
+                if !name_node.is_null() {
+                    let name_cstr = lilv_node_as_string(name_node);
+                    CStr::from_ptr(name_cstr).to_string_lossy().to_string()
+                } else {
+                    plugin_uri.to_string()
+                }
+            };
+
             let instance = lilv_plugin_instantiate(plugin, rate as f64, ptr::null());
             if instance.is_null() {
                 lilv_node_free(uri_node);
@@ -694,6 +664,7 @@ impl LV2PluginBase {
                 num_ports,
 
                 plugin_uri: plugin_uri.to_string(),
+                plugin_name,
                 sample_rate: rate,
                 max_block_size,
             };

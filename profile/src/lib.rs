@@ -203,5 +203,6 @@ fn generate_uid() -> Ulid {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct FilterConfig {
+    pub name: String,
     pub parameters: Vec<FilterProperty>,
 }

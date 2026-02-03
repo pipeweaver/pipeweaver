@@ -8,7 +8,7 @@ use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use anyhow::{Result, anyhow, bail};
 use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{FilterProperties, MediaClass, PipewireMessage};
-use pipeweaver_profile::Filter;
+use pipeweaver_profile::{Filter, FilterConfig};
 use pipeweaver_shared::{FilterValue, NodeType};
 use std::collections::HashMap;
 use ulid::Ulid;
@@ -119,7 +119,7 @@ impl FilterManagement for PipewireManager {
                 let name = format!("{}-{}-{}", node_desc.name, name, filter_count);
                 let defaults = HashMap::new();
 
-                let props = filter_lv2(uri, name, id, defaults);
+                let (name, props) = filter_lv2(uri, name, id, defaults);
 
                 self.filter_pw_create(props).await?;
 
@@ -131,8 +131,10 @@ impl FilterManagement for PipewireManager {
                 let message = PipewireMessage::GetFilterParameters(id, tx);
                 self.pipewire().send_message(message)?;
 
-                let params = rx.recv()??;
-                self.filter_config.insert(id, params);
+                let parameters = rx.recv()??;
+                let config = FilterConfig { name, parameters };
+
+                self.filter_config.insert(id, config);
             }
         }
         Ok(())

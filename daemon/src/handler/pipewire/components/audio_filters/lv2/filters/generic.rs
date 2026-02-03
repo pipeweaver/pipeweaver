@@ -11,6 +11,9 @@ use ulid::Ulid;
 pub struct GenericLV2Filter {
     plugin: LV2PluginBase,
 
+    // The Name of the Filter
+    plugin_name: String,
+
     // Maps property_id -> port_index for quick lookups in the PluginBase
     property_to_port: Vec<u32>,
 }
@@ -144,6 +147,7 @@ impl GenericLV2Filter {
         defaults: HashMap<String, FilterValue>,
     ) -> Result<Self, String> {
         let plugin = LV2PluginBase::new(plugin_uri, rate, block_size)?;
+        let plugin_name = plugin.plugin_name.clone();
 
         let mut property_to_port = Vec::new();
 
@@ -163,6 +167,7 @@ impl GenericLV2Filter {
 
         let mut filter = Self {
             plugin,
+            plugin_name,
             property_to_port,
         };
 
@@ -187,7 +192,7 @@ pub fn filter_lv2(
     name: String,
     id: Ulid,
     defaults: HashMap<String, FilterValue>,
-) -> FilterProperties {
+) -> (String, FilterProperties) {
     let plugin_uri = plugin_uri.into();
     let description = name.to_lowercase().replace(" ", "-");
 
@@ -209,8 +214,9 @@ pub fn filter_lv2(
             );
         }
     };
+    let name = callback.plugin_name.clone();
 
-    FilterProperties {
+    let props = FilterProperties {
         filter_id: id,
         filter_name,
         filter_nick: name.to_string(),
@@ -223,5 +229,7 @@ pub fn filter_lv2(
 
         callback: Box::new(callback),
         ready_sender: None,
-    }
+    };
+
+    (name, props)
 }
