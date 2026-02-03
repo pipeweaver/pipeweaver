@@ -141,10 +141,11 @@ export default {
               <input type="checkbox" :checked="prop.value.Bool"/>
             </span>
             <span v-else-if="getFilterPropertyType(prop) === 'int'">
-              <input type="number" :value="prop.value.Int32"/>
+              <input type="number" :value="prop.value.Int32" :min="prop.min" :max="prop.max"/>
             </span>
             <span v-else-if="getFilterPropertyType(prop) === 'float'">
-              <input type="number" step="0.01" :value="prop.value.Float32"/>
+              <input type="number" step="0.01" :value="prop.value.Float32" :min="prop.min"
+                     :max="prop.max"/>
             </span>
             <span v-else-if="getFilterPropertyType(prop) === 'enum'">
               <select>
