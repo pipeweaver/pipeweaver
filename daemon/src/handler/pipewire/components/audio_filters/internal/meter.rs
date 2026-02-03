@@ -63,6 +63,8 @@ impl FilterHandler for MeterFilter {
                 min: 0.0,
                 max: 1.0,
 
+                is_input: true,
+
                 enum_def: None,
             },
             _ => panic!("Attempted to lookup non-existent property!"),

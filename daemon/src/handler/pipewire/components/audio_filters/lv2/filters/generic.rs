@@ -58,6 +58,7 @@ impl FilterHandler for GenericLV2Filter {
             value,
             min: port.min,
             max: port.max,
+            is_input: port.is_input,
             enum_def: port.is_enum.clone(),
         }
     }

@@ -148,5 +148,7 @@ pub struct FilterProperty {
     pub min: f32,
     pub max: f32,
 
+    pub is_input: bool,
+
     pub enum_def: Option<HashMap<u32, String>>,
 }

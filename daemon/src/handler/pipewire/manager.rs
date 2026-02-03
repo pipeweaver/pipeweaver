@@ -19,7 +19,7 @@ use pipeweaver_pipewire::{
     PipewireRunner,
 };
 use pipeweaver_profile::{FilterConfig, Profile};
-use pipeweaver_shared::{AppTarget, DeviceType, FilterProperty, Mix};
+use pipeweaver_shared::{AppTarget, DeviceType, Mix};
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;

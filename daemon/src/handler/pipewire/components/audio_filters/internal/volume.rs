@@ -85,6 +85,8 @@ impl FilterHandler for VolumeFilter {
                 min: 0.0,
                 max: 100.0,
 
+                is_input: true,
+
                 enum_def: None,
             },
             _ => panic!("Attempted to lookup non-existent property!"),
