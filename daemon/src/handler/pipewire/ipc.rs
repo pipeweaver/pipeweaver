@@ -111,6 +111,10 @@ impl IPCHandler for PipewireManager {
                 .filter_custom_create(id, filter)
                 .await
                 .map(|_| Resp::Ok),
+            Cmd::SetFilterValue(filter, id, value) => self
+                .filter_set_value(filter, id, value)
+                .await
+                .map(|_| Resp::Ok),
         }
     }
 }

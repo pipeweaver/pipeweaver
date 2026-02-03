@@ -31,6 +31,7 @@ pub(crate) trait FilterManagement {
 
     async fn node_load_filters(&mut self, id: Ulid) -> Result<()>;
     async fn filter_custom_create(&mut self, target: Ulid, filter: Filter) -> Result<()>;
+    async fn filter_set_value(&mut self, filter: Ulid, id: u32, value: FilterValue) -> Result<()>;
 }
 
 impl FilterManagement for PipewireManager {
@@ -101,7 +102,11 @@ impl FilterManagement for PipewireManager {
         let device_filters = self.get_device_filters_mut(id)?;
 
         for (index, filter) in device_filters.clone().iter().enumerate() {
-            self.filter_create_custom(id, filter.clone(), index).await?;
+            let defaults = match filter {
+                Filter::LV2(lv2_filter) => lv2_filter.values.clone(), // Use existing values as defaults for LV2 filters
+            };
+            self.filter_create_custom(id, filter.clone(), index, defaults)
+                .await?;
         }
 
         Ok(())
@@ -109,10 +114,47 @@ impl FilterManagement for PipewireManager {
 
     async fn filter_custom_create(&mut self, target: Ulid, filter: Filter) -> Result<()> {
         let id = self.get_filter_count(target)? + 1;
+        let defaults = HashMap::new();
 
-        self.filter_create_custom(target, filter.clone(), id)
+        self.filter_create_custom(target, filter.clone(), id, defaults)
             .await?;
         self.add_filter_to_profile(target, filter)
+    }
+
+    async fn filter_set_value(&mut self, filter: Ulid, id: u32, value: FilterValue) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        let message = PipewireMessage::SetFilterValue(filter, id, value.clone(), tx);
+        self.pipewire().send_message(message)?;
+        rx.recv()??;
+
+        // Update the filter configuration cache
+        if let Some(filter_conf) = self.filter_config.get_mut(&filter) {
+            let param = filter_conf.parameters.iter_mut().find(|p| p.id == id);
+            if let Some(param) = param {
+                // Store the symbol for updating the profile
+                let symbol = param.symbol.clone();
+                param.value = value.clone();
+
+                // Update the profile's filter entry
+                let dev = self.get_device_by_filter_mut(filter)?;
+
+                // Find this filter in the list and update based on filter type
+                let filter_entry = dev.iter_mut().find(|f| match f {
+                    Filter::LV2(lv2) => lv2.id == filter,
+                });
+
+                if let Some(found_filter) = filter_entry {
+                    // Update the filter's parameters based on its type
+                    match found_filter {
+                        Filter::LV2(lv2_filter) => {
+                            lv2_filter.values.insert(symbol, value);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -126,13 +168,16 @@ trait FilterManagementLocal {
 
     fn get_filter_count(&mut self, target: Ulid) -> Result<usize>;
     fn add_filter_to_profile(&mut self, target: Ulid, filter: Filter) -> Result<()>;
+
     fn get_device_filters_mut(&mut self, target: Ulid) -> Result<&mut Vec<Filter>>;
+    fn get_device_by_filter_mut(&mut self, filter: Ulid) -> Result<&mut Vec<Filter>>;
 
     async fn filter_create_custom(
         &mut self,
         target: Ulid,
         filter: Filter,
         index: usize,
+        defaults: HashMap<String, FilterValue>,
     ) -> Result<()>;
 }
 
@@ -280,11 +325,39 @@ impl FilterManagementLocal for PipewireManager {
         Ok(device_filters)
     }
 
+    fn get_device_by_filter_mut(&mut self, filter: Ulid) -> Result<&mut Vec<Filter>> {
+        // Define a matcher function
+        let filter_matches = |f: &Filter| match f {
+            Filter::LV2(lv2) => lv2.id == filter,
+        };
+
+        // This macro is a new way to reduce duplication, might extend it elsewhere later.
+        macro_rules! search_devices {
+            ($devices:expr) => {
+                if let Some(device) = $devices
+                    .iter_mut()
+                    .find(|d| d.filters.iter().any(&filter_matches))
+                {
+                    return Ok(&mut device.filters);
+                }
+            };
+        }
+
+        // Search the devices :)
+        search_devices!(self.profile.devices.sources.physical_devices);
+        search_devices!(self.profile.devices.targets.physical_devices);
+        search_devices!(self.profile.devices.sources.virtual_devices);
+        search_devices!(self.profile.devices.targets.virtual_devices);
+
+        Err(anyhow!("Filter not found in any device"))
+    }
+
     async fn filter_create_custom(
         &mut self,
         target: Ulid,
         filter: Filter,
         index: usize,
+        defaults: HashMap<String, FilterValue>,
     ) -> Result<()> {
         let node_desc = self.node_get_description(target).await?;
 
@@ -306,8 +379,6 @@ impl FilterManagementLocal for PipewireManager {
                     .ok_or_else(|| anyhow!("Failed to get filter name from URI"))?;
 
                 let name = format!("{}-{}-{}", node_desc.name, name, index);
-                let defaults = HashMap::new();
-
                 let (name, props) = filter_lv2(uri, name, id, defaults);
                 self.filter_pw_create(props).await?;
 

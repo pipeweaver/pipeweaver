@@ -85,7 +85,7 @@ export default {
       if (store.getAudio().filter_config[id] === undefined) {
         return [];
       }
-      
+
       return store.getAudio().filter_config[id].parameters.filter(prop => prop.is_input !== false);
     },
 
@@ -118,10 +118,41 @@ export default {
       if (prop['value']['Float32'] !== undefined) {
         return 'float';
       }
+    },
 
-      // if prop.enu
-      //
-      // if prop.value[]
+    setFilterPropertyValue(filter_id, prop_id, e) {
+      let input = store.getAudio().filter_config[filter_id];
+      if (input === undefined) {
+        console.error("Unknown filter ID: " + filter_id);
+        return;
+      }
+
+      let prop = input.parameters.find(p => p.id === prop_id);
+      let prop_type = this.getFilterPropertyType(prop);
+
+      let raw = e.target.value;
+      let send_value = undefined;
+
+      if (prop_type === 'bool') {
+        let value = e.target.checked;
+        send_value = {"Bool": value};
+
+      } else if (prop_type === 'int' || prop_type === 'enum') {
+        let value = parseInt(raw, 10);
+        send_value = {"Int32": value};
+      } else if (prop_type === 'float') {
+        let value = parseFloat(raw);
+        send_value = {"Float32": value};
+      } else {
+        console.error("Unsupported filter property type: " + prop_type);
+        return;
+      }
+
+      // SetFilterValue(Ulid, u32, FilterValue),
+      let command = {
+        "SetFilterValue": [filter_id, prop_id, send_value]
+      };
+      websocket.send_command(command);
     }
   }
 }
@@ -144,20 +175,23 @@ export default {
         </div>
         <div class="filter-page" v-else>
           <div class="prop-value">
-            <div v-for="prop of getFilterProperties(activeFilter)">
-              <span class="prop-label">{{ prop.name }}</span>
+            <div v-for="(prop, id) in getFilterProperties(activeFilter)">
+              <span class="prop-label">{{ prop.name }} - {{ prop.id }}</span>
               <span v-if="getFilterPropertyType(prop) === 'bool'" class="prop-value">
-                <input type="checkbox" :checked="prop.value.Bool"/>
+                <input type="checkbox" :checked="prop.value.Bool"
+                       @change="e => setFilterPropertyValue(activeFilter, prop.id, e)"/>
               </span>
               <span v-else-if="getFilterPropertyType(prop) === 'int'" class="prop-value">
-                <input type="number" :value="prop.value.Int32" :min="prop.min" :max="prop.max"/>
+                <input type="number" :value="prop.value.Int32" :min="prop.min" :max="prop.max"
+                       @change="e => setFilterPropertyValue(activeFilter, prop.id, e)"/>
               </span>
               <span v-else-if="getFilterPropertyType(prop) === 'float'" class="prop-value">
                 <input type="number" step="0.01" :value="prop.value.Float32" :min="prop.min"
-                       :max="prop.max"/>
+                       :max="prop.max"
+                       @change="e => setFilterPropertyValue(activeFilter, prop.id, e)"/>
               </span>
               <span v-else-if="getFilterPropertyType(prop) === 'enum'" class="prop-value">
-                <select>
+                <select @change="e => setFilterPropertyValue(activeFilter, prop.id, e)">
                   <option v-for="(enum_name, enum_value) in prop.enum_def" :value="enum_value">
                     {{ enum_name }}
                   </option>

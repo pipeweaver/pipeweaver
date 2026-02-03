@@ -2,8 +2,8 @@ use enum_map::EnumMap;
 use json_patch::Patch;
 use pipeweaver_profile::{Filter, FilterConfig, Profile};
 use pipeweaver_shared::{
-    AppDefinition, AppTarget, Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType, OrderGroup,
-    Quantum,
+    AppDefinition, AppTarget, Colour, DeviceType, FilterValue, Mix, MuteState, MuteTarget,
+    NodeType, OrderGroup, Quantum,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -95,6 +95,7 @@ pub enum APICommand {
 
     // Ability to create filters for a node
     AddFilterToNode(Ulid, Filter),
+    SetFilterValue(Ulid, u32, FilterValue),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
