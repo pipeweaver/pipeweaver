@@ -38,6 +38,7 @@ const LV2_PORT_GROUP_URI: &[u8] = b"http://lv2plug.in/ns/ext/port-groups#group\0
 const LV2_STEREO_GROUP_URI: &[u8] = b"http://lv2plug.in/ns/ext/port-groups#StereoGroup\0";
 const LV2_MONO_GROUP_URI: &[u8] = b"http://lv2plug.in/ns/ext/port-groups#MonoGroup\0";
 const LV2_SIDECHAIN_GROUP_URI: &[u8] = b"http://lv2plug.in/ns/ext/port-groups#SideChainGroup\0";
+const LV2_IS_SIDECHAIN_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#isSideChain\0";
 
 // String slice versions of URIs for comparison (without null terminator)
 const LV2_STEREO_GROUP_URI_STR: &str = "http://lv2plug.in/ns/ext/port-groups#StereoGroup";
@@ -89,6 +90,7 @@ struct UriNodes {
     stereo_group: *mut LilvNode,
     mono_group: *mut LilvNode,
     sidechain_group: *mut LilvNode,
+    is_sidechain: *mut LilvNode,
 }
 
 impl UriNodes {
@@ -116,6 +118,9 @@ impl UriNodes {
             sidechain_group: unsafe {
                 lilv_new_uri(world, LV2_SIDECHAIN_GROUP_URI.as_ptr() as *const i8)
             },
+            is_sidechain: unsafe {
+                lilv_new_uri(world, LV2_IS_SIDECHAIN_URI.as_ptr() as *const i8)
+            },
         }
     }
 
@@ -137,6 +142,7 @@ impl UriNodes {
             lilv_node_free(self.stereo_group);
             lilv_node_free(self.mono_group);
             lilv_node_free(self.sidechain_group);
+            lilv_node_free(self.is_sidechain);
         }
     }
 }
@@ -276,10 +282,17 @@ impl LV2World {
                     let is_output = lilv_port_is_a(plugin, port, self.uri_nodes.output_port);
 
                     if is_audio {
+                        // Check if port has lv2:isSideChain property (more direct check)
+                        let has_sidechain_property =
+                            lilv_port_has_property(plugin, port, self.uri_nodes.is_sidechain);
+
+                        // Also check port group for sidechain group type
                         let group_nodes =
                             lilv_port_get_value(plugin, port, self.uri_nodes.port_group);
 
-                        let is_sidechain = if lilv_nodes_size(group_nodes) > 0 {
+                        let is_sidechain = if has_sidechain_property {
+                            true
+                        } else if lilv_nodes_size(group_nodes) > 0 {
                             let group_node = lilv_nodes_get_first(group_nodes);
                             let uri_cstr = lilv_node_as_string(group_node);
                             let group_uri = CStr::from_ptr(uri_cstr);
