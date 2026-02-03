@@ -10,10 +10,12 @@ import MixAssignment from "@/views/desktop/channels/MixAssignment.vue";
 import PhysicalDeviceSelector from "@/views/desktop/channels/DevicePopup.vue";
 import DevicePopup from "@/views/desktop/channels/DevicePopup.vue";
 import ColourPicker from "@/views/desktop/components/ColourPicker.vue";
+import FilterView from "@/views/desktop/channels/FilterView.vue";
 
 export default {
   name: 'ChannelColumn',
   components: {
+    FilterView,
     ColourPicker,
     DevicePopup,
     PhysicalDeviceSelector,
@@ -251,13 +253,11 @@ export default {
     },
 
     colour_clicked: function (e) {
-      // const rgb = this.getColour();
-      //
-      // const hexColour = this.rgbToHex(rgb.red, rgb.green, rgb.blue);
-      //
-      // this.$refs.colour_picker.value = hexColour;
-      // this.$refs.colour_picker.click();
       this.$refs.colour.show(this.$refs['colour_section']);
+    },
+
+    filter_clicked: function (e) {
+      this.$refs.filters.show(e);
     },
 
     colour_changed: function (value) {
@@ -375,6 +375,8 @@ export default {
                 @closed="colour_closed" @colour-changed="colour_changed"
                 @preview-clicked="colour_show_native"/>
 
+  <FilterView :id="id" ref="filters"/>
+
   <div class="mix">
     <div class="title">
       <div class="start drag-handle">
@@ -382,7 +384,8 @@ export default {
       </div>
       <div class="name">{{ getChannelName() }}</div>
       <div class="end">
-        <DevicePopup id="select_device" :colour_callback="colour_clicked" :device_id="id"
+        <DevicePopup id="select_device" :filter_callback="filter_clicked"
+                     :colour_callback="colour_clicked" :device_id="id"
                      :order_group='order_group'
                      :type='type'/>
       </div>
