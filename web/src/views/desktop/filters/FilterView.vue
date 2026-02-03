@@ -74,11 +74,19 @@ export default {
 
     getFilterName(filter) {
       let id = this.getFilterId(filter);
+      if (store.getAudio().filter_config[id] === undefined) {
+        return "Unknown Filter";
+      }
+
       return store.getAudio().filter_config[id].name;
     },
 
     getFilterProperties(id) {
-      return store.getAudio().filter_config[id].parameters;
+      if (store.getAudio().filter_config[id] === undefined) {
+        return [];
+      }
+      
+      return store.getAudio().filter_config[id].parameters.filter(prop => prop.is_input !== false);
     },
 
     getFilterPropertyType(prop) {
@@ -126,7 +134,7 @@ export default {
     <template v-slot:default>
       <div class="filter-wrapper">
         <div class="filter-list">
-          <div class="add_filter" @click="addFilter">Add Filter</div>
+          <div class="add-filter" @click="addFilter">Add Filter</div>
           <div v-for="filter in getFilters()" class="filter-item" @click="setActiveFilter(filter)">
             {{ getFilterName(filter) }}
           </div>
@@ -134,29 +142,31 @@ export default {
         <div v-if="activeFilter === undefined" class="filter-page">Need Dis:
           http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo
         </div>
-        <div v-else>
-          <div v-for="prop of getFilterProperties(activeFilter)">
-            {{ prop.name }}
-            <span v-if="getFilterPropertyType(prop) === 'bool'">
-              <input type="checkbox" :checked="prop.value.Bool"/>
-            </span>
-            <span v-else-if="getFilterPropertyType(prop) === 'int'">
-              <input type="number" :value="prop.value.Int32" :min="prop.min" :max="prop.max"/>
-            </span>
-            <span v-else-if="getFilterPropertyType(prop) === 'float'">
-              <input type="number" step="0.01" :value="prop.value.Float32" :min="prop.min"
-                     :max="prop.max"/>
-            </span>
-            <span v-else-if="getFilterPropertyType(prop) === 'enum'">
-              <select>
-                <option v-for="(enum_name, enum_value) in prop.enum_def" :value="enum_value">
-                  {{ enum_name }}
-                </option>
-              </select>
-            </span>
-            <span v-else>
-              Err: {{ getFilterProperties(activeFilter) }}
-            </span>
+        <div class="filter-page" v-else>
+          <div class="prop-value">
+            <div v-for="prop of getFilterProperties(activeFilter)">
+              <span class="prop-label">{{ prop.name }}</span>
+              <span v-if="getFilterPropertyType(prop) === 'bool'" class="prop-value">
+                <input type="checkbox" :checked="prop.value.Bool"/>
+              </span>
+              <span v-else-if="getFilterPropertyType(prop) === 'int'" class="prop-value">
+                <input type="number" :value="prop.value.Int32" :min="prop.min" :max="prop.max"/>
+              </span>
+              <span v-else-if="getFilterPropertyType(prop) === 'float'" class="prop-value">
+                <input type="number" step="0.01" :value="prop.value.Float32" :min="prop.min"
+                       :max="prop.max"/>
+              </span>
+              <span v-else-if="getFilterPropertyType(prop) === 'enum'" class="prop-value">
+                <select>
+                  <option v-for="(enum_name, enum_value) in prop.enum_def" :value="enum_value">
+                    {{ enum_name }}
+                  </option>
+                </select>
+              </span>
+              <span v-else>
+                Err: {{ getFilterProperties(activeFilter) }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -181,7 +191,7 @@ export default {
   width: 800px;
 }
 
-.add_filter {
+.add-filter {
   margin: 0 5px 5px 5px;
   padding: 10px;
   border-bottom: 1px solid #fff;
@@ -189,7 +199,7 @@ export default {
   text-align: center;
 }
 
-.add_filter:hover {
+.add-filter:hover {
   background-color: #353a39;
 }
 
@@ -201,5 +211,19 @@ export default {
 .filter-item:hover {
   background-color: #353a39;
 }
+
+.prop-label {
+  display: inline-block;
+  width: 200px;
+}
+
+.prop-value input[type="number"] {
+  width: 100px;
+}
+
+.prop-value select {
+  width: 100px;
+}
+
 
 </style>
