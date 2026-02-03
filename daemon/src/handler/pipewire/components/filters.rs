@@ -29,6 +29,7 @@ pub(crate) trait FilterManagement {
     async fn filter_remove(&mut self, id: Ulid) -> Result<()>;
     async fn filter_debug_create(&mut self, props: FilterProperties) -> Result<()>;
 
+    async fn node_load_filters(&mut self, id: Ulid) -> Result<()>;
     async fn filter_custom_create(&mut self, target: Ulid, filter: Filter) -> Result<()>;
 }
 
@@ -96,48 +97,22 @@ impl FilterManagement for PipewireManager {
         self.filter_pw_create(props).await
     }
 
-    async fn filter_custom_create(&mut self, target: Ulid, filter: Filter) -> Result<()> {
-        let node_desc = self.node_get_description(target).await?;
+    async fn node_load_filters(&mut self, id: Ulid) -> Result<()> {
+        let device_filters = self.get_device_filters_mut(id)?;
 
-        // Get the number of existing filters
-        let filter_count = self.get_filter_count(target)? + 1;
-
-        match filter.clone() {
-            Filter::LV2(lv2_filter) => {
-                // TODO: Check for LV2 feature support
-
-                // This ID should be generated automatically if a ulid isn't directly provided
-                let id = lv2_filter.id;
-                let uri = lv2_filter.plugin_uri;
-
-                // We need to pull the last segment of the URI for the name
-                let name = uri
-                    .rsplit("/")
-                    .next()
-                    .ok_or_else(|| anyhow!("Failed to get filter name from URI"))?;
-
-                let name = format!("{}-{}-{}", node_desc.name, name, filter_count);
-                let defaults = HashMap::new();
-
-                let (name, props) = filter_lv2(uri, name, id, defaults);
-
-                self.filter_pw_create(props).await?;
-
-                // Add this to the Profile
-                self.add_filter_to_profile(target, filter)?;
-
-                // Grab the filter parameters
-                let (tx, rx) = oneshot::channel();
-                let message = PipewireMessage::GetFilterParameters(id, tx);
-                self.pipewire().send_message(message)?;
-
-                let parameters = rx.recv()??;
-                let config = FilterConfig { name, parameters };
-
-                self.filter_config.insert(id, config);
-            }
+        for (index, filter) in device_filters.clone().iter().enumerate() {
+            self.filter_create_custom(id, filter.clone(), index).await?;
         }
+
         Ok(())
+    }
+
+    async fn filter_custom_create(&mut self, target: Ulid, filter: Filter) -> Result<()> {
+        let id = self.get_filter_count(target)? + 1;
+
+        self.filter_create_custom(target, filter.clone(), id)
+            .await?;
+        self.add_filter_to_profile(target, filter)
     }
 }
 
@@ -152,6 +127,13 @@ trait FilterManagementLocal {
     fn get_filter_count(&mut self, target: Ulid) -> Result<usize>;
     fn add_filter_to_profile(&mut self, target: Ulid, filter: Filter) -> Result<()>;
     fn get_device_filters_mut(&mut self, target: Ulid) -> Result<&mut Vec<Filter>>;
+
+    async fn filter_create_custom(
+        &mut self,
+        target: Ulid,
+        filter: Filter,
+        index: usize,
+    ) -> Result<()>;
 }
 
 impl FilterManagementLocal for PipewireManager {
@@ -296,5 +278,50 @@ impl FilterManagementLocal for PipewireManager {
             }
         };
         Ok(device_filters)
+    }
+
+    async fn filter_create_custom(
+        &mut self,
+        target: Ulid,
+        filter: Filter,
+        index: usize,
+    ) -> Result<()> {
+        let node_desc = self.node_get_description(target).await?;
+
+        // Get the number of existing filters
+        //let filter_count = self.get_filter_count(target)? + 1;
+
+        match filter.clone() {
+            Filter::LV2(lv2_filter) => {
+                // TODO: Check for LV2 feature support
+
+                // This ID should be generated automatically if a ulid isn't directly provided
+                let id = lv2_filter.id;
+                let uri = lv2_filter.plugin_uri;
+
+                // We need to pull the last segment of the URI for the name
+                let name = uri
+                    .rsplit("/")
+                    .next()
+                    .ok_or_else(|| anyhow!("Failed to get filter name from URI"))?;
+
+                let name = format!("{}-{}-{}", node_desc.name, name, index);
+                let defaults = HashMap::new();
+
+                let (name, props) = filter_lv2(uri, name, id, defaults);
+                self.filter_pw_create(props).await?;
+
+                // Grab the filter parameters
+                let (tx, rx) = oneshot::channel();
+                let message = PipewireMessage::GetFilterParameters(id, tx);
+                self.pipewire().send_message(message)?;
+
+                let parameters = rx.recv()??;
+                let config = FilterConfig { name, parameters };
+
+                self.filter_config.insert(id, config);
+            }
+        }
+        Ok(())
     }
 }

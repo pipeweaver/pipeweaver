@@ -1,3 +1,4 @@
+use crate::handler::pipewire::components::filters::FilterManagement;
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
@@ -16,39 +17,6 @@ impl LoadProfile for PipewireManager {
         self.profile_create_nodes().await?;
         self.profile_load_volumes().await?;
         self.profile_apply_routing().await?;
-
-        #[cfg(feature = "lv2")]
-        {
-            use crate::handler::pipewire::components::audio_filters::lv2::filters::generic::filter_lv2;
-            use crate::handler::pipewire::components::filters::FilterManagement;
-            use pipeweaver_pipewire::{PipewireMessage, oneshot};
-            use pipeweaver_shared::FilterValue;
-            use std::collections::HashMap;
-            use ulid::Ulid;
-
-            let uri = "http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo";
-            let name = String::from("Generic LV2 Filter");
-
-            let mut defaults = HashMap::new();
-            defaults.insert("enabled".into(), FilterValue::Bool(true));
-            defaults.insert("mode_l".into(), FilterValue::Int32(2));
-            defaults.insert("mode_r".into(), FilterValue::Int32(2));
-            defaults.insert("time_l".into(), FilterValue::Float32(1000.));
-            defaults.insert("time_r".into(), FilterValue::Float32(1000.));
-
-            let (_name, props) = filter_lv2(uri, name, Ulid::new(), defaults);
-            let id = props.filter_id;
-
-            //let props = filter_get_delay_props(String::from("Test"), Ulid::new());
-            self.filter_debug_create(props).await?;
-
-            // Ok, lets try and fetch the properties for this filter...
-            let (tx, rx) = oneshot::channel();
-            let message = PipewireMessage::GetFilterParameters(id, tx);
-            self.pipewire().send_message(message)?;
-            debug!("{:?}", rx.recv()?);
-        }
-
         Ok(())
     }
 }
@@ -67,12 +35,14 @@ impl LoadProfileLocal for PipewireManager {
         for device in self.profile.devices.sources.physical_devices.clone() {
             self.node_create(NodeType::PhysicalSource, &device.description)
                 .await?;
+            self.node_load_filters(device.description.id).await?;
             self.check_device_order_present(&device.description, true)?;
         }
 
         for device in self.profile.devices.sources.virtual_devices.clone() {
             self.node_create(NodeType::VirtualSource, &device.description)
                 .await?;
+            self.node_load_filters(device.description.id).await?;
             self.check_device_order_present(&device.description, true)?;
         }
         self.validate_device_order(true)?;
@@ -80,12 +50,14 @@ impl LoadProfileLocal for PipewireManager {
         for device in self.profile.devices.targets.physical_devices.clone() {
             self.node_create(NodeType::PhysicalTarget, &device.description)
                 .await?;
+            self.node_load_filters(device.description.id).await?;
             self.check_device_order_present(&device.description, false)?;
         }
 
         for device in self.profile.devices.targets.virtual_devices.clone() {
             self.node_create(NodeType::VirtualTarget, &device.description)
                 .await?;
+            self.node_load_filters(device.description.id).await?;
             self.check_device_order_present(&device.description, false)?;
         }
         self.validate_device_order(false)?;
