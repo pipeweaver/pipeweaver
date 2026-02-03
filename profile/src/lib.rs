@@ -188,11 +188,6 @@ pub enum Filter {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum FilterConfig {
-    LV2(LV2FilterConfig),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LV2Filter {
     // We'll generate a ulid if one isn't provided
     #[serde(default = "generate_uid")]
@@ -207,6 +202,6 @@ fn generate_uid() -> Ulid {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct LV2FilterConfig {
+pub struct FilterConfig {
     pub parameters: Vec<FilterProperty>,
 }
