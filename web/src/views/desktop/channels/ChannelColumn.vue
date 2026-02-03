@@ -10,7 +10,7 @@ import MixAssignment from "@/views/desktop/channels/MixAssignment.vue";
 import PhysicalDeviceSelector from "@/views/desktop/channels/DevicePopup.vue";
 import DevicePopup from "@/views/desktop/channels/DevicePopup.vue";
 import ColourPicker from "@/views/desktop/components/ColourPicker.vue";
-import FilterView from "@/views/desktop/channels/FilterView.vue";
+import FilterView from "@/views/desktop/filters/FilterView.vue";
 
 export default {
   name: 'ChannelColumn',
