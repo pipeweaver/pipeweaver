@@ -160,7 +160,7 @@ pub struct FilterConfig {
     pub parameters: Vec<FilterProperty>,
 }
 
-#[derive(Display, Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Display, Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum FilterState {
     Running,
     NotFound,

@@ -31,7 +31,10 @@ pub(crate) trait FilterManagement {
     async fn filter_debug_create(&mut self, props: FilterProperties) -> Result<()>;
 
     async fn node_load_filters(&mut self, id: Ulid) -> Result<()>;
+
     async fn filter_custom_create(&mut self, target: Ulid, filter: Filter) -> Result<()>;
+    async fn filter_custom_remove(&mut self, id: Ulid) -> Result<()>;
+
     async fn filter_set_value(&mut self, filter: Ulid, id: u32, value: FilterValue) -> Result<()>;
 }
 
@@ -122,6 +125,18 @@ impl FilterManagement for PipewireManager {
         self.add_filter_to_profile(target, filter)
     }
 
+    async fn filter_custom_remove(&mut self, id: Ulid) -> Result<()> {
+        let err = anyhow!("Filter not found in config");
+        let filter = self.filter_config.remove(&id).ok_or(err)?;
+
+        // Only remove the filter if it's running
+        if filter.state == FilterState::Running {
+            self.filter_pw_remove(id).await?;
+        }
+        self.remove_filter_from_profile(id)?;
+        Ok(())
+    }
+
     async fn filter_set_value(&mut self, filter: Ulid, id: u32, value: FilterValue) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         let message = PipewireMessage::SetFilterValue(filter, id, value.clone(), tx);
@@ -169,6 +184,7 @@ trait FilterManagementLocal {
 
     fn get_filter_count(&mut self, target: Ulid) -> Result<usize>;
     fn add_filter_to_profile(&mut self, target: Ulid, filter: Filter) -> Result<()>;
+    fn remove_filter_from_profile(&mut self, filter: Ulid) -> Result<()>;
 
     fn get_device_filters_mut(&mut self, target: Ulid) -> Result<&mut Vec<Filter>>;
     fn get_device_by_filter_mut(&mut self, filter: Ulid) -> Result<&mut Vec<Filter>>;
@@ -263,12 +279,26 @@ impl FilterManagementLocal for PipewireManager {
     }
 
     fn get_filter_count(&mut self, target: Ulid) -> Result<usize> {
+        // TODO: This is actually bad, because you can remove a filter, add a new one and conflict.
+        // We should probably have a global app counter somewhere that just increments every time a
+        // filter is created.
         let filters = self.get_device_filters_mut(target)?;
         Ok(filters.len())
     }
     fn add_filter_to_profile(&mut self, target: Ulid, filter: Filter) -> Result<()> {
         let filters = self.get_device_filters_mut(target)?;
         filters.push(filter);
+        Ok(())
+    }
+    fn remove_filter_from_profile(&mut self, filter: Ulid) -> Result<()> {
+        // Find the device that contains this filter
+        let device_filters = self.get_device_by_filter_mut(filter)?;
+
+        // Remove the filter from the device's filter list
+        device_filters.retain(|f| match f {
+            Filter::LV2(lv2) => lv2.id != filter,
+        });
+
         Ok(())
     }
 
