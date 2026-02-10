@@ -12,7 +12,13 @@ use pipeweaver_pipewire::{FilterProperties, MediaClass, PipewireMessage};
 use pipeweaver_profile::Filter;
 use pipeweaver_shared::{FilterConfig, FilterState, FilterValue, NodeType};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use ulid::Ulid;
+
+static FILTER_COUNTER: AtomicUsize = AtomicUsize::new(0);
+fn next_filter_id() -> usize {
+    FILTER_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
 
 #[allow(unused)]
 pub(crate) trait FilterManagement {
@@ -117,7 +123,7 @@ impl FilterManagement for PipewireManager {
     }
 
     async fn filter_custom_create(&mut self, target: Ulid, filter: Filter) -> Result<()> {
-        let id = self.get_filter_count(target)? + 1;
+        let id = next_filter_id();
         let defaults = HashMap::new();
 
         self.filter_create_custom(target, filter.clone(), id, defaults)
@@ -182,7 +188,6 @@ trait FilterManagementLocal {
     fn filter_volume_get_props(&self, name: String, id: Ulid) -> FilterProperties;
     fn filter_meter_get_props(&self, node: Ulid, name: String, id: Ulid) -> FilterProperties;
 
-    fn get_filter_count(&mut self, target: Ulid) -> Result<usize>;
     fn add_filter_to_profile(&mut self, target: Ulid, filter: Filter) -> Result<()>;
     fn remove_filter_from_profile(&mut self, filter: Ulid) -> Result<()>;
 
@@ -278,13 +283,6 @@ impl FilterManagementLocal for PipewireManager {
         }
     }
 
-    fn get_filter_count(&mut self, target: Ulid) -> Result<usize> {
-        // TODO: This is actually bad, because you can remove a filter, add a new one and conflict.
-        // We should probably have a global app counter somewhere that just increments every time a
-        // filter is created.
-        let filters = self.get_device_filters_mut(target)?;
-        Ok(filters.len())
-    }
     fn add_filter_to_profile(&mut self, target: Ulid, filter: Filter) -> Result<()> {
         let filters = self.get_device_filters_mut(target)?;
         filters.push(filter);
