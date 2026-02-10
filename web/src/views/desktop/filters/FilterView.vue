@@ -57,6 +57,14 @@ export default {
       websocket.send_command(command);
     },
 
+    removeFilter(filter) {
+      let id = this.getFilterId(filter);
+      let command = {
+        "RemoveFilter": id
+      };
+      websocket.send_command(command);
+    },
+
     setActiveFilter(filter) {
       this.activeFilter = this.getFilterId(filter);
     },
@@ -167,7 +175,8 @@ export default {
         <div class="filter-list">
           <div class="add-filter" @click="addFilter">Add Filter</div>
           <div v-for="filter in getFilters()" class="filter-item" @click="setActiveFilter(filter)">
-            {{ getFilterName(filter) }}
+            <div class="title">{{ getFilterName(filter) }}</div>
+            <div class="button" @click="removeFilter(filter)">x</div>
           </div>
         </div>
         <div v-if="activeFilter === undefined" class="filter-page">Need Dis:
@@ -240,6 +249,16 @@ export default {
 .filter-item {
   cursor: pointer;
   padding: 10px;
+
+  display: flex;
+}
+
+.filter-item .title {
+  flex: 1;
+}
+
+.filter-item .button {
+
 }
 
 .filter-item:hover {

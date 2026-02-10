@@ -7,7 +7,6 @@ use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::Error;
-use log::debug;
 use pipeweaver_ipc::commands::{APICommand, APICommandResponse};
 use pipeweaver_shared::MuteState::{Muted, Unmuted};
 
@@ -98,12 +97,10 @@ impl IPCHandler for PipewireManager {
                 .clear_application_transient_target(id)
                 .await
                 .map(|_| Resp::Ok),
-            Cmd::SetApplicationVolume(id, volume) => {
-                debug!("ERR?");
-                self.set_application_volume(id, volume)
-                    .await
-                    .map(|_| Resp::Ok)
-            }
+            Cmd::SetApplicationVolume(id, volume) => self
+                .set_application_volume(id, volume)
+                .await
+                .map(|_| Resp::Ok),
             Cmd::SetApplicationMute(id, state) => {
                 self.set_application_mute(id, state).await.map(|_| Resp::Ok)
             }
@@ -115,6 +112,7 @@ impl IPCHandler for PipewireManager {
                 .filter_set_value(filter, id, value)
                 .await
                 .map(|_| Resp::Ok),
+            Cmd::RemoveFilter(id) => self.filter_custom_remove(id).await.map(|_| Resp::Ok),
         }
     }
 }

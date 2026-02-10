@@ -96,6 +96,7 @@ pub enum APICommand {
     // Ability to create filters for a node
     AddFilterToNode(Ulid, Filter),
     SetFilterValue(Ulid, u32, FilterValue),
+    RemoveFilter(Ulid),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
