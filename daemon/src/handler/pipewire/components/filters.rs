@@ -1,12 +1,10 @@
 use crate::handler::pipewire::components::audio_filters::internal::meter::MeterFilter;
 use crate::handler::pipewire::components::audio_filters::internal::pass_through::PassThroughFilter;
 use crate::handler::pipewire::components::audio_filters::internal::volume::VolumeFilter;
-use crate::handler::pipewire::components::audio_filters::lv2::filters::generic::filter_lv2;
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use anyhow::{Result, anyhow, bail};
-use log::warn;
 use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{FilterProperties, MediaClass, PipewireMessage};
 use pipeweaver_profile::Filter;
@@ -381,6 +379,8 @@ impl FilterManagementLocal for PipewireManager {
         Err(anyhow!("Filter not found in any device"))
     }
 
+    // We allow unused variables here, because if the LV2 feature isn't enabled, they won't be used,
+    #[allow(unused_variables)]
     async fn filter_create_custom(
         &mut self,
         target: Ulid,
@@ -388,15 +388,11 @@ impl FilterManagementLocal for PipewireManager {
         index: usize,
         defaults: HashMap<String, FilterValue>,
     ) -> Result<()> {
-        let node_desc = self.node_get_description(target).await?;
-
         // Get the number of existing filters
         //let filter_count = self.get_filter_count(target)? + 1;
 
         match filter.clone() {
             Filter::LV2(lv2_filter) => {
-                // TODO: Check for LV2 feature support
-
                 // This ID should be generated automatically if a ulid isn't directly provided
                 let id = lv2_filter.id;
                 let uri = lv2_filter.plugin_uri;
@@ -407,36 +403,52 @@ impl FilterManagementLocal for PipewireManager {
                     .next()
                     .ok_or_else(|| anyhow!("Failed to get filter name from URI"))?;
 
-                let name = format!("{}-{}-{}", node_desc.name, plugin_name, index);
-                let create_filter = filter_lv2(uri.clone(), name.clone(), id, defaults.clone());
+                #[cfg(feature = "lv2")]
+                {
+                    use log::warn;
+                    use crate::handler::pipewire::components::audio_filters::lv2::filters::generic::filter_lv2;
+                    let node_desc = self.node_get_description(target).await?;
 
-                // Ok, even if a filter fails to create, we still want to keep track of it in both
-                // the profile and filter config, this is so we can report to the user what is
-                // wrong, and correctly load next time if they correct it.
-                let (name, parameters, state) = match create_filter {
-                    Ok((name, props)) => {
-                        // Create the filter in PipeWire
-                        self.filter_pw_create(props).await?;
+                    let name = format!("{}-{}-{}", node_desc.name, plugin_name, index);
+                    let create_filter = filter_lv2(uri.clone(), name.clone(), id, defaults.clone());
 
-                        // Grab the filter parameters
-                        let (tx, rx) = oneshot::channel();
-                        let message = PipewireMessage::GetFilterParameters(id, tx);
-                        self.pipewire().send_message(message)?;
+                    // Ok, even if a filter fails to create, we still want to keep track of it in both
+                    // the profile and filter config, this is so we can report to the user what is
+                    // wrong, and correctly load next time if they correct it.
+                    let (name, parameters, state) = match create_filter {
+                        Ok((name, props)) => {
+                            // Create the filter in PipeWire
+                            self.filter_pw_create(props).await?;
 
-                        (name, rx.recv()??, FilterState::Running)
-                    }
-                    Err(e) => {
-                        warn!("Failed to create LV2 filter '{}': {}", uri, e);
-                        (plugin_name.to_string(), Vec::new(), e)
-                    }
-                };
+                            // Grab the filter parameters
+                            let (tx, rx) = oneshot::channel();
+                            let message = PipewireMessage::GetFilterParameters(id, tx);
+                            self.pipewire().send_message(message)?;
 
-                let config = FilterConfig {
-                    name,
-                    state,
-                    parameters,
-                };
-                self.filter_config.insert(id, config);
+                            (name, rx.recv()??, FilterState::Running)
+                        }
+                        Err(e) => {
+                            warn!("Failed to create LV2 filter '{}': {}", uri, e);
+                            (plugin_name.to_string(), Vec::new(), e)
+                        }
+                    };
+
+                    let config = FilterConfig {
+                        name,
+                        state,
+                        parameters,
+                    };
+                    self.filter_config.insert(id, config);
+                }
+                #[cfg(not(feature = "lv2"))]
+                {
+                    let config = FilterConfig {
+                        name: plugin_name.to_string(),
+                        state: FilterState::FeatureMissing("lv2".to_string()),
+                        parameters: Vec::new(),
+                    };
+                    self.filter_config.insert(id, config);
+                }
             }
         }
         Ok(())

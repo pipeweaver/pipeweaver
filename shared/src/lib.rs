@@ -167,6 +167,9 @@ pub enum FilterState {
     NotCompatible,
     Error(String),
 
+    // This one is for when the cargo feature for a filter isn't enabled.
+    FeatureMissing(String),
+
     #[default]
     Stopped,
 }

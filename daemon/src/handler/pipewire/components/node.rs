@@ -22,6 +22,7 @@ use ulid::Ulid;
 type GroupList = EnumMap<OrderGroup, Vec<Ulid>>;
 
 /// This crate contains everything needed to create a Pipewire node
+#[allow(unused)]
 pub(crate) trait NodeManagement {
     fn get_node_type(&self, id: Ulid) -> Option<NodeType>;
 
