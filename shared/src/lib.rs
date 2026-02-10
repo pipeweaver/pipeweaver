@@ -152,3 +152,9 @@ pub struct FilterProperty {
 
     pub enum_def: Option<HashMap<u32, String>>,
 }
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct FilterConfig {
+    pub name: String,
+    pub parameters: Vec<FilterProperty>,
+}

@@ -2,8 +2,7 @@ mod default;
 
 use enum_map::{EnumMap, enum_map};
 use pipeweaver_shared::{
-    Colour, DeviceType, FilterProperty, FilterValue, Mix, MuteState, MuteTarget, OrderGroup,
-    Quantum,
+    Colour, DeviceType, FilterValue, Mix, MuteState, MuteTarget, OrderGroup, Quantum,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -199,10 +198,4 @@ pub struct LV2Filter {
 
 fn generate_uid() -> Ulid {
     Ulid::new()
-}
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct FilterConfig {
-    pub name: String,
-    pub parameters: Vec<FilterProperty>,
 }

@@ -8,8 +8,8 @@ use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use anyhow::{Result, anyhow, bail};
 use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{FilterProperties, MediaClass, PipewireMessage};
-use pipeweaver_profile::{Filter, FilterConfig};
-use pipeweaver_shared::{FilterValue, NodeType};
+use pipeweaver_profile::Filter;
+use pipeweaver_shared::{FilterConfig, FilterValue, NodeType};
 use std::collections::HashMap;
 use ulid::Ulid;
 

@@ -18,8 +18,8 @@ use pipeweaver_pipewire::{
     ApplicationNode, DeviceNode, MediaClass, NodeTarget, PipewireMessage, PipewireReceiver,
     PipewireRunner,
 };
-use pipeweaver_profile::{FilterConfig, Profile};
-use pipeweaver_shared::{AppTarget, DeviceType, Mix};
+use pipeweaver_profile::Profile;
+use pipeweaver_shared::{AppTarget, DeviceType, FilterConfig, Mix};
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
