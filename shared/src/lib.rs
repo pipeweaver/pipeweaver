@@ -156,5 +156,17 @@ pub struct FilterProperty {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct FilterConfig {
     pub name: String,
+    pub state: FilterState,
     pub parameters: Vec<FilterProperty>,
+}
+
+#[derive(Display, Debug, Default, Clone, Serialize, Deserialize)]
+pub enum FilterState {
+    Running,
+    NotFound,
+    NotCompatible,
+    Error(String),
+
+    #[default]
+    Stopped,
 }

@@ -12,6 +12,7 @@ use lilv_sys::{
     lilv_world_new,
 };
 use log::{debug, warn};
+use pipeweaver_shared::FilterState;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::fmt::Debug;
@@ -191,28 +192,30 @@ impl LV2World {
         plugin_uris
     }
 
-    pub fn validate_plugin(&self, uri: &str) -> bool {
+    pub fn validate_plugin(&self, uri: &str) -> Result<(), FilterState> {
         // Fast Fail, check if plugin URI is in the known list
         if !self.plugin_list.contains(&uri.to_string()) {
-            return false;
+            return Err(FilterState::NotFound);
         }
 
         unsafe {
             let uri_cstr = match CString::new(uri) {
                 Ok(s) => s,
-                Err(_) => return false,
+                Err(_) => {
+                    return Err(FilterState::Error("Cannot Create CString".to_string()));
+                }
             };
 
             let uri_node = lilv_new_uri(self.world, uri_cstr.as_ptr());
             if uri_node.is_null() {
-                return false;
+                return Err(FilterState::Error("Failed to create URI node".to_string()));
             }
 
             let plugin = lilv_plugins_get_by_uri(self.plugins, uri_node);
             lilv_node_free(uri_node);
 
             if plugin.is_null() {
-                return false;
+                return Err(FilterState::NotFound);
             }
 
             // Get plugin name for logging
@@ -222,7 +225,7 @@ impl LV2World {
                     let name_cstr = lilv_node_as_string(name_node);
                     CStr::from_ptr(name_cstr).to_string_lossy().to_string()
                 } else {
-                    "Unknown".to_string()
+                    uri.to_string()
                 }
             };
 
@@ -266,7 +269,7 @@ impl LV2World {
                     "LV2 Plugin REJECTED: '{}' ({}i/{}o) - {}",
                     plugin_name, audio_input_count, audio_output_count, reason
                 );
-                return false;
+                return Err(FilterState::NotCompatible);
             }
 
             // Now do detailed analysis with sidechain detection
@@ -342,7 +345,7 @@ impl LV2World {
                                         "LV2 Plugin REJECTED: '{}' ({}i/{}o) - multi-channel input (>2 inputs)",
                                         plugin_name, main_input_count, main_output_count
                                     );
-                                    return false;
+                                    return Err(FilterState::NotCompatible);
                                 }
                             } else if is_output {
                                 main_output_count += 1;
@@ -351,7 +354,7 @@ impl LV2World {
                                         "LV2 Plugin REJECTED: '{}' ({}i/{}o) - multi-channel output (>2 outputs)",
                                         plugin_name, main_input_count, main_output_count
                                     );
-                                    return false;
+                                    return Err(FilterState::NotCompatible);
                                 }
                             }
                         }
@@ -365,7 +368,7 @@ impl LV2World {
                     "LV2 Plugin ACCEPTED: '{}' ({}i/{}o) -> {}",
                     plugin_name, main_input_count, main_output_count, uri
                 );
-                true
+                Ok(())
             } else {
                 let reason = if main_input_count == 0 {
                     "no main audio inputs"
@@ -383,7 +386,7 @@ impl LV2World {
                     "LV2 Plugin REJECTED: '{}' ({}i/{}o) - {}",
                     plugin_name, main_input_count, main_output_count, reason
                 );
-                false
+                Err(FilterState::NotCompatible)
             }
         }
     }
@@ -461,36 +464,43 @@ pub struct LV2PluginBase {
 
 impl LV2PluginBase {
     /// Create a new LV2 plugin instance
-    pub fn new(plugin_uri: &str, rate: u32, max_block_size: usize) -> Result<Self, String> {
+    pub fn new(plugin_uri: &str, rate: u32, max_block_size: usize) -> Result<Self, FilterState> {
         unsafe {
             // Get shared world (initializes on first call)
-            let world_guard = get_world()
+            let world_guard = match get_world()
                 .lock()
-                .map_err(|e| format!("Failed to lock world: {}", e))?;
+                .map_err(|e| format!("Failed to lock world: {}", e))
+            {
+                Ok(wg) => wg,
+                Err(e) => return Err(FilterState::Error(e)),
+            };
 
             let world = world_guard.get_world();
             let plugins = world_guard.get_plugins();
             let uri_nodes = &world_guard.uri_nodes;
 
             if world.is_null() {
-                return Err("Failed to access LV2 world".to_string());
+                return Err(FilterState::Error("Failed to access LV2 world".to_string()));
             }
 
-            if !world_guard.validate_plugin(plugin_uri) {
-                return Err(format!("Plugin '{}' failed validation", plugin_uri));
-            }
+            world_guard.validate_plugin(plugin_uri)?;
 
-            let uri_cstr = CString::new(plugin_uri).map_err(|e| format!("Invalid URI: {}", e))?;
+            let uri_cstr = match CString::new(plugin_uri).map_err(|e| format!("Invalid URI: {}", e))
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    return Err(FilterState::Error(e));
+                }
+            };
             let uri_node = lilv_new_uri(world, uri_cstr.as_ptr());
-
             if uri_node.is_null() {
-                return Err("Failed to create URI node".to_string());
+                return Err(FilterState::Error("Failed to create URI node".to_string()));
             }
 
             let plugin = lilv_plugins_get_by_uri(plugins, uri_node);
             if plugin.is_null() {
                 lilv_node_free(uri_node);
-                return Err(format!("Plugin not found: {}", plugin_uri));
+                return Err(FilterState::NotFound);
             }
 
             // Scan ports
@@ -662,7 +672,9 @@ impl LV2PluginBase {
             let instance = lilv_plugin_instantiate(plugin, rate as f64, ptr::null());
             if instance.is_null() {
                 lilv_node_free(uri_node);
-                return Err("Failed to instantiate plugin".to_string());
+                return Err(FilterState::Error(
+                    "Failed to instantiate plugin".to_string(),
+                ));
             }
 
             let mut plugin_base = Self {

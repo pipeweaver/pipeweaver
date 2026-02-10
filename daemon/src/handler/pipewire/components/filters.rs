@@ -6,10 +6,11 @@ use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use anyhow::{Result, anyhow, bail};
+use log::warn;
 use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{FilterProperties, MediaClass, PipewireMessage};
 use pipeweaver_profile::Filter;
-use pipeweaver_shared::{FilterConfig, FilterValue, NodeType};
+use pipeweaver_shared::{FilterConfig, FilterState, FilterValue, NodeType};
 use std::collections::HashMap;
 use ulid::Ulid;
 
@@ -373,23 +374,40 @@ impl FilterManagementLocal for PipewireManager {
                 let uri = lv2_filter.plugin_uri;
 
                 // We need to pull the last segment of the URI for the name
-                let name = uri
+                let plugin_name = uri
                     .rsplit("/")
                     .next()
                     .ok_or_else(|| anyhow!("Failed to get filter name from URI"))?;
 
-                let name = format!("{}-{}-{}", node_desc.name, name, index);
-                let (name, props) = filter_lv2(uri, name, id, defaults);
-                self.filter_pw_create(props).await?;
+                let name = format!("{}-{}-{}", node_desc.name, plugin_name, index);
+                let create_filter = filter_lv2(uri.clone(), name.clone(), id, defaults.clone());
 
-                // Grab the filter parameters
-                let (tx, rx) = oneshot::channel();
-                let message = PipewireMessage::GetFilterParameters(id, tx);
-                self.pipewire().send_message(message)?;
+                // Ok, even if a filter fails to create, we still want to keep track of it in both
+                // the profile and filter config, this is so we can report to the user what is
+                // wrong, and correctly load next time if they correct it.
+                let (name, parameters, state) = match create_filter {
+                    Ok((name, props)) => {
+                        // Create the filter in PipeWire
+                        self.filter_pw_create(props).await?;
 
-                let parameters = rx.recv()??;
-                let config = FilterConfig { name, parameters };
+                        // Grab the filter parameters
+                        let (tx, rx) = oneshot::channel();
+                        let message = PipewireMessage::GetFilterParameters(id, tx);
+                        self.pipewire().send_message(message)?;
 
+                        (name, rx.recv()??, FilterState::Running)
+                    }
+                    Err(e) => {
+                        warn!("Failed to create LV2 filter '{}': {}", uri, e);
+                        (plugin_name.to_string(), Vec::new(), e)
+                    }
+                };
+
+                let config = FilterConfig {
+                    name,
+                    state,
+                    parameters,
+                };
                 self.filter_config.insert(id, config);
             }
         }

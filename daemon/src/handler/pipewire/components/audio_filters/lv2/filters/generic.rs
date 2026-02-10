@@ -3,7 +3,7 @@ use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use anyhow::{Result, bail};
 use log::{debug, warn};
 use pipeweaver_pipewire::{FilterHandler, FilterProperties, MediaClass};
-use pipeweaver_shared::{FilterProperty, FilterValue};
+use pipeweaver_shared::{FilterProperty, FilterState, FilterValue};
 use std::collections::HashMap;
 use ulid::Ulid;
 
@@ -146,7 +146,7 @@ impl GenericLV2Filter {
         rate: u32,
         block_size: usize,
         defaults: HashMap<String, FilterValue>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, FilterState> {
         let plugin = LV2PluginBase::new(plugin_uri, rate, block_size)?;
         let plugin_name = plugin.plugin_name.clone();
 
@@ -193,7 +193,7 @@ pub fn filter_lv2(
     name: String,
     id: Ulid,
     defaults: HashMap<String, FilterValue>,
-) -> (String, FilterProperties) {
+) -> Result<(String, FilterProperties), FilterState> {
     let plugin_uri = plugin_uri.into();
     let description = name.to_lowercase().replace(" ", "-");
 
@@ -206,15 +206,7 @@ pub fn filter_lv2(
 
     debug!("Filter Name: {}", filter_name);
 
-    let callback = match GenericLV2Filter::new(&plugin_uri, 96000, 1024, defaults) {
-        Ok(filter) => filter,
-        Err(e) => {
-            panic!(
-                "Failed to create GenericLV2Filter for '{}': {}",
-                plugin_uri, e
-            );
-        }
-    };
+    let callback = GenericLV2Filter::new(&plugin_uri, 96000, 1024, defaults)?;
     let name = callback.plugin_name.clone();
 
     let props = FilterProperties {
@@ -232,5 +224,5 @@ pub fn filter_lv2(
         ready_sender: None,
     };
 
-    (name, props)
+    Ok((name, props))
 }
