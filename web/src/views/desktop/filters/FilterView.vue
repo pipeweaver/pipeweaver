@@ -1,12 +1,20 @@
 <script>
 import ModalOverlay from "@/views/desktop/components/ModalOverlay.vue";
+import DelayFilter from "@/views/desktop/filters/filter/delay/DelayFilter.vue";
+import GenericLV2 from "@/views/desktop/filters/filter/GenericLV2.vue";
 import {get_device_by_id} from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
 import {store} from "@/app/store.js";
+import FilterListItem from "@/views/desktop/filters/FilterListItem.vue";
 
 export default {
   name: "FilterView",
-  components: {ModalOverlay},
+  components: {
+    FilterListItem,
+    ModalOverlay,
+    DelayFilter,
+    GenericLV2
+  },
   props: {
     id: {type: String, required: true}
   },
@@ -14,10 +22,37 @@ export default {
   data() {
     return {
       activeFilter: undefined,
+      // Map specific plugin URIs to components
+      pluginComponents: {
+        'http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo': 'DelayFilter',
+      },
+      // Fallback component for each filter type
+      fallbackComponents: {
+        'LV2': 'GenericLV2',
+      }
     }
   },
 
   methods: {
+    getFilterState(id) {
+      if (store.getAudio().filter_config[id] === undefined) {
+        console.error("Filter State Missing: " + id);
+        return {state: "ERROR", message: null};
+      }
+
+      const state = store.getAudio().filter_config[id].state;
+
+      if (state['FeatureMissing'] !== undefined) {
+        return {state: "FeatureMissing", message: state['FeatureMissing']};
+      }
+
+      if (state['Error'] !== undefined) {
+        return {state: "Error", message: state['Error']};
+      }
+
+      return {state: state, message: null};
+    },
+
     show(e) {
       this.$refs.filterModal.openModal(undefined, undefined);
     },
@@ -35,17 +70,6 @@ export default {
 
       console.log("Add Filter: " + url);
 
-      // AddFilterToNode(Ulid, Filter),
-      // pub enum Filter {
-      //     LV2(LV2Filter),
-      // }
-      // pub struct LV2Filter {
-      //   #[serde(default = "generate_uid")]
-      //   pub id: Ulid,
-      //
-      //   pub plugin_uri: String,
-      //   pub values: HashMap<String, FilterValue>,
-      // }
       let command = {
         "AddFilterToNode": [this.id, {
           LV2: {
@@ -58,7 +82,7 @@ export default {
     },
 
     removeFilter(filter) {
-      let id = this.getFilterId(filter);
+      let id = this.getFilterInfo(filter).id;
       let command = {
         "RemoveFilter": id
       };
@@ -66,7 +90,7 @@ export default {
     },
 
     setActiveFilter(filter) {
-      this.activeFilter = this.getFilterId(filter);
+      this.activeFilter = this.getFilterInfo(filter);
     },
 
     getFilters() {
@@ -74,14 +98,18 @@ export default {
       return device.filters;
     },
 
-    getFilterId(filter) {
+    getFilterInfo(filter) {
       if (filter['LV2']) {
-        return filter['LV2'].id;
+        return {
+          id: filter['LV2'].id,
+          type: 'LV2',
+          identifier: filter['LV2'].plugin_uri,
+        };
       }
     },
 
     getFilterName(filter) {
-      let id = this.getFilterId(filter);
+      let id = this.getFilterInfo(filter).id;
       if (store.getAudio().filter_config[id] === undefined) {
         return "Unknown Filter";
       }
@@ -89,79 +117,26 @@ export default {
       return store.getAudio().filter_config[id].name;
     },
 
-    getFilterProperties(id) {
-      if (store.getAudio().filter_config[id] === undefined) {
-        return [];
+    getFilterPageComponent(identifier, filterType) {
+      // First try to find a specific component for this plugin URI
+      if (this.pluginComponents[identifier]) {
+        return this.pluginComponents[identifier];
       }
 
-      return store.getAudio().filter_config[id].parameters.filter(prop => prop.is_input !== false);
-    },
-
-    getFilterPropertyType(prop) {
-      // We should support all of these, but for now, we'll just support the LV2 basics
-      /*
-        pub enum FilterValue {
-            Int32(i32),
-            Float32(f32),
-            UInt8(u8),
-            UInt32(u32),
-            String(String),
-            Bool(bool),
-            Enum(String, u32),
-        }
-      */
-
-      // First check for enum, because this returns as an Int32
-      if (prop['enum_def'] !== null) {
-        return 'enum';
-      }
-      console.log(prop);
-
-      if (prop['value']['Bool'] !== undefined) {
-        return 'bool';
-      }
-      if (prop['value']['Int32'] !== undefined) {
-        return 'int';
-      }
-      if (prop['value']['Float32'] !== undefined) {
-        return 'float';
-      }
-    },
-
-    setFilterPropertyValue(filter_id, prop_id, e) {
-      let input = store.getAudio().filter_config[filter_id];
-      if (input === undefined) {
-        console.error("Unknown filter ID: " + filter_id);
-        return;
-      }
-
-      let prop = input.parameters.find(p => p.id === prop_id);
-      let prop_type = this.getFilterPropertyType(prop);
-
-      let raw = e.target.value;
-      let send_value = undefined;
-
-      if (prop_type === 'bool') {
-        let value = e.target.checked;
-        send_value = {"Bool": value};
-
-      } else if (prop_type === 'int' || prop_type === 'enum') {
-        let value = parseInt(raw, 10);
-        send_value = {"Int32": value};
-      } else if (prop_type === 'float') {
-        let value = parseFloat(raw);
-        send_value = {"Float32": value};
-      } else {
-        console.error("Unsupported filter property type: " + prop_type);
-        return;
-      }
-
-      // SetFilterValue(Ulid, u32, FilterValue),
-      let command = {
-        "SetFilterValue": [filter_id, prop_id, send_value]
-      };
-      websocket.send_command(command);
+      // Fall back to generic component for this filter type
+      return this.fallbackComponents[filterType] || null;
     }
+  },
+
+  computed: {
+    currentFilterPageComponent() {
+      if (!this.activeFilter) return null;
+      return this.getFilterPageComponent(this.activeFilter.identifier, this.activeFilter.type);
+    },
+
+    filterState() {
+      return this.getFilterState(this.activeFilter.id);
+    },
   }
 }
 </script>
@@ -174,42 +149,49 @@ export default {
       <div class="filter-wrapper">
         <div class="filter-list">
           <div class="add-filter" @click="addFilter">Add Filter</div>
-          <div v-for="filter in getFilters()" class="filter-item" @click="setActiveFilter(filter)">
-            <div class="title">{{ getFilterName(filter) }}</div>
-            <div class="button" @click="removeFilter(filter)">x</div>
+
+          <FilterListItem
+            v-for="filter in getFilters()"
+            :key="getFilterInfo(filter).id"
+            :filter="filter"
+            :filter-info="getFilterInfo(filter)"
+            :filter-name="getFilterName(filter)"
+            @select="setActiveFilter"
+            @remove="removeFilter"
+          />
+        </div>
+
+        <div v-if="activeFilter === undefined" class="filter-page empty-state">
+          <h3>No Filter Selected</h3>
+          <p>Select a filter from the list or add a new one.</p>
+          <p class="suggestion">Try:
+            <code>http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo</code></p>
+        </div>
+
+        <div v-else>
+          <div v-if="filterState.state === 'Running'">
+            <component
+              :is="currentFilterPageComponent"
+              :filter-id="activeFilter.id"
+              :filter-type="activeFilter.identifier"
+            />
           </div>
-        </div>
-        <div v-if="activeFilter === undefined" class="filter-page">Need Dis:
-          http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo
-        </div>
-        <div class="filter-page" v-else>
-          <div class="prop-value">
-            <div v-for="(prop, id) in getFilterProperties(activeFilter)">
-              <span class="prop-label">{{ prop.name }} - {{ prop.id }}</span>
-              <span v-if="getFilterPropertyType(prop) === 'bool'" class="prop-value">
-                <input type="checkbox" :checked="prop.value.Bool"
-                       @change="e => setFilterPropertyValue(activeFilter, prop.id, e)"/>
-              </span>
-              <span v-else-if="getFilterPropertyType(prop) === 'int'" class="prop-value">
-                <input type="number" :value="prop.value.Int32" :min="prop.min" :max="prop.max"
-                       @change="e => setFilterPropertyValue(activeFilter, prop.id, e)"/>
-              </span>
-              <span v-else-if="getFilterPropertyType(prop) === 'float'" class="prop-value">
-                <input type="number" step="0.01" :value="prop.value.Float32" :min="prop.min"
-                       :max="prop.max"
-                       @change="e => setFilterPropertyValue(activeFilter, prop.id, e)"/>
-              </span>
-              <span v-else-if="getFilterPropertyType(prop) === 'enum'" class="prop-value">
-                <select @change="e => setFilterPropertyValue(activeFilter, prop.id, e)">
-                  <option v-for="(enum_name, enum_value) in prop.enum_def" :value="enum_value">
-                    {{ enum_name }}
-                  </option>
-                </select>
-              </span>
-              <span v-else>
-                Err: {{ getFilterProperties(activeFilter) }}
-              </span>
-            </div>
+
+          <!-- Error states -->
+          <div v-else-if="filterState.state === 'NotFound'" class="error-state">
+            This plugin was not found on your system.
+          </div>
+          <div v-else-if="filterState.state === 'NotCompatible'" class="error-state">
+            This plugin is not compatible with Pipeweaver
+          </div>
+          <div v-else-if="filterState.state === 'FeatureMissing'" class="error-state">
+            Feature not enabled: {{ filterState.message }}
+          </div>
+          <div v-else-if="filterState.state === 'Error'" class="error-state">
+            Error: {{ filterState.message }}
+          </div>
+          <div v-else class="error-state">
+            Internal Pipeweaver Error!
           </div>
         </div>
       </div>
@@ -234,6 +216,24 @@ export default {
   width: 800px;
 }
 
+.empty-state, .error-state {
+  padding: 40px;
+  text-align: center;
+  color: #888;
+}
+
+.suggestion {
+  margin-top: 20px;
+  padding: 10px;
+  background-color: #2a2f2e;
+  border-radius: 4px;
+}
+
+.suggestion code {
+  color: #6bb6ff;
+  font-size: 0.9em;
+}
+
 .add-filter {
   margin: 0 5px 5px 5px;
   padding: 10px;
@@ -245,38 +245,4 @@ export default {
 .add-filter:hover {
   background-color: #353a39;
 }
-
-.filter-item {
-  cursor: pointer;
-  padding: 10px;
-
-  display: flex;
-}
-
-.filter-item .title {
-  flex: 1;
-}
-
-.filter-item .button {
-
-}
-
-.filter-item:hover {
-  background-color: #353a39;
-}
-
-.prop-label {
-  display: inline-block;
-  width: 200px;
-}
-
-.prop-value input[type="number"] {
-  width: 100px;
-}
-
-.prop-value select {
-  width: 100px;
-}
-
-
 </style>
