@@ -14,6 +14,11 @@ export default {
     source: String,
     target: String,
     enabled: Boolean,
+
+    colour: {
+      type: String,
+      default: '#59b1b6'
+    }
   },
 
   methods: {
@@ -32,7 +37,7 @@ td {
 div {
   text-align: center;
   font-size: 18px;
-  color: #59b1b6;
+  color: v-bind(colour);
   background-color: #3b413f;
   margin: 0;
   position: relative;

@@ -1,6 +1,12 @@
 <script>
 
-import {DeviceType, get_devices, getFullSourceList, getFullTargetList} from "@/app/util.js";
+import {
+  DeviceType,
+  get_device_by_id,
+  get_devices,
+  getFullSourceList,
+  getFullTargetList
+} from "@/app/util.js";
 import RoutingCell from "@/views/desktop/routing/RoutingCell.vue";
 import {store} from "@/app/store.js";
 import {websocket} from "@/app/sockets.js";
@@ -30,6 +36,16 @@ export default {
       }
 
       return store.getProfile().routes[source].includes(target);
+    },
+
+    getCheckColour: function (target) {
+      console.log(target);
+      let dev = get_device_by_id(target.id);
+      if (dev.mix === "B") {
+        return "#e07c24";
+      }
+
+      return "#59b1b6";
     },
 
     handleClick: function (source, target) {
@@ -69,6 +85,7 @@ export default {
 
         <!-- Output the Source cells for this Target -->
         <RoutingCell v-for="source in getFullSourceList()" :key="source"
+                     :colour="getCheckColour(target)"
                      :enabled="isEnabled(source.id, target.id)" :source="source.id"
                      :target="target.id" @clicked="handleClick"/>
       </tr>
