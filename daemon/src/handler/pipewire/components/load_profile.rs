@@ -17,38 +17,6 @@ impl LoadProfile for PipewireManager {
         self.profile_load_volumes().await?;
         self.profile_apply_routing().await?;
 
-        #[cfg(feature = "lv2")]
-        {
-            use crate::handler::pipewire::components::audio_filters::lv2::filters::generic::filter_get_generic_lv2_props;
-            use crate::handler::pipewire::components::filters::FilterManagement;
-            use pipeweaver_pipewire::FilterValue;
-            use pipeweaver_pipewire::{PipewireMessage, oneshot};
-            use std::collections::HashMap;
-            use ulid::Ulid;
-
-            let uri = "http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo";
-            let name = String::from("Generic LV2 Filter");
-
-            let mut defaults = HashMap::new();
-            defaults.insert("enabled".into(), FilterValue::Bool(true));
-            defaults.insert("mode_l".into(), FilterValue::Int32(2));
-            defaults.insert("mode_r".into(), FilterValue::Int32(2));
-            defaults.insert("time_l".into(), FilterValue::Float32(1000.));
-            defaults.insert("time_r".into(), FilterValue::Float32(1000.));
-
-            let props = filter_get_generic_lv2_props(uri, name, Ulid::new(), defaults);
-            let id = props.filter_id;
-
-            //let props = filter_get_delay_props(String::from("Test"), Ulid::new());
-            self.filter_debug_create(props).await?;
-
-            // Ok, lets try and fetch the properties for this filter...
-            let (tx, rx) = oneshot::channel();
-            let message = PipewireMessage::GetFilterParameters(id, tx);
-            self.pipewire().send_message(message)?;
-            debug!("{:?}", rx.recv()?);
-        }
-
         Ok(())
     }
 }
