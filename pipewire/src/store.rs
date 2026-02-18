@@ -1042,11 +1042,11 @@ impl Store {
     // ----- UTILITY FUNCTIONS -----
     fn get_media_class(&self, in_count: usize, out_count: usize) -> Option<MediaClass> {
         // Return the Specific MediaClass based on Channel Count
-        if (1..=2).contains(&in_count) && (out_count == 0) {
+        if in_count >= 1 && out_count == 0 {
             return Some(MediaClass::Sink);
-        } else if (1..=2).contains(&out_count) && in_count == 0 {
+        } else if out_count >= 1 && in_count == 0 {
             return Some(MediaClass::Source);
-        } else if (1..=2).contains(&in_count) && in_count == out_count {
+        } else if in_count >= 1 && in_count == out_count {
             // This is a bit of an assumption really, but we have non-monitor ports on the
             // tail end, so a reasonable assumption.
             return Some(MediaClass::Duplex);
