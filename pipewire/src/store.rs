@@ -15,7 +15,7 @@ use log::{debug, error, info, warn};
 use oneshot::Sender;
 use parking_lot::RwLock;
 use pipewire::filter::{Filter, FilterListener, FilterPort};
-use pipewire::link::{Link, LinkListener};
+use pipewire::link::Link;
 use pipewire::node::{Node, NodeListener, NodeState};
 use pipewire::properties::Properties;
 use pipewire::proxy::ProxyListener;
@@ -542,12 +542,38 @@ impl Store {
 
                     // This will be unmanaged before the link callback, so take ownership
                     self.unmanaged_links.remove(&pw_id);
+                    break;
                 }
             }
         }
 
         // Regardless of what's happened here, perform a ready check on the parent
         self.managed_link_ready_check(id);
+    }
+
+    /// Called when a link creation error occurs (e.g., "link already exists")
+    /// This notifies the sender so the caller doesn't hang waiting for a response
+    pub fn managed_link_error(&mut self, parent_id: Ulid, link_id: Ulid) {
+        if let Some(link) = self.managed_links.get_mut(&parent_id) {
+            // Remove the failed link from the store
+            for port in PortLocation::iter() {
+                if let Some(port) = &link.links[port]
+                    && port.internal_id == link_id
+                {
+                    debug!("Removing failed link {} from parent {}", link_id, parent_id);
+                }
+            }
+
+            // If this is the first error for this parent, notify the sender immediately
+            // so the caller doesn't hang waiting for links that will never succeed
+            if let Some(sender) = link.ready_sender.take() {
+                warn!(
+                    "Link creation failed for parent {}, notifying sender",
+                    parent_id
+                );
+                let _ = sender.send(());
+            }
+        }
     }
 
     pub fn managed_link_ready_check(&mut self, id: Ulid) {
@@ -609,9 +635,6 @@ impl Store {
         }
 
         self.unmanaged_device_nodes.insert(id, node);
-        self.unmanaged_node_add(id);
-
-        //self.unmanaged_node_update(id);
     }
 
     pub fn unmanaged_device_node_get(&mut self, id: u32) -> Option<&mut RegistryDeviceNode> {
@@ -638,53 +661,98 @@ impl Store {
         }
     }
 
-    /// When an unmanaged node comes in, we need to send it off across to the manager to be
-    /// listed. I should probably move this into `unmanaged_device_node_add` :D
-    pub fn unmanaged_node_add(&mut self, id: u32) {
+    pub fn unmanaged_node_port_count_update(&mut self, id: u32) {
+        // Check if we have all the information needed to send the device upstream:
+        // 1. Port count info has been received (from .info callback)
+        // 2. All actual ports have been received and match the expected count
+        // 3. We haven't already sent this device
         if let Some(node) = self.unmanaged_device_nodes.get(&id) {
-            debug!("Node Arrived: {:?}", node);
-            // We need a media class, otherwise we can't use this node
-            if let Some(media_class) = &node.media_class {
-                // Map the media class to our internal enum
-                let media_class = match media_class {
-                    s if s.starts_with("Audio/Sink") => Some(MediaClass::Sink),
-                    s if s.starts_with("Audio/Source") => Some(MediaClass::Source),
-                    s if s.starts_with("Audio/Duplex") => Some(MediaClass::Duplex),
-                    _ => {
-                        warn!("Unrecognized Media Class: {}", media_class);
-                        None
-                    }
-                };
+            // If already sent, nothing to do
+            if node.sent_upstream {
+                return;
+            }
+            debug!("Checking Received Port Count for Node: {}", id);
 
-                if let Some(media_class) = media_class {
-                    // Create the virtual node and send it upstream
-                    let node = DeviceNode {
-                        node_id: id,
-                        node_class: media_class,
-                        is_usable: false,
-                        name: node.name.clone(),
-                        nickname: node.nickname.clone(),
-                        description: node.description.clone(),
-                    };
+            // Check if we have port count expectations for both directions
+            let has_port_count_info = node.port_count[Direction::In].is_some()
+                && node.port_count[Direction::Out].is_some();
 
-                    let _ = self.callback_tx.send(PipewireReceiver::DeviceAdded(node));
+            if !has_port_count_info {
+                debug!("Node {} missing port count info, waiting...", id);
+                return;
+            }
+
+            // Check if received port count matches expected count
+            let mut is_complete = true;
+            for direction in Direction::iter() {
+                let count = node.ports[direction].len();
+                debug!(
+                    "Direction: {:?}, Port Count: {}, Expecting: {:?}",
+                    direction, count, node.port_count[direction]
+                );
+                if node.port_count[direction] != Some(count as u32) {
+                    is_complete = false;
                 }
+            }
+
+            if is_complete {
+                debug!("Port Count Matches for Node: {}, Sending Device..", id);
+                self.unmanaged_node_send(id);
             }
         }
     }
 
-    /// This is called whenever the port status changes, we need to check whether this is a
-    /// regular stereo node or not, so we can report it as usable.
-    pub fn unmanaged_node_update(&mut self, id: u32) {
+    pub fn unmanaged_node_send(&mut self, id: u32) {
+        // Check if the node exists and hasn't been sent yet
+        let node = if let Some(node) = self.unmanaged_device_nodes.get(&id) {
+            if node.sent_upstream {
+                return;
+            }
+            node
+        } else {
+            return;
+        };
+
+        // We need a media class, otherwise we can't use this node
+        let Some(media_class_str) = &node.media_class else {
+            return;
+        };
+
+        // Map the media class to our internal enum
+        let media_class = match media_class_str.as_str() {
+            s if s.starts_with("Audio/Sink") => Some(MediaClass::Sink),
+            s if s.starts_with("Audio/Source") => Some(MediaClass::Source),
+            s if s.starts_with("Audio/Duplex") => Some(MediaClass::Duplex),
+            _ => {
+                warn!("Unrecognized Media Class: {}", media_class_str);
+                None
+            }
+        };
+
+        let Some(media_class) = media_class else {
+            return;
+        };
+
         let is_usable = self.is_usable_unmanaged_device_node(id).is_some();
 
-        if let Some(node) = self.unmanaged_device_nodes.get_mut(&id)
-            && node.is_usable != is_usable
-        {
-            node.is_usable = is_usable;
-            let message = PipewireReceiver::DeviceUsable(id, is_usable);
-            let _ = self.callback_tx.send(message);
+        // Create the virtual node and send it upstream
+        let device_node = DeviceNode {
+            node_id: id,
+            node_class: media_class,
+            is_usable,
+            name: node.name.clone(),
+            nickname: node.nickname.clone(),
+            description: node.description.clone(),
+        };
+
+        // Mark as sent BEFORE sending to prevent race conditions
+        if let Some(node) = self.unmanaged_device_nodes.get_mut(&id) {
+            node.sent_upstream = true;
         }
+
+        let _ = self
+            .callback_tx
+            .send(PipewireReceiver::DeviceAdded(device_node));
     }
 
     pub fn is_usable_unmanaged_device_node(&self, id: u32) -> Option<MediaClass> {
@@ -1118,7 +1186,7 @@ pub struct LinkStoreMap {
 
     /// Variables needed to keep this link alive
     pub(crate) _link: Link,
-    pub(crate) _listener: LinkListener,
+    pub(crate) _proxy_listener: pipewire::proxy::ProxyListener,
 
     /// Internal Port Index Mapping
     pub(crate) _source_port_id: u32,

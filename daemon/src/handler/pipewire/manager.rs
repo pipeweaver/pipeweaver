@@ -205,24 +205,13 @@ impl PipewireManager {
         let mut initial_ready = false;
         let mut initial_ready_timer = Box::pin(sleep(Duration::from_secs(1)));
 
-        // So these are small timers which are set up when a new device is sent to us. Rather than
-        // immediately processing, we wait half a second to make sure the device doesn't disappear
-        // again as it's layout is being calculated, if this timer completes we should be safe to
-        // assume the device configuration has stabilised.
-        let mut device_timers: HashMap<u32, JoinHandle<()>> = HashMap::new();
-        let (device_ready_tx, mut device_ready_rx) = mpsc::channel(256);
-
-        // We do the same for Application nodes, the problem with ApplicationsList is that they will
-        // never arrive with their default route as that's sent 'later' by pipewire, but we also
-        // can't handle this on the pipewire side because there's a chance the route is *NEVER* sent
-        // if it's set to a default. So the goal is to just wait for 200ms after an application node
-        // arrives to see if a default route comes in. If the timeout expires assume it's a default
-        // otherwise handle the arrival when we get the default route.
+        // This is a simple timer for applications. Because they won't appear with their default
+        // routes, it's best to give them half a second for pipewire to read the data and propagate
+        // it. The Pipeweaver frontend will briefly wait before presenting it.
         let mut application_timers: HashMap<u32, JoinHandle<()>> = HashMap::new();
         let (application_ready_tx, mut application_ready_rx) = mpsc::channel(256);
 
-        // A simple list of nodes which have been discovered, but not flagged 'Ready'
-        let mut discovered_devices: HashMap<u32, DeviceNode> = HashMap::new();
+        // A simple list of applications which have been discovered, but not flagged 'Ready'
         let mut discovered_applications: HashMap<u32, ApplicationNode> = HashMap::new();
 
         // Let the primary worker know we're ready
@@ -322,54 +311,59 @@ impl PipewireManager {
                         }
 
                         PipewireReceiver::DeviceAdded(node) => {
-                            // Only do this if we don't already have a timer
-                            if device_timers.contains_key(&node.node_id) {
-                                continue;
+                            debug!("Device Found: {:?}, Type: {:?}", node.description, node.node_class);
+
+                            // Create the 'Status' object
+                            let physical_node = PhysicalDevice {
+                                node_id: node.node_id,
+                                name: node.name.clone(),
+                                description: node.description.clone(),
+                                is_usable: node.is_usable,
+                            };
+
+                            let (is_source, is_target) = match node.node_class {
+                                MediaClass::Source => (true, false),
+                                MediaClass::Sink => (false, true),
+                                MediaClass::Duplex => (true, true),
+                            };
+
+                            if is_source {
+                                self.node_list[DeviceType::Source].push(physical_node.clone());
+                                if node.is_usable {
+                                    let sender = self.worker_sender.clone();
+                                    let _ = self.source_device_added(physical_node.clone(), sender.clone()).await;
+                                }
+                            }
+                            if is_target {
+                                self.node_list[DeviceType::Target].push(physical_node.clone());
+                                if node.is_usable {
+                                    let sender = self.worker_sender.clone();
+                                    let _ = self.target_device_added(physical_node, sender).await;
+                                }
                             }
 
-                            // While device information is being populated, a device can rapidly
-                            // switch between 'usable' and 'not usable'. To prevent incorrectly
-                            // attempting to use a device, we'll put it on a 500ms timer before
-                            // we actually process it, so it can first settle.
-
-                            let done = device_ready_tx.clone();
-
-                            // Spawn up a simple task that simply waits 500ms
-                            let handle = tokio::spawn(async move {
-                                sleep(Duration::from_millis(500)).await;
-                                let _ = done.send(node.node_id).await;
-                            });
-                            device_timers.insert(node.node_id, handle);
-                            discovered_devices.insert(node.node_id, node);
-                        }
-                        PipewireReceiver::DeviceUsable(id, usable) => {
-                            // Simply update the usable state if we're waiting for this device.
-                            if let Some(dev) = discovered_devices.get_mut(&id) {
-                                dev.is_usable = usable;
+                            // Add node to our definitive list
+                            self.device_nodes.insert(node.node_id, node);
+                            if self.worker_sender.capacity() > 0 {
+                                let _ = self.worker_sender.send(TransientChange).await;
                             }
                         }
                         PipewireReceiver::DeviceRemoved(id) => {
-                            if let Some(handle) = device_timers.remove(&id) {
-                                debug!("Device Disappeared During Grace Period: {}", id);
-                                discovered_devices.remove(&id);
-                                handle.abort();
-                            } else {
-                                debug!("Natural Device Removal: {}", id);
-                                if let Some(node) = self.device_nodes.remove(&id) {
-                                    match node.node_class {
-                                        MediaClass::Source => {
-                                            let _ = self.source_device_removed(id).await;
-                                        }
-                                        MediaClass::Sink => {
-                                            let _ = self.target_device_removed(id).await;
-                                        }
-                                        MediaClass::Duplex => {
-                                            let _ = self.source_device_removed(id).await;
-                                            let _ = self.target_device_removed(id).await;
-                                        }
+                            debug!("Device Removed: {}", id);
+                            if let Some(node) = self.device_nodes.remove(&id) {
+                                match node.node_class {
+                                    MediaClass::Source => {
+                                        let _ = self.source_device_removed(id).await;
                                     }
-                                    let _ = self.worker_sender.send(TransientChange).await;
+                                    MediaClass::Sink => {
+                                        let _ = self.target_device_removed(id).await;
+                                    }
+                                    MediaClass::Duplex => {
+                                        let _ = self.source_device_removed(id).await;
+                                        let _ = self.target_device_removed(id).await;
+                                    }
                                 }
+                                let _ = self.worker_sender.send(TransientChange).await;
                             }
                         }
                         PipewireReceiver::ManagedLinkDropped(source, target) => {
@@ -496,50 +490,6 @@ impl PipewireManager {
                     self.sync_all_pipewire_volumes().await;
                     self.sync_all_pipewire_mutes().await;
                     initial_ready = true;
-                }
-                Some(node_id) = device_ready_rx.recv() => {
-                    // A device has been sat here for 500ms, lets do the processing.
-                    if let Some(device) = discovered_devices.remove(&node_id) {
-                        debug!("Device Found: {:?}, Type: {:?}", device.description, device.node_class);
-                        device_timers.remove(&node_id);
-
-                        // Create the 'Status' object
-                        let node = PhysicalDevice {
-                            node_id: device.node_id,
-                            name: device.name.clone(),
-                            description: device.description.clone(),
-                            is_usable: device.is_usable,
-                        };
-
-                        let (is_source, is_target) = match device.node_class {
-                            MediaClass::Source => (true, false),
-                            MediaClass::Sink => (false, true),
-                            MediaClass::Duplex => (true, true),
-                        };
-
-                        if is_source {
-                            self.node_list[DeviceType::Source].push(node.clone());
-                            if node.is_usable {
-                                let sender = self.worker_sender.clone();
-                                let _ = self.source_device_added(node.clone(), sender.clone()).await;
-                            }
-                        }
-                        if is_target {
-                            self.node_list[DeviceType::Target].push(node.clone());
-                            if node.is_usable {
-                                let sender = self.worker_sender.clone();
-                                let _ = self.target_device_added(node, sender).await;
-                            }
-                        }
-
-                        // Add node to our definitive list
-                        self.device_nodes.insert(device.node_id, device);
-                        if self.worker_sender.capacity() > 0 {
-                            let _ = self.worker_sender.send(TransientChange).await;
-                        }
-                    } else {
-                        panic!("Got a Timer Ready for non-existent Node");
-                    }
                 }
                 Some(node_id) = application_ready_rx.recv() => {
                     // An Application has been hanging around for 200ms without receiving a route,

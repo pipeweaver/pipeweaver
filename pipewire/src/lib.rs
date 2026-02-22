@@ -86,7 +86,6 @@ pub enum PipewireReceiver {
     DefaultChanged(MediaClass, NodeTarget),
 
     DeviceAdded(DeviceNode),
-    DeviceUsable(u32, bool),
     DeviceRemoved(u32),
 
     ApplicationAdded(ApplicationNode),

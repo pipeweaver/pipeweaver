@@ -17,10 +17,10 @@ use pipewire::keys::{
     NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME,
     NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME,
 };
-use pipewire::link::{Link, LinkListener, LinkState};
+use pipewire::link::Link;
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
-use pipewire::proxy::ProxyT;
+use pipewire::proxy::{ProxyListener, ProxyT};
 use pipewire::registry::Registry;
 use pipewire::spa::pod::builder::Builder;
 use pipewire::spa::pod::deserialize::PodDeserializer;
@@ -517,10 +517,47 @@ impl PipewireManager {
         dest: LinkType,
         sender: Sender<()>,
     ) -> Result<()> {
+        // First, check if a managed link already exists and remove it
+        self.store.borrow_mut().managed_link_remove(source, dest);
+
         let parent_id = Ulid::new();
         let mut port_map: EnumMap<PortLocation, Option<LinkStoreMap>> = Default::default();
 
-        // Rewrite, lets go!
+        // Collect all the port pairs we're going to link
+        let mut port_pairs = Vec::new();
+        for port in PortLocation::iter() {
+            let (_, src_index) = self.get_port(source, registry::Direction::Out, port)?;
+            let (_, tgt_index) = self.get_port(dest, registry::Direction::In, port)?;
+            port_pairs.push((src_index, tgt_index));
+        }
+
+        // Find and destroy any unmanaged links between these exact ports
+        let links_to_destroy: Vec<u32> = self
+            .store
+            .borrow()
+            .get_unmanaged_links()
+            .iter()
+            .filter_map(|(id, link)| {
+                let should_remove = port_pairs.iter().any(|(out_port, in_port)| {
+                    link.output_port == *out_port && link.input_port == *in_port
+                });
+                if should_remove { Some(*id) } else { None }
+            })
+            .collect();
+
+        if !links_to_destroy.is_empty() {
+            debug!(
+                "Destroying {} orphaned unmanaged links in PipeWire: {:?}",
+                links_to_destroy.len(),
+                links_to_destroy
+            );
+            for link_id in links_to_destroy {
+                self.registry.destroy_global(link_id);
+                self.store.borrow_mut().unmanaged_link_remove(link_id);
+            }
+        }
+
+        // Now create the links
         for port in PortLocation::iter() {
             // Firstly, create an id for this list
             let link_id = Ulid::new();
@@ -530,7 +567,7 @@ impl PipewireManager {
             let (tgt_id, tgt_index) = self.get_port(dest, registry::Direction::In, port)?;
 
             // Now we simply create the link
-            let (link, lis) =
+            let (link, proxy_lis) =
                 self.create_port_link(link_id, parent_id, src_id, src_index, tgt_id, tgt_index)?;
 
             // Create the LinkStore Mapping for this link
@@ -538,7 +575,7 @@ impl PipewireManager {
                 pw_id: None,
                 internal_id: link_id,
                 _link: link,
-                _listener: lis,
+                _proxy_listener: proxy_lis,
                 _source_port_id: src_index,
                 _destination_port_id: tgt_index,
             };
@@ -637,7 +674,7 @@ impl PipewireManager {
         src_port: u32,
         dest_node: u32,
         dest_port: u32,
-    ) -> Result<(Link, LinkListener)> {
+    ) -> Result<(Link, ProxyListener)> {
         let listener_info_store = Rc::downgrade(&self.store);
         let link = self
             .core
@@ -661,23 +698,38 @@ impl PipewireManager {
             )
             .map_err(|e| anyhow!("Failed to create link: {}", e))?;
 
-        let link_listener = link
+        let listener_bound_store = listener_info_store.clone();
+        let listener_error_store = listener_info_store.clone();
+        let proxy_listener = link
+            .upcast_ref()
             .add_listener_local()
-            .info(move |link| {
-                if let LinkState::Active = link.state() {
-                    // We're alive, let the store know
-                    if let Some(listener_info_store) = listener_info_store.upgrade() {
-                        listener_info_store.borrow_mut().managed_link_ready(
-                            parent_id,
-                            id,
-                            link.id(),
-                        );
-                    }
+            .bound(move |pw_id| {
+                // The link is now bound and has an ID, notify the store
+                if let Some(listener_bound_store) = listener_bound_store.upgrade() {
+                    listener_bound_store
+                        .borrow_mut()
+                        .managed_link_ready(parent_id, id, pw_id);
+                }
+            })
+            .error(move |seq, res, message| {
+                log::error!(
+                    "[Link {}:{}] Link proxy error! seq={}, res={}, message={}",
+                    parent_id,
+                    id,
+                    seq,
+                    res,
+                    message
+                );
+                // Notify the store about the error so the sender doesn't hang
+                if let Some(listener_error_store) = listener_error_store.upgrade() {
+                    listener_error_store
+                        .borrow_mut()
+                        .managed_link_error(parent_id, id);
                 }
             })
             .register();
 
-        Ok((link, link_listener))
+        Ok((link, proxy_listener))
     }
 
     fn set_application_target(&mut self, app_id: u32, target: Ulid) -> Result<()> {

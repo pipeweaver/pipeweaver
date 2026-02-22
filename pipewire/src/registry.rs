@@ -25,7 +25,9 @@ use pipewire::spa::utils::dict::DictRef;
 use pipewire::types::ObjectType;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::rc::Rc;
+use strum_macros::EnumIter;
 
 pub(crate) struct PipewireRegistry {
     registry: Rc<RefCell<Registry>>,
@@ -88,12 +90,34 @@ impl PipewireRegistry {
                                 return;
                             }
 
-                            if let Ok(node) = RegistryDeviceNode::try_from(props) {
+                            if let Ok(mut node) = RegistryDeviceNode::try_from(props) {
                                 if let Some(parent_id) = node.parent_id
                                     && let Some(device) = store.unmanaged_device_get(parent_id) {
                                     device.add_node(id);
                                 }
 
+                                let bound: Option<Node> = registry.borrow().bind(global).ok();
+                                let info_local = listener_store.clone();
+                                if let Some(proxy) = bound {
+                                    let listener = proxy.add_listener_local().info(move |info| {
+                                        let inputs = info.n_input_ports();
+                                        let outputs = info.n_output_ports();
+
+                                        if let Some(store) = info_local.upgrade() {
+                                            let mut store = store.borrow_mut();
+
+                                            if let Some(node) = store.unmanaged_device_node_get(id) {
+                                                node.port_count[Direction::In] = Some(inputs);
+                                                node.port_count[Direction::Out] = Some(outputs);
+
+                                                store.unmanaged_node_port_count_update(id);
+                                            }
+                                        }
+                                    }).register();
+
+                                    node._proxy = Some(proxy);
+                                    node._listener = Some(listener);
+                                }
                                 // All unmanaged nodes should be handled, even if they don't have a parent
                                 store.unmanaged_device_node_add(id, node);
                             } else if let Ok(mut node) = RegistryClientNode::try_from(props) {
@@ -215,7 +239,8 @@ impl PipewireRegistry {
                             if let Some(node_id) = node_id.and_then(|s| s.parse::<u32>().ok()) && let Some(port_id) = pid.and_then(|s| s.parse::<u32>().ok()) {
                                 if let Some(node) = store.unmanaged_device_node_get(node_id) {
                                     node.add_port(id, direction, port);
-                                    store.unmanaged_node_update(node_id);
+                                    // Check if we now have all ports and can send DeviceAdded
+                                    store.unmanaged_node_port_count_update(node_id);
                                     return;
                                 }
                                 if let Some(node) = store.unmanaged_client_node_get(node_id) {
@@ -466,13 +491,12 @@ impl RegistryDevice {
     }
 }
 
-#[derive(Debug, Enum)]
+#[derive(Debug, Copy, Clone, Enum, EnumIter)]
 pub(crate) enum Direction {
     In,
     Out,
 }
 
-#[derive(Debug)]
 pub(crate) struct RegistryDeviceNode {
     pub object_serial: u32,
     pub parent_id: Option<u32>,
@@ -484,7 +508,14 @@ pub(crate) struct RegistryDeviceNode {
     pub description: Option<String>,
     pub name: Option<String>,
 
+    pub(crate) _proxy: Option<Node>,
+    pub(crate) _listener: Option<NodeListener>,
+
+    pub port_count: EnumMap<Direction, Option<u32>>,
     pub ports: EnumMap<Direction, HashMap<u32, RegistryPort>>,
+
+    /// Tracks whether this device has been sent upstream via DeviceAdded
+    pub sent_upstream: bool,
 }
 
 impl TryFrom<&DictRef> for RegistryDeviceNode {
@@ -523,8 +554,28 @@ impl TryFrom<&DictRef> for RegistryDeviceNode {
             nickname,
             description,
             name,
+
+            _proxy: None,
+            _listener: None,
+
+            port_count: EnumMap::default(),
             ports: Default::default(),
+            sent_upstream: false,
         })
+    }
+}
+
+impl Debug for RegistryDeviceNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RegistryDeviceNode")
+            .field("object_serial", &self.object_serial)
+            .field("parent_id", &self.parent_id)
+            .field("media_class", &self.media_class)
+            .field("is_usable", &self.is_usable)
+            .field("nickname", &self.nickname)
+            .field("description", &self.description)
+            .field("name", &self.name)
+            .finish()
     }
 }
 
