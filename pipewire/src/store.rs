@@ -661,44 +661,89 @@ impl Store {
         }
     }
 
-    pub fn unmanaged_node_port_count_update(&mut self, id: u32) {
-        // Check if we have all the information needed to send the device upstream:
-        // 1. Port count info has been received (from .info callback)
-        // 2. All actual ports have been received and match the expected count
-        // 3. We haven't already sent this device
-        if let Some(node) = self.unmanaged_device_nodes.get(&id) {
-            // If already sent, nothing to do
-            if node.sent_upstream {
-                return;
-            }
-            debug!("Checking Received Port Count for Node: {}", id);
+    pub fn unmanaged_node_port_count_update(&mut self, id: u32, in_count: u32, out_count: u32) {
+        // Ok, new plan here, because this can change on-the-fly we need to be able to work and
+        // correctly handle that. So we'll check the 'old' one and the 'new' one and see if there's
+        // a specific change.
 
-            // Check if we have port count expectations for both directions
-            let has_port_count_info = node.port_count[Direction::In].is_some()
-                && node.port_count[Direction::Out].is_some();
+        if let Some(node) = self.unmanaged_device_nodes.get_mut(&id) {
+            let old_in_count = node.port_count[Direction::In];
+            let old_out_count = node.port_count[Direction::Out];
 
-            if !has_port_count_info {
-                debug!("Node {} missing port count info, waiting...", id);
-                return;
-            }
+            let port_counts_changed =
+                old_in_count != Some(in_count) || old_out_count != Some(out_count);
 
-            // Check if received port count matches expected count
-            let mut is_complete = true;
-            for direction in Direction::iter() {
-                let count = node.ports[direction].len();
+            node.port_count[Direction::In] = Some(in_count);
+            node.port_count[Direction::Out] = Some(out_count);
+
+            if port_counts_changed {
                 debug!(
-                    "Direction: {:?}, Port Count: {}, Expecting: {:?}",
-                    direction, count, node.port_count[direction]
+                    "Node {} port count updated (In: {:?} -> {}, Out: {:?} -> {})",
+                    id, old_in_count, in_count, old_out_count, out_count
                 );
-                if node.port_count[direction] != Some(count as u32) {
-                    is_complete = false;
-                }
+                self.unmanaged_node_port_check(id);
             }
+        }
+    }
 
-            if is_complete {
-                debug!("Port Count Matches for Node: {}, Sending Device..", id);
-                self.unmanaged_node_send(id);
+    pub fn unmanaged_node_port_check(&mut self, id: u32) {
+        // Check if a node is ready to be sent upstream or needs an update.
+        // Called when:
+        // - A port is added (ports may now be complete)
+        // - Port count info is updated (via unmanaged_node_port_count_update)
+
+        let node = if let Some(node) = self.unmanaged_device_nodes.get(&id) {
+            node
+        } else {
+            return;
+        };
+
+        // Check if we have port count expectations for both directions
+        let has_port_count_info =
+            node.port_count[Direction::In].is_some() && node.port_count[Direction::Out].is_some();
+
+        if !has_port_count_info {
+            debug!("Node {} missing port count info, waiting...", id);
+            return;
+        }
+
+        // Check if received port count matches expected count
+        let mut is_complete = true;
+        for direction in Direction::iter() {
+            let count = node.ports[direction].len();
+            if node.port_count[direction] != Some(count as u32) {
+                is_complete = false;
+                break;
             }
+        }
+
+        if !is_complete {
+            debug!(
+                "Node {} ports incomplete (In: {} of {:?}, Out: {} of {:?}), waiting...",
+                id,
+                node.ports[Direction::In].len(),
+                node.port_count[Direction::In],
+                node.ports[Direction::Out].len(),
+                node.port_count[Direction::Out]
+            );
+            return;
+        }
+
+        // Ports are complete - either send initial or update
+        if node.sent_upstream {
+            // Already sent, check if usability changed
+            let new_usability = self.is_usable_unmanaged_device_node(id).is_some();
+            debug!(
+                "Node {} port configuration complete, updating usability: {}",
+                id, new_usability
+            );
+            let _ = self
+                .callback_tx
+                .send(PipewireReceiver::DeviceUsable(id, new_usability));
+        } else {
+            // Not sent yet, send it now
+            debug!("Port Count Matches for Node: {}, Sending Device..", id);
+            self.unmanaged_node_send(id);
         }
     }
 

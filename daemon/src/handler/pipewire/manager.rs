@@ -366,6 +366,95 @@ impl PipewireManager {
                                 let _ = self.worker_sender.send(TransientChange).await;
                             }
                         }
+                        PipewireReceiver::DeviceUsable(id, usable) => {
+                            if let Some(dev) = self.device_nodes.get_mut(&id) {
+                                if dev.is_usable == usable {
+                                    continue;
+                                }
+
+                                debug!("Usability Changed for Node {}: {} -> {}", id, dev.is_usable, usable);
+                                dev.is_usable = usable;
+
+                                let node_class = dev.node_class;
+
+                                // Create physical node for attachment
+                                let physical_node = PhysicalDevice {
+                                    node_id: id,
+                                    name: dev.name.clone(),
+                                    description: dev.description.clone(),
+                                    is_usable: usable,
+                                };
+
+                                // Update node_list
+                                match node_class {
+                                    MediaClass::Source => {
+                                        if let Some(node) = self.node_list[DeviceType::Source]
+                                            .iter_mut()
+                                            .find(|n| n.node_id == id)
+                                        {
+                                            node.is_usable = usable;
+                                        }
+                                    }
+                                    MediaClass::Sink => {
+                                        if let Some(node) = self.node_list[DeviceType::Target]
+                                            .iter_mut()
+                                            .find(|n| n.node_id == id)
+                                        {
+                                            node.is_usable = usable;
+                                        }
+                                    }
+                                    MediaClass::Duplex => {
+                                        if let Some(node) = self.node_list[DeviceType::Source]
+                                            .iter_mut()
+                                            .find(|n| n.node_id == id)
+                                        {
+                                            node.is_usable = usable;
+                                        }
+                                        if let Some(node) = self.node_list[DeviceType::Target]
+                                            .iter_mut()
+                                            .find(|n| n.node_id == id)
+                                        {
+                                            node.is_usable = usable;
+                                        }
+                                    }
+                                }
+
+                                // Handle connection/disconnection based on usability
+                                if usable {
+                                    // Device became usable, connect it
+                                    match node_class {
+                                        MediaClass::Source => {
+                                            let sender = self.worker_sender.clone();
+                                            let _ = self.source_device_added(physical_node, sender).await;
+                                        }
+                                        MediaClass::Sink => {
+                                            let sender = self.worker_sender.clone();
+                                            let _ = self.target_device_added(physical_node, sender).await;
+                                        }
+                                        MediaClass::Duplex => {
+                                            let sender = self.worker_sender.clone();
+                                            let _ = self.source_device_added(physical_node.clone(), sender.clone()).await;
+                                            let _ = self.target_device_added(physical_node, sender).await;
+                                        }
+                                    }
+                                } else {
+                                    // Device became unusable, disconnect it
+                                    match node_class {
+                                        MediaClass::Source => {
+                                            let _ = self.source_device_disconnect(id).await;
+                                        }
+                                        MediaClass::Sink => {
+                                            let _ = self.target_device_disconnect(id).await;
+                                        }
+                                        MediaClass::Duplex => {
+                                            let _ = self.source_device_disconnect(id).await;
+                                            let _ = self.target_device_disconnect(id).await;
+                                        }
+                                    }
+                                }
+                            }
+                            let _ = self.worker_sender.send(TransientChange).await;
+                        }
                         PipewireReceiver::ManagedLinkDropped(source, target) => {
                             warn!("Managed Link Removed: {:?} {:?}, reestablishing", source, target);
                             if let Err(e) = self.link_create_type_to_type(source, target).await {

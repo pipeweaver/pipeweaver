@@ -106,11 +106,8 @@ impl PipewireRegistry {
                                         if let Some(store) = info_local.upgrade() {
                                             let mut store = store.borrow_mut();
 
-                                            if let Some(node) = store.unmanaged_device_node_get(id) {
-                                                node.port_count[Direction::In] = Some(inputs);
-                                                node.port_count[Direction::Out] = Some(outputs);
-
-                                                store.unmanaged_node_port_count_update(id);
+                                            if store.unmanaged_device_node_get(id).is_some() {
+                                                store.unmanaged_node_port_count_update(id, inputs, outputs);
                                             }
                                         }
                                     }).register();
@@ -239,8 +236,9 @@ impl PipewireRegistry {
                             if let Some(node_id) = node_id.and_then(|s| s.parse::<u32>().ok()) && let Some(port_id) = pid.and_then(|s| s.parse::<u32>().ok()) {
                                 if let Some(node) = store.unmanaged_device_node_get(node_id) {
                                     node.add_port(id, direction, port);
+
                                     // Check if we now have all ports and can send DeviceAdded
-                                    store.unmanaged_node_port_count_update(node_id);
+                                    store.unmanaged_node_port_check(node_id);
                                     return;
                                 }
                                 if let Some(node) = store.unmanaged_client_node_get(node_id) {

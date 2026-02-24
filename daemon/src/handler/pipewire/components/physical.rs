@@ -30,6 +30,9 @@ pub(crate) trait PhysicalDevices {
     async fn source_device_removed(&mut self, node_id: u32) -> Result<()>;
     async fn target_device_removed(&mut self, node_id: u32) -> Result<()>;
 
+    async fn source_device_disconnect(&mut self, node_id: u32) -> Result<()>;
+    async fn target_device_disconnect(&mut self, node_id: u32) -> Result<()>;
+
     async fn add_device_to_node(&mut self, id: Ulid, node_id: u32) -> Result<()>;
     async fn remove_device_from_node(&mut self, id: Ulid, vec_index: usize) -> Result<()>;
 }
@@ -335,6 +338,71 @@ impl PhysicalDevices for PipewireManager {
 
     async fn target_device_removed(&mut self, node_id: u32) -> Result<()> {
         self.node_list[DeviceType::Target].retain(|node| node.node_id != node_id);
+        Ok(())
+    }
+
+    /// Disconnect a source device from all connected filters without removing it from tracking
+    async fn source_device_disconnect(&mut self, node_id: u32) -> Result<()> {
+        // Search through all physical source devices in the profile to find connections
+        let devices = self.profile.devices.sources.physical_devices.clone();
+        for device in devices {
+            // Check each attached device to see if it matches this node_id
+            for attached in &device.attached_devices {
+                // Try to locate this attached device in our device_nodes
+                if let Some(pw_node) = self.locate_node(attached.clone())
+                    && pw_node.node_id == node_id
+                {
+                    // Found it! Remove the link from this unmanaged node to the filter
+                    debug!(
+                        "Disconnecting Source Node {} from Filter {}",
+                        node_id, device.description.id
+                    );
+                    let _ = self
+                        .link_remove_unmanaged_to_filter(node_id, device.description.id)
+                        .await;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Disconnect a target device from all connected filters without removing it from tracking
+    async fn target_device_disconnect(&mut self, node_id: u32) -> Result<()> {
+        // Search through physical target devices
+        let physical_devices = self.profile.devices.targets.physical_devices.clone();
+        for device in physical_devices {
+            for attached in &device.attached_devices {
+                if let Some(pw_node) = self.locate_node(attached.clone())
+                    && pw_node.node_id == node_id
+                {
+                    debug!(
+                        "Disconnecting Target Node {} from Filter {}",
+                        node_id, device.description.id
+                    );
+                    let _ = self
+                        .link_remove_filter_to_unmanaged(device.description.id, node_id)
+                        .await;
+                }
+            }
+        }
+
+        // Search through virtual target devices
+        let virtual_devices = self.profile.devices.targets.virtual_devices.clone();
+        for device in virtual_devices {
+            for attached in &device.attached_devices {
+                if let Some(pw_node) = self.locate_node(attached.clone())
+                    && pw_node.node_id == node_id
+                {
+                    debug!(
+                        "Disconnecting Target Node {} from Virtual Node {}",
+                        node_id, device.description.id
+                    );
+                    let _ = self
+                        .link_remove_node_to_unmanaged(device.description.id, node_id)
+                        .await;
+                }
+            }
+        }
         Ok(())
     }
 
