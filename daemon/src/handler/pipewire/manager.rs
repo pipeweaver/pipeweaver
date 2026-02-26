@@ -457,6 +457,14 @@ impl PipewireManager {
                         }
                         PipewireReceiver::ManagedLinkDropped(source, target) => {
                             warn!("Managed Link Removed: {:?} {:?}, reestablishing", source, target);
+
+                            // This can happen and be flagged if pipewire has failed to create a link,
+                            // often this is caused due to it being unable to create a buffer due to
+                            // a huge volume of links being sent at once. Before sending the new
+                            // request, we need to wait for a moment for pipewire to catch up,
+                            // otherwise we may end up with dodgy links or other problems.
+                            sleep(Duration::from_millis(100)).await;
+
                             if let Err(e) = self.link_create_type_to_type(source, target).await {
                                 warn!("Unable to reestablish link: {}", e);
                             }
