@@ -60,7 +60,7 @@ pub struct Store {
 
     // These are devices and device nodes not created by us
     unmanaged_devices: HashMap<u32, RegistryDevice>,
-    pub(crate) unmanaged_device_nodes: HashMap<u32, RegistryDeviceNode>,
+    unmanaged_device_nodes: HashMap<u32, RegistryDeviceNode>,
 
     // These are clients and client nodes not created by us
     unmanaged_clients: HashMap<u32, RegistryClient>,
@@ -73,8 +73,8 @@ pub struct Store {
     usable_client_nodes: Vec<u32>,
 
     // Pending Stuff
-    pub(crate) pending_link_syncs: HashMap<i32, PendingLinkSync>,
-    pub(crate) pending_device_syncs: HashMap<i32, u32>,
+    pending_link_syncs: HashMap<i32, PendingLinkSync>,
+    pending_device_syncs: HashMap<i32, u32>,
 
     callback_tx: mpsc::Sender<PipewireReceiver>,
 }
@@ -134,6 +134,16 @@ impl Store {
         let _ = self
             .callback_tx
             .send(PipewireReceiver::AnnouncedClock(rate));
+    }
+
+    // ----- SYNC Handler -----
+    pub fn resolve_sync(&mut self, seq: i32) {
+        if self.pending_link_syncs.contains_key(&seq) {
+            self.resolve_pending_link_sync(seq);
+        }
+        if self.pending_device_syncs.contains_key(&seq) {
+            self.resolve_pending_device_sync(seq);
+        }
     }
 
     // ----- FACTORIES -----
@@ -708,15 +718,15 @@ impl Store {
         self.pending_device_syncs.insert(seq, id);
     }
 
-    // pub fn resolve_pending_device_sync(&mut self, seq: i32) {
-    //     if let Some(id) = self.pending_device_syncs.remove(&seq)
-    //         && let Some(node) = self.unmanaged_device_nodes.get_mut(&id)
-    //     {
-    //         debug!("Device Synced, Checking.. {}", id);
-    //         node.is_synced = true;
-    //         self.unmanaged_node_port_check(id);
-    //     }
-    // }
+    pub fn resolve_pending_device_sync(&mut self, seq: i32) {
+        if let Some(id) = self.pending_device_syncs.remove(&seq)
+            && let Some(node) = self.unmanaged_device_nodes.get_mut(&id)
+        {
+            debug!("Device Synced, Checking.. {}", id);
+            node.is_synced = true;
+            self.unmanaged_node_port_check(id);
+        }
+    }
 
     pub fn unmanaged_node_port_count_update(&mut self, id: u32, in_count: u32, out_count: u32) {
         // Ok, new plan here, because this can change on-the-fly we need to be able to work and

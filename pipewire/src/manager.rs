@@ -42,7 +42,7 @@ use pipewire::spa::utils;
 
 use pipewire::main_loop::MainLoop;
 use pipewire::{context, main_loop};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::io::Cursor;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -57,6 +57,7 @@ pub(crate) struct FilterData {
 
 struct PipewireManager {
     core: Core,
+    mainloop: Rc<MainLoop>,
     registry: PipewireRegistry,
 
     store: Rc<RefCell<Store>>,
@@ -75,51 +76,18 @@ impl PipewireManager {
         let registry = PipewireRegistry::new(registry, store.clone(), Rc::new(core.clone()));
 
         let done_store = Rc::downgrade(&store);
-        let done_mainloop = Rc::downgrade(&mainloop);
-
         let _core_listener = core
             .add_listener_local()
             .done(move |_id, seq| {
-                debug!("Core done callback fired, seq: {}", seq.raw());
                 if let Some(store) = done_store.upgrade() {
-                    let mut store_ref = store.borrow_mut();
-
-                    if store_ref.pending_link_syncs.contains_key(&seq.raw()) {
-                        store_ref.resolve_pending_link_sync(seq.raw());
-                        return;
-                    }
-
-                    if let Some(node_id) = store_ref.pending_device_syncs.remove(&seq.raw()) {
-                        debug!(
-                            "Device sync completed for node {}, scheduling port check",
-                            node_id
-                        );
-
-                        drop(store_ref);
-                        if let Some(mainloop) = done_mainloop.upgrade() {
-                            let timer_store = Rc::downgrade(&store);
-                            let timer = mainloop.loop_().add_timer(move |_| {
-                                debug!("TIMER HIT: Checking for ports on node {}", node_id);
-                                if let Some(store) = timer_store.upgrade() {
-                                    let mut store = store.borrow_mut();
-                                    if let Some(node) =
-                                        store.unmanaged_device_nodes.get_mut(&node_id)
-                                    {
-                                        node.is_synced = true;
-                                    }
-                                    store.unmanaged_node_port_check(node_id);
-                                }
-                            });
-                            timer.update_timer(Some(Duration::from_secs(1)), None);
-                            std::mem::forget(timer);
-                        }
-                    }
+                    store.borrow_mut().resolve_sync(seq.raw());
                 }
             })
             .register();
 
         Self {
             core,
+            mainloop,
             registry,
             store,
 

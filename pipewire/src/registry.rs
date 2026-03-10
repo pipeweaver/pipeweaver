@@ -120,7 +120,7 @@ impl PipewireRegistry {
                                                         .unwrap_or(false);
                                                     let has_driver = props.get("node.driver-id").is_some();
 
-                                                    if (is_driver || has_driver) && store.unmanaged_node_set_clock_ready(id) {
+                                                    if is_driver || has_driver &&  store.unmanaged_node_set_clock_ready(id) {
                                                         let seq = core_local.sync(0).expect("core sync failed");
                                                         store.add_pending_device_sync(seq.raw(), id);
                                                     }
