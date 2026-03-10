@@ -8,7 +8,7 @@ use crate::{MediaClass, PWReceiver};
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use log::{debug, error, info};
-use pipewire::core::{Core, Listener};
+use pipewire::core::Core;
 use pipewire::filter::{Filter, FilterFlags, FilterState, PortFlags};
 use pipewire::keys::{
     APP_ICON_NAME, APP_ID, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME,
@@ -42,12 +42,11 @@ use pipewire::spa::utils;
 
 use pipewire::main_loop::MainLoop;
 use pipewire::{context, main_loop};
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::io::Cursor;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::mpsc;
-use std::time::Duration;
 use strum::IntoEnumIterator;
 use ulid::Ulid;
 
@@ -61,8 +60,6 @@ struct PipewireManager {
     registry: PipewireRegistry,
 
     store: Rc<RefCell<Store>>,
-
-    _core_listener: Listener,
 }
 
 impl PipewireManager {
@@ -73,25 +70,13 @@ impl PipewireManager {
         callback_tx: mpsc::Sender<PipewireReceiver>,
     ) -> Self {
         let store = Rc::new(RefCell::new(Store::new(callback_tx.clone())));
-        let registry = PipewireRegistry::new(registry, store.clone(), Rc::new(core.clone()));
-
-        let done_store = Rc::downgrade(&store);
-        let _core_listener = core
-            .add_listener_local()
-            .done(move |_id, seq| {
-                if let Some(store) = done_store.upgrade() {
-                    store.borrow_mut().resolve_sync(seq.raw());
-                }
-            })
-            .register();
+        let registry = PipewireRegistry::new(registry, store.clone());
 
         Self {
             core,
             mainloop,
             registry,
             store,
-
-            _core_listener,
         }
     }
 
@@ -610,12 +595,7 @@ impl PipewireManager {
             ready_sender: Some(sender),
         };
 
-        // Queue a sync - when it fires, all server-side operations are complete
-        let seq = self.core.sync(0).expect("core sync failed");
-        self.store
-            .borrow_mut()
-            .add_pending_link(seq.raw(), parent_id, group);
-
+        self.store.borrow_mut().managed_link_add(parent_id, group);
         Ok(())
     }
 
@@ -732,7 +712,7 @@ impl PipewireManager {
                 if let Some(listener_bound_store) = listener_bound_store.upgrade() {
                     listener_bound_store
                         .borrow_mut()
-                        .managed_link_bound(parent_id, id, pw_id);
+                        .managed_link_ready(parent_id, id, pw_id);
                 }
             })
             .error(move |seq, res, message| {

@@ -72,10 +72,6 @@ pub struct Store {
     // Usable Nodes are unmanaged device / client nodes with a stereo setup
     usable_client_nodes: Vec<u32>,
 
-    // Pending Stuff
-    pending_link_syncs: HashMap<i32, PendingLinkSync>,
-    pending_device_syncs: HashMap<i32, u32>,
-
     callback_tx: mpsc::Sender<PipewireReceiver>,
 }
 
@@ -101,9 +97,6 @@ impl Store {
             unmanaged_client_nodes: HashMap::new(),
 
             unmanaged_links: HashMap::new(),
-
-            pending_link_syncs: HashMap::new(),
-            pending_device_syncs: HashMap::new(),
 
             usable_client_nodes: vec![],
 
@@ -134,16 +127,6 @@ impl Store {
         let _ = self
             .callback_tx
             .send(PipewireReceiver::AnnouncedClock(rate));
-    }
-
-    // ----- SYNC Handler -----
-    pub fn resolve_sync(&mut self, seq: i32) {
-        if self.pending_link_syncs.contains_key(&seq) {
-            self.resolve_pending_link_sync(seq);
-        }
-        if self.pending_device_syncs.contains_key(&seq) {
-            self.resolve_pending_device_sync(seq);
-        }
     }
 
     // ----- FACTORIES -----
@@ -539,35 +522,6 @@ impl Store {
         self.managed_links.insert(id, group);
     }
 
-    pub fn add_pending_link(&mut self, seq: i32, parent_id: Ulid, group: LinkStore) {
-        self.pending_link_syncs.insert(
-            seq,
-            PendingLinkSync {
-                parent_id,
-                group,
-                bound_ids: HashMap::new(),
-            },
-        );
-    }
-
-    pub fn resolve_pending_link_sync(&mut self, seq: i32) {
-        if let Some(pending) = self.pending_link_syncs.remove(&seq) {
-            let mut group = pending.group;
-
-            // Apply collected pw_ids
-            for port in PortLocation::iter() {
-                if let Some(link) = &mut group.links[port]
-                    && let Some(pw_id) = pending.bound_ids.get(&link.internal_id)
-                {
-                    link.pw_id = Some(*pw_id);
-                }
-            }
-
-            self.managed_link_add(pending.parent_id, group);
-            self.managed_link_ready_check(pending.parent_id);
-        }
-    }
-
     pub fn managed_link_remove(&mut self, source: LinkType, destination: LinkType) {
         self.managed_links
             .retain(|_, link| link.source != source || link.destination != destination)
@@ -578,30 +532,23 @@ impl Store {
             .retain(|_, link| link.source != id && link.destination != id);
     }
 
-    pub fn managed_link_bound(&mut self, id: Ulid, link_id: Ulid, pw_id: u32) {
-        // Check pending syncs first
-        if let Some(pending) = self
-            .pending_link_syncs
-            .values_mut()
-            .find(|p| p.parent_id == id)
-        {
-            pending.bound_ids.insert(link_id, pw_id);
-            return;
-        }
-
-        // Sync already completed, group is in managed_links
+    pub fn managed_link_ready(&mut self, id: Ulid, link_id: Ulid, pw_id: u32) {
         if let Some(link) = self.managed_links.get_mut(&id) {
             for port in PortLocation::iter() {
                 if let Some(port) = &mut link.links[port]
                     && port.internal_id == link_id
                 {
                     port.pw_id = Some(pw_id);
+
+                    // This will be unmanaged before the link callback, so take ownership
                     self.unmanaged_links.remove(&pw_id);
                     break;
                 }
             }
-            self.managed_link_ready_check(id);
         }
+
+        // Regardless of what's happened here, perform a ready check on the parent
+        self.managed_link_ready_check(id);
     }
 
     /// Called when a link creation error occurs (e.g., "link already exists")
@@ -714,20 +661,6 @@ impl Store {
         }
     }
 
-    pub fn add_pending_device_sync(&mut self, seq: i32, id: u32) {
-        self.pending_device_syncs.insert(seq, id);
-    }
-
-    pub fn resolve_pending_device_sync(&mut self, seq: i32) {
-        if let Some(id) = self.pending_device_syncs.remove(&seq)
-            && let Some(node) = self.unmanaged_device_nodes.get_mut(&id)
-        {
-            debug!("Device Synced, Checking.. {}", id);
-            node.is_synced = true;
-            self.unmanaged_node_port_check(id);
-        }
-    }
-
     pub fn unmanaged_node_port_count_update(&mut self, id: u32, in_count: u32, out_count: u32) {
         // Ok, new plan here, because this can change on-the-fly we need to be able to work and
         // correctly handle that. So we'll check the 'old' one and the 'new' one and see if there's
@@ -753,14 +686,6 @@ impl Store {
         }
     }
 
-    pub fn unmanaged_node_set_clock_ready(&mut self, id: u32) {
-        if let Some(node) = self.unmanaged_device_nodes.get_mut(&id) {
-            node.clock_ready = true;
-            debug!("Node {} clock is now ready", id);
-            self.unmanaged_node_port_check(id);
-        }
-    }
-
     pub fn unmanaged_node_port_check(&mut self, id: u32) {
         // Check if a node is ready to be sent upstream or needs an update.
         // Called when:
@@ -772,14 +697,6 @@ impl Store {
         } else {
             return;
         };
-
-        if !node.clock_ready {
-            return;
-        }
-
-        if !node.is_synced {
-            return;
-        }
 
         // Check if we have port count expectations for both directions
         let has_port_count_info =
@@ -1352,10 +1269,4 @@ impl Drop for Store {
     fn drop(&mut self) {
         debug!("Dropping Pipewire Store");
     }
-}
-
-pub struct PendingLinkSync {
-    pub parent_id: Ulid,
-    pub group: LinkStore,
-    pub bound_ids: HashMap<Ulid, u32>, // link_id -> pw_id collected during sync wait
 }

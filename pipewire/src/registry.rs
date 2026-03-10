@@ -5,7 +5,6 @@ use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
 use log::debug;
 use pipewire::client::{Client, ClientChangeMask, ClientListener};
-use pipewire::core::Core;
 use pipewire::keys::{
     ACCESS, APP_NAME, APP_PROCESS_BINARY, AUDIO_CHANNEL, CLIENT_ID, DEVICE_DESCRIPTION, DEVICE_ID,
     DEVICE_NAME, DEVICE_NICK, FACTORY_NAME, FACTORY_TYPE_NAME, FACTORY_TYPE_VERSION,
@@ -33,7 +32,6 @@ use strum_macros::EnumIter;
 pub(crate) struct PipewireRegistry {
     registry: Rc<RefCell<Registry>>,
     store: Rc<RefCell<Store>>,
-    core: Rc<Core>,
 
     // These two need to exist, if the Listeners are dropped they simply stop working.
     registry_listener: Option<Listener>,
@@ -41,11 +39,10 @@ pub(crate) struct PipewireRegistry {
 }
 
 impl PipewireRegistry {
-    pub fn new(registry: Registry, store: Rc<RefCell<Store>>, core: Rc<Core>) -> Self {
+    pub fn new(registry: Registry, store: Rc<RefCell<Store>>) -> Self {
         let mut registry = Self {
             registry: Rc::new(RefCell::new(registry)),
             store,
-            core,
             registry_listener: None,
             registry_removal_listener: None,
         };
@@ -60,7 +57,6 @@ impl PipewireRegistry {
         let local_store = Rc::downgrade(&self.store);
         let listener_store = Rc::downgrade(&self.store);
         let registry = self.registry.clone();
-        let core = self.core.clone();
 
         self.registry
             .borrow()
@@ -102,7 +98,6 @@ impl PipewireRegistry {
 
                                 let bound: Option<Node> = registry.borrow().bind(global).ok();
                                 let info_local = listener_store.clone();
-                                let core_local = core.clone();
                                 if let Some(proxy) = bound {
                                     let listener = proxy.add_listener_local().info(move |info| {
                                         let inputs = info.n_input_ports();
@@ -113,17 +108,6 @@ impl PipewireRegistry {
 
                                             if store.unmanaged_device_node_get(id).is_some() {
                                                 store.unmanaged_node_port_count_update(id, inputs, outputs);
-
-                                                if let Some(props) = info.props() {
-                                                    let is_driver = props.get("node.driver")
-                                                        .and_then(|v| v.parse::<bool>().ok())
-                                                        .unwrap_or(false);
-                                                    let has_driver = props.get("node.driver-id").is_some();
-
-                                                    if is_driver || has_driver {
-                                                        store.unmanaged_node_set_clock_ready(id);
-                                                    }
-                                                }
                                             }
                                         }
                                     }).register();
@@ -133,9 +117,6 @@ impl PipewireRegistry {
                                 }
                                 // All unmanaged nodes should be handled, even if they don't have a parent
                                 store.unmanaged_device_node_add(id, node);
-                                let seq = core_local.sync(0).expect("core sync failed");
-                                store.add_pending_device_sync(seq.raw(), id);
-
                             } else if let Ok(mut node) = RegistryClientNode::try_from(props) {
                                 if let Some(client) = store.unmanaged_client_get(node.parent_id) {
                                     let bound: Option<Node> = registry.borrow().bind(global).ok();
@@ -520,8 +501,6 @@ pub(crate) struct RegistryDeviceNode {
 
     pub media_class: Option<String>,
     pub is_usable: bool,
-    pub clock_ready: bool,
-    pub is_synced: bool,
 
     pub nickname: Option<String>,
     pub description: Option<String>,
@@ -569,8 +548,6 @@ impl TryFrom<&DictRef> for RegistryDeviceNode {
 
             media_class,
             is_usable: false,
-            clock_ready: false,
-            is_synced: false,
 
             nickname,
             description,
