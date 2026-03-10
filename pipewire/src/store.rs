@@ -753,16 +753,12 @@ impl Store {
         }
     }
 
-    pub fn unmanaged_node_set_clock_ready(&mut self, id: u32) -> bool {
-        if let Some(node) = self.unmanaged_device_nodes.get_mut(&id)
-            && !node.clock_ready
-        {
+    pub fn unmanaged_node_set_clock_ready(&mut self, id: u32) {
+        if let Some(node) = self.unmanaged_device_nodes.get_mut(&id) {
             node.clock_ready = true;
             debug!("Node {} clock is now ready", id);
             self.unmanaged_node_port_check(id);
-            return true;
         }
-        false
     }
 
     pub fn unmanaged_node_port_check(&mut self, id: u32) {

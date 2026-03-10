@@ -120,9 +120,8 @@ impl PipewireRegistry {
                                                         .unwrap_or(false);
                                                     let has_driver = props.get("node.driver-id").is_some();
 
-                                                    if is_driver || has_driver &&  store.unmanaged_node_set_clock_ready(id) {
-                                                        let seq = core_local.sync(0).expect("core sync failed");
-                                                        store.add_pending_device_sync(seq.raw(), id);
+                                                    if is_driver || has_driver {
+                                                        store.unmanaged_node_set_clock_ready(id);
                                                     }
                                                 }
                                             }
@@ -134,7 +133,8 @@ impl PipewireRegistry {
                                 }
                                 // All unmanaged nodes should be handled, even if they don't have a parent
                                 store.unmanaged_device_node_add(id, node);
-
+                                let seq = core_local.sync(0).expect("core sync failed");
+                                store.add_pending_device_sync(seq.raw(), id);
 
                             } else if let Ok(mut node) = RegistryClientNode::try_from(props) {
                                 if let Some(client) = store.unmanaged_client_get(node.parent_id) {
