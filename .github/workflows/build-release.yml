@@ -39,3 +39,9 @@ jobs:
         with:
           name: rpm-artifact
           path: ./target/generate-rpm/*.rpm
+
+      - name: "Upload Basic Binary Artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-artifact
+          path: ./pipeweaver-daemon.zip

@@ -28,3 +28,5 @@ cargo deb -p pipeweaver-daemon --no-build
 # Then the RPM
 cargo generate-rpm -p daemon
 
+# Now grab the generated binary and drop it into a zip file..
+zip -j pipeweaver-daemon.zip target/release/pipeweaver-daemon
