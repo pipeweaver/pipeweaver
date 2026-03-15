@@ -43,5 +43,5 @@ jobs:
       - name: "Upload Basic Binary Artifact"
         uses: actions/upload-artifact@v4
         with:
-          name: rpm-artifact
+          name: binary-artifact
           path: ./pipeweaver-daemon.zip
