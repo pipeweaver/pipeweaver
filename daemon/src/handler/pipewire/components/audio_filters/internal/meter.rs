@@ -96,7 +96,9 @@ impl FilterHandler for MeterFilter {
             let meter = self.calculate_meter(self.peak);
 
             // Always send meter updates every 100ms to maintain UI meter decay
-            let _ = self.callback.blocking_send((self.node_id, meter));
+            if self.callback.capacity() != 0 {
+                let _ = self.callback.blocking_send((self.node_id, meter));
+            }
 
             // Reset our values
             self.peak = 0.0;
