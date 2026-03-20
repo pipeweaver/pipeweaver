@@ -328,6 +328,10 @@ pub struct FilterProperties {
     pub linger: bool,
     pub callback: Box<dyn FilterHandler>,
 
+    // Latency Configuration
+    pub buffer: u32,
+    pub rate: u32,
+
     pub ready_sender: Option<oneshot::Sender<()>>,
 }
 impl Debug for FilterProperties {
