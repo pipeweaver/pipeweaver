@@ -89,6 +89,21 @@ impl PipewireManager {
                         return;
                     }
 
+                    if let Some(id) = store_ref.pending_filter_syncs.remove(&seq.raw()) {
+                        debug!("Filter sync completed for node {}, scheduling send..", id);
+                        if let Some(mainloop) = done_mainloop.upgrade() {
+                            let timer_store = Rc::downgrade(&store);
+                            let timer = mainloop.loop_().add_timer(move |_| {
+                                if let Some(store) = timer_store.upgrade() {
+                                    let mut store = store.borrow_mut();
+                                    store.resolve_pending_filter_sync(id);
+                                }
+                            });
+                            timer.update_timer(Some(Duration::from_millis(50)), None);
+                            std::mem::forget(timer);
+                        }
+                    }
+
                     if let Some(node_id) = store_ref.pending_device_syncs.remove(&seq.raw()) {
                         debug!(
                             "Device sync completed for node {}, scheduling port check",
@@ -464,6 +479,7 @@ impl PipewireManager {
         let listener_input_ports = input_ports.clone();
         let listener_output_ports = output_ports.clone();
         let listener_state_store = Rc::downgrade(&self.store);
+        let listener_core = self.core.clone();
         let listener_id = props.filter_id;
         let listener = filter
             .add_local_listener_with_user_data(data_inner)
@@ -471,9 +487,11 @@ impl PipewireManager {
                 if old == FilterState::Connecting {
                     debug!("[{}] Filter Connected", listener_id);
                     if let Some(listener_state_store) = listener_state_store.upgrade() {
-                        listener_state_store
-                            .borrow_mut()
-                            .managed_filter_set_pw_id(listener_id, filter.node_id());
+                        let mut store = listener_state_store.borrow_mut();
+                        store.managed_filter_set_pw_id(listener_id, filter.node_id());
+
+                        let seq = listener_core.sync(0).expect("core sync failed");
+                        store.add_pending_filter(seq.raw(), listener_id)
                     }
                 }
             })

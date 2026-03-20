@@ -75,6 +75,7 @@ pub struct Store {
     // Pending Stuff
     pub(crate) pending_link_syncs: HashMap<i32, PendingLinkSync>,
     pub(crate) pending_device_syncs: HashMap<i32, u32>,
+    pub(crate) pending_filter_syncs: HashMap<i32, Ulid>,
 
     callback_tx: mpsc::Sender<PipewireReceiver>,
 }
@@ -104,6 +105,7 @@ impl Store {
 
             pending_link_syncs: HashMap::new(),
             pending_device_syncs: HashMap::new(),
+            pending_filter_syncs: HashMap::new(),
 
             usable_client_nodes: vec![],
 
@@ -460,6 +462,17 @@ impl Store {
     }
 
     // ----- MANAGED FILTERS -----
+    pub fn add_pending_filter(&mut self, seq: i32, id: Ulid) {
+        self.pending_filter_syncs.insert(seq, id);
+    }
+
+    pub fn resolve_pending_filter_sync(&mut self, id: Ulid) {
+        let filter = self.managed_filters.get_mut(&id).expect("Broke");
+        if let Some(Some(sender)) = filter.ready_sender.take() {
+            let _ = sender.send(());
+        }
+    }
+
     pub fn managed_filter_add(&mut self, filter: FilterStore) {
         debug!("[{}] Filter Added to Store", &filter.id);
         self.managed_filters.insert(filter.id, filter);
@@ -477,10 +490,6 @@ impl Store {
     pub fn managed_filter_set_pw_id(&mut self, id: Ulid, pw_id: u32) {
         let filter = self.managed_filters.get_mut(&id).expect("Broke");
         filter.pw_id = Some(pw_id);
-
-        if let Some(Some(sender)) = filter.ready_sender.take() {
-            let _ = sender.send(());
-        }
     }
 
     pub fn managed_filter_set_parameter(
@@ -542,6 +551,7 @@ impl Store {
 
     pub fn resolve_pending_link_sync(&mut self, seq: i32) {
         if let Some(pending) = self.pending_link_syncs.remove(&seq) {
+            debug!("Resolving Link Creation..");
             let mut group = pending.group;
 
             // Apply collected pw_ids
