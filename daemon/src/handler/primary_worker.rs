@@ -77,7 +77,10 @@ impl PrimaryWorker {
 
             // Used to pass messages into the Pipewire Manager
             let (command_sender, command_receiver) = mpsc::channel(32);
-            let (worker_sender, mut worker_receiver) = mpsc::channel(32);
+
+            // We need to keep this one a little high, during load there may be a LOT of changes coming in (either transient or otherwise)
+            // as pipewire sends in data, and we run the risk of blocking the command sender.
+            let (worker_sender, mut worker_receiver) = mpsc::channel(256);
             let (stop_sender, stop_receiver) = oneshot::channel();
             let (ready_sender, ready_receiver) = oneshot::channel();
             let mut profile_tick = time::interval(Duration::from_secs(5));
