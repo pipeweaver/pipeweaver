@@ -196,9 +196,6 @@ impl PipewireManager {
                 true => "false",
                 false => "true"
             },
-
-            // Keep the monitor as close to 'real-time' as possible
-            //"monitor.passthrough" => "true",
         };
 
         debug!(
@@ -635,9 +632,15 @@ impl PipewireManager {
             let (src_id, src_index) = self.get_port(source, registry::Direction::Out, port)?;
             let (tgt_id, tgt_index) = self.get_port(dest, registry::Direction::In, port)?;
 
+            // If the Source and Destination aren't physical nodes, we should flag the link as
+            // passive, otherwise it should be active.
+            let is_passive = !matches!(source, LinkType::UnmanagedNode(_))
+                && !matches!(dest, LinkType::UnmanagedNode(_));
+
             // Now we simply create the link
-            let (link, proxy_lis) =
-                self.create_port_link(link_id, parent_id, src_id, src_index, tgt_id, tgt_index)?;
+            let (link, proxy_lis) = self.create_port_link(
+                link_id, parent_id, src_id, src_index, tgt_id, tgt_index, is_passive,
+            )?;
 
             // Create the LinkStore Mapping for this link
             let store = LinkStoreMap {
@@ -740,6 +743,7 @@ impl PipewireManager {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn create_port_link(
         &self,
         id: Ulid,
@@ -748,6 +752,7 @@ impl PipewireManager {
         src_port: u32,
         dest_node: u32,
         dest_port: u32,
+        is_passive: bool,
     ) -> Result<(Link, ProxyListener)> {
         let listener_info_store = Rc::downgrade(&self.store);
         let link = self
@@ -761,13 +766,7 @@ impl PipewireManager {
                     *LINK_INPUT_PORT => dest_port.to_string(),
                     *OBJECT_LINGER => "false",
 
-                    // No passivity here. While our links may, in some cases, be attached to
-                    // physical sources / sinks, in other cases they're attached to audio_filters which
-                    // don't have the opportunity to go idle, and implying as such can create a
-                    // disconnect between internal and external behaviours.
-                    //
-                    // TODO: send a parameter indicating the node types
-                    *NODE_PASSIVE => "false",
+                    *NODE_PASSIVE => if is_passive { "true" } else { "false" },
                 },
             )
             .map_err(|e| anyhow!("Failed to create link: {}", e))?;
