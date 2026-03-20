@@ -62,7 +62,7 @@ include_dir = "0.7.4"
 # fork fixes that, and allows cleaner fallthrough, allowing it to retry when the service appears.
 ksni = "0.3.3"
 
-image = "0.25.9"
+image = { version = "0.25.9", default-features = false, features = ["png"] }
 open = "5.3.3"
 which = "8.0.0"
 
