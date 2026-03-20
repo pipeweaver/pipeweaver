@@ -40,6 +40,7 @@ use pipewire::spa::param::ParamType;
 use pipewire::spa::pod::serialize::PodSerializer;
 use pipewire::spa::utils;
 
+use pipewire::main_loop::MainLoop;
 use pipewire::{context, main_loop};
 use std::cell::RefCell;
 use std::io::Cursor;
@@ -55,6 +56,7 @@ pub(crate) struct FilterData {
 
 struct PipewireManager {
     core: Core,
+    mainloop: Rc<MainLoop>,
     registry: PipewireRegistry,
 
     store: Rc<RefCell<Store>>,
@@ -63,6 +65,7 @@ struct PipewireManager {
 impl PipewireManager {
     pub fn new(
         core: Core,
+        mainloop: Rc<MainLoop>,
         registry: Registry,
         callback_tx: mpsc::Sender<PipewireReceiver>,
     ) -> Self {
@@ -71,6 +74,7 @@ impl PipewireManager {
 
         Self {
             core,
+            mainloop,
             registry,
             store,
         }
@@ -865,6 +869,7 @@ pub fn run_pw_main_loop(
 
     let manager = Rc::new(RefCell::new(PipewireManager::new(
         core,
+        mainloop.clone(),
         registry,
         callback_tx,
     )));
