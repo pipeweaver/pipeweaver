@@ -229,6 +229,7 @@ impl PipewireManager {
 
         loop {
             select!(
+                biased;
                 Some(command) = self.command_receiver.recv() => {
                     match command {
                         ManagerMessage::Execute(command, tx) => {
