@@ -100,6 +100,9 @@ impl PrimaryWorker {
             // Wait until the manager reports itself as ready
             let _ = ready_receiver.await;
 
+            // Load the initial status
+            self.update_status(&command_sender).await;
+
             let mut profile_changed = false;
 
             loop {
