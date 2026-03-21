@@ -101,8 +101,7 @@ impl PrimaryWorker {
             let _ = ready_receiver.await;
 
             // Load the initial status
-            self.update_status(&command_sender).await;
-
+            self.update_status(&command_sender, true).await;
             let mut profile_changed = false;
 
             loop {
@@ -110,7 +109,7 @@ impl PrimaryWorker {
                     Some(message) = message_receiver.recv() => {
                         match self.handle_message(&command_sender, message).await {
                             MessageResult::UpdateState => {
-                                self.update_status(&command_sender).await;
+                                self.update_status(&command_sender, false).await;
                                 profile_changed = true;
                             }
                             MessageResult::Reset => {
@@ -129,11 +128,11 @@ impl PrimaryWorker {
                             WorkerMessage::TransientChange => {
                                 // A physical device has changed, we need to update the main
                                 // status to include it.
-                                self.update_status(&command_sender).await;
+                                self.update_status(&command_sender, false).await;
                             }
                             WorkerMessage::ProfileChanged => {
                                 // Something's been changed in the Profile
-                                self.update_status(&command_sender).await;
+                                self.update_status(&command_sender, false).await;
                                 profile_changed = true;
                             }
                         }
@@ -252,7 +251,7 @@ impl PrimaryWorker {
         MessageResult::None
     }
 
-    async fn update_status(&mut self, pw_tx: &Manage) {
+    async fn update_status(&mut self, pw_tx: &Manage, initial: bool) {
         let mut status = DaemonStatus::default();
 
         let (cmd_tx, cmd_rx) = oneshot::channel();
@@ -275,13 +274,15 @@ impl PrimaryWorker {
             false
         });
 
-        let previous = serde_json::to_value(&self.last_status).unwrap();
-        let new = serde_json::to_value(&status).unwrap();
+        if self.patch_broadcast.receiver_count() > 0 && !initial {
+            let previous = serde_json::to_value(&self.last_status).unwrap();
+            let new = serde_json::to_value(&status).unwrap();
 
-        let patch = diff(&previous, &new);
-        if !patch.0.is_empty() {
-            // Something has changed in our config, broadcast it to listeners
-            let _ = self.patch_broadcast.send(PatchEvent { data: patch });
+            let patch = diff(&previous, &new);
+            if !patch.is_empty() {
+                // Something has changed in our config, broadcast it to listeners
+                let _ = self.patch_broadcast.send(PatchEvent { data: patch });
+            }
         }
 
         self.last_status = status;
