@@ -1,6 +1,7 @@
 use clap::ValueEnum;
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::fmt::Debug;
 use std::str::FromStr;
 use strum_macros::{Display, EnumIter};
@@ -134,6 +135,14 @@ impl Default for Colour {
 
 #[derive(Debug)]
 pub struct InvalidColour;
+
+impl fmt::Display for InvalidColour {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "invalid colour (expected #RGB or #RRGGBB)")
+    }
+}
+
+impl std::error::Error for InvalidColour {}
 
 impl FromStr for Colour {
     type Err = InvalidColour;
