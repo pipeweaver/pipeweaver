@@ -131,9 +131,6 @@ impl FilterManagementLocal for PipewireManager {
             linger: false,
             callback: Box::new(PassThroughFilter::new()),
 
-            buffer: self.profile.audio_quantum.into(),
-            rate: self.clock_rate.unwrap_or(48000),
-
             ready_sender: None,
         }
     }
@@ -152,9 +149,6 @@ impl FilterManagementLocal for PipewireManager {
             app_name: APP_NAME.to_string(),
             linger: false,
             callback: Box::new(VolumeFilter::new(0)),
-
-            buffer: self.profile.audio_quantum.into(),
-            rate: self.clock_rate.unwrap_or(48000),
 
             ready_sender: None,
         }
@@ -180,9 +174,6 @@ impl FilterManagementLocal for PipewireManager {
                 self.meter_enabled,
                 rate,
             )),
-
-            buffer: self.profile.audio_quantum.into(),
-            rate,
 
             ready_sender: None,
         }

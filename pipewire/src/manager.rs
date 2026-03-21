@@ -519,8 +519,8 @@ impl PipewireManager {
         let builder = Builder::new(&mut buffer);
 
         let latency = spa_process_latency_info {
-            quantum: props.buffer as f32,
-            rate: props.rate as i32,
+            quantum: 0.,
+            rate: 0,
             ns: 1,
         };
         let pod = unsafe {
