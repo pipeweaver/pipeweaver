@@ -80,7 +80,6 @@ impl PipewireManager {
         let _core_listener = core
             .add_listener_local()
             .done(move |_id, seq| {
-                debug!("Core done callback fired, seq: {}", seq.raw());
                 if let Some(store) = done_store.upgrade() {
                     let mut store_ref = store.borrow_mut();
 

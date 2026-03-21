@@ -1189,8 +1189,13 @@ impl Store {
 
     // ----- UNMANAGED LINKS -----
     pub fn unmanaged_link_add(&mut self, id: u32, link: RegistryLink) {
+        let in_pending = self
+            .pending_link_syncs
+            .values()
+            .any(|p| p.bound_ids.values().any(|&pw_id| pw_id == id));
+
         // Check our Managed Links to see if this is actually unmanaged
-        if self.is_managed_link(id).is_none() {
+        if self.is_managed_link(id).is_none() && !in_pending {
             self.unmanaged_links.insert(id, link);
         }
     }
@@ -1208,30 +1213,47 @@ impl Store {
     // to go through our stored data, find the corresponding item, and handle it.
     pub fn remove_by_id(&mut self, id: u32) {
         if self.unmanaged_devices.contains_key(&id) {
+            debug!("Removing Unmanaged Device: {}", id);
             return self.unmanaged_device_remove(id);
         }
 
         if self.unmanaged_device_nodes.contains_key(&id) {
+            debug!("Removing Unmanaged Nodes: {}", id);
             return self.unmanaged_device_node_remove(id);
         }
 
         if self.unmanaged_clients.contains_key(&id) {
+            debug!("Removing Unmanaged Client: {}", id);
             return self.unmanaged_client_remove(id);
         }
 
         if self.unmanaged_client_nodes.contains_key(&id) {
+            debug!("Removing Unmanaged Client Node: {}", id);
             return self.unmanaged_client_node_remove(id);
         }
 
         if self.unmanaged_links.contains_key(&id) {
+            debug!("Removing Unmanaged Links: {}", id);
             return self.unmanaged_link_remove(id);
         }
 
         // Something may be trying to mess with a managed link, if so, completely drop our links
         // and report back to whatever is calling us that it's happened, so they can action it.
+        if let Some(id) = self.is_managed_link(id) {
+            debug!("Removing Managed Link: {}", id);
+            if let Some(link) = self.managed_links.remove(&id) {
+                debug!("Removed Links: {:?} -> {:?}", link.source, link.destination);
+                let _ = self.callback_tx.send(PipewireReceiver::ManagedLinkDropped(
+                    link.source,
+                    link.destination,
+                ));
+            }
+        }
+
         if let Some(id) = self.is_managed_link(id)
             && let Some(link) = self.managed_links.remove(&id)
         {
+            debug!("IT HERE!");
             let _ = self.callback_tx.send(PipewireReceiver::ManagedLinkDropped(
                 link.source,
                 link.destination,
