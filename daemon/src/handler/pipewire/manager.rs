@@ -213,14 +213,6 @@ impl PipewireManager {
 
         // A simple list of applications which have been discovered, but not flagged 'Ready'
         let mut discovered_applications: HashMap<u32, ApplicationNode> = HashMap::new();
-
-        // Let the primary worker know we're ready
-        let _ = self
-            .ready_sender
-            .take()
-            .expect("Ready Sender Missing")
-            .send(());
-
         let mut requeue: Vec<PipewireReceiver> = vec![];
 
         // Pull out the Meter Receiver
@@ -283,6 +275,14 @@ impl PipewireManager {
                                 error!("Error Loading Profile: {}", e);
                             }
                             loaded_profile = true;
+
+                            // Let the primary worker know we're ready
+                            let _ = self
+                                .ready_sender
+                                .take()
+                                .expect("Ready Sender Missing")
+                                .send(());
+
                             continue;
                         }
                     } else if !loaded_profile {
