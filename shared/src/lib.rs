@@ -1,10 +1,13 @@
+use clap::ValueEnum;
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use strum_macros::{Display, EnumIter};
 use ulid::Ulid;
 
-#[derive(Debug, Display, Copy, Clone, PartialEq, Enum, EnumIter, Serialize, Deserialize)]
+#[derive(
+    Debug, Display, Copy, Clone, PartialEq, Enum, EnumIter, Serialize, Deserialize, ValueEnum,
+)]
 pub enum NodeType {
     PhysicalSource,
     PhysicalTarget,
@@ -19,14 +22,16 @@ pub enum Mix {
     B,
 }
 
-#[derive(Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq)]
+#[derive(
+    Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq, ValueEnum,
+)]
 pub enum DeviceType {
     #[default]
     Source,
     Target,
 }
 
-#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Enum, EnumIter)]
+#[derive(Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq)]
 pub enum MuteState {
     #[default]
     Unmuted,

@@ -8,6 +8,10 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-clap = { version = "4.5.53", features = ["derive"] }
+clap = { workspace = true }
+ulid = { workspace = true }
+
+pipeweaver-shared = { path = "../shared" }
+
 
 [build-dependencies]

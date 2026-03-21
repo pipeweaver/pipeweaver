@@ -24,6 +24,9 @@ repository = "https://github.com/pipeweaver/pipeweaver"
 ### Logging ###
 log = "0.4.29"
 
+### Command Line Parsing ###
+clap = { version = "4.6.0", features = ["derive"] }
+
 ### Error Handling ###
 anyhow = "1.0.100"
 

@@ -1944,6 +1944,8 @@ name = "pipeweaver-client"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "pipeweaver-shared",
+ "ulid",
 ]
 
 [[package]]
@@ -2033,6 +2035,7 @@ dependencies = [
 name = "pipeweaver-shared"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "enum-map",
  "serde",
  "serde_json",
