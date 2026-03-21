@@ -14,9 +14,8 @@ use pipewire::keys::{
     APP_ICON_NAME, APP_ID, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME,
     FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT,
     MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_ALWAYS_PROCESS,
-    NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_LATENCY,
-    NODE_MAX_LATENCY, NODE_NAME, NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER,
-    PORT_MONITOR, PORT_NAME,
+    NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_NAME, NODE_NICK,
+    NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME,
 };
 use pipewire::link::Link;
 use pipewire::node::NodeChangeMask;
@@ -170,8 +169,6 @@ impl PipewireManager {
             },
 
             *AUDIO_CHANNELS => "2",
-            *NODE_LATENCY => format!("{}/{}", properties.buffer, properties.rate),
-            *NODE_MAX_LATENCY => format!("{}/{}", properties.buffer, properties.rate),
 
             // Force the QUANTUM and the RATE to ensure that we're not internally adjusted when
             // latency occurs following a link
@@ -399,9 +396,6 @@ impl PipewireManager {
             *NODE_NICK => &*props.filter_nick,
             *NODE_DESCRIPTION => &*props.filter_description,
             *NODE_ALWAYS_PROCESS => "true",
-
-            *NODE_FORCE_QUANTUM => props.buffer.to_string(),
-            *NODE_FORCE_RATE => props.rate.to_string(),
 
             *MEDIA_TYPE => "Audio",
             *MEDIA_CATEGORY => "Filter",
