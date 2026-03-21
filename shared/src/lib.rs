@@ -17,7 +17,9 @@ pub enum NodeType {
     VirtualTarget,
 }
 
-#[derive(Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq)]
+#[derive(
+    Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq, ValueEnum,
+)]
 pub enum Mix {
     #[default]
     A,
@@ -33,7 +35,9 @@ pub enum DeviceType {
     Target,
 }
 
-#[derive(Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(
+    Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq, ValueEnum,
+)]
 pub enum MuteState {
     #[default]
     Unmuted,
@@ -41,7 +45,18 @@ pub enum MuteState {
 }
 
 #[derive(
-    Default, Debug, Copy, Clone, Hash, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq,
+    Default,
+    Debug,
+    Copy,
+    Clone,
+    Hash,
+    Enum,
+    EnumIter,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+    ValueEnum,
 )]
 pub enum MuteTarget {
     #[default]
@@ -50,7 +65,18 @@ pub enum MuteTarget {
 }
 
 #[derive(
-    Default, Debug, Copy, Clone, Hash, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq,
+    Default,
+    Debug,
+    Copy,
+    Clone,
+    Hash,
+    Enum,
+    EnumIter,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+    ValueEnum,
 )]
 pub enum OrderGroup {
     #[default]
@@ -59,7 +85,7 @@ pub enum OrderGroup {
     Hidden,
 }
 
-#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq, ValueEnum)]
 pub enum Quantum {
     Quantum8,
     Quantum16,
