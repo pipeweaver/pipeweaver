@@ -70,6 +70,7 @@ pub enum APICommand {
     SetVolumeByName(String, Option<Mix>, u8),
 
     SetSourceVolumeLinked(Ulid, bool),
+    SetSourceVolumeLinkedByName(String, bool),
 
     SetTargetMix(Ulid, Mix),
     SetTargetMixByName(String, Mix),
@@ -121,6 +122,8 @@ pub enum APICommand {
 
     // Set the position of a node in the order tree
     SetOrderGroup(Ulid, OrderGroup),
+    SetOrderGroupByName(String, OrderGroup),
+
     SetOrder(Ulid, u8),
     SetOrderByName(String, u8),
 }

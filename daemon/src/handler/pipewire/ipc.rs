@@ -109,6 +109,15 @@ impl IPCHandler for PipewireManager {
                 .set_source_volume_linked(id, linked)
                 .await
                 .map(|_| Resp::Ok),
+            Cmd::SetSourceVolumeLinkedByName(name, linked) => {
+                if let Some(id) = self.get_node_id_by_name(&name) {
+                    self.set_source_volume_linked(id, linked)
+                        .await
+                        .map(|_| Resp::Ok)
+                } else {
+                    bail!("Node name {} not Found", name);
+                }
+            }
 
             Cmd::SetTargetMix(target, mix) => self
                 .routing_set_target_mix(target, mix)
@@ -361,6 +370,13 @@ impl IPCHandler for PipewireManager {
             }
 
             Cmd::SetOrderGroup(id, group) => self.node_set_group(id, group).await.map(|_| Resp::Ok),
+            Cmd::SetOrderGroupByName(name, group) => {
+                if let Some(id) = self.get_node_id_by_name(&name) {
+                    self.node_set_group(id, group).await.map(|_| Resp::Ok)
+                } else {
+                    bail!("Node name {} not Found", name);
+                }
+            }
             Cmd::SetOrder(id, position) => {
                 self.node_set_position(id, position).await.map(|_| Resp::Ok)
             }
