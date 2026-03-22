@@ -78,8 +78,10 @@ export default {
       let command = {
         "CreateNode": [final_type, name]
       }
-      websocket.send_command(command)
-    },
+      websocket.send_command(command).catch(err => {
+        alert("Error: " + err);
+      });
+    }
   },
 
   computed: {
@@ -95,7 +97,6 @@ export default {
       }
     },
   }
-
 }
 </script>
 

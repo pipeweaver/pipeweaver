@@ -1,6 +1,5 @@
 <script setup>
 
-import {websocket} from "@/app/sockets.js";
 import Router from "@/views/desktop/routing/Router.vue";
 import Mixer from "@/views/Mixer.vue";
 import ApplicationsList from "@/views/desktop/applications/ApplicationsList.vue";
@@ -8,16 +7,6 @@ import {nextTick, ref} from "vue";
 import Settings from "@/views/Settings.vue";
 
 const activeTab = ref('router');
-
-function addDevice(type, e) {
-  let name = prompt("Device Name:");
-
-  // CreateNode(NodeType, String),
-  let command = {
-    "CreateNode": [type, name]
-  }
-  websocket.send_command(command)
-}
 
 async function switchTab(tab) {
   activeTab.value = tab;

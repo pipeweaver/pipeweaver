@@ -17,13 +17,22 @@ export class Websocket {
 
       let message_id = json.id
       let message_data = json.data
+
+      console.log('message_id:', message_id, 'queue keys:', Object.keys(self.#message_queue))
+
       if (message_data['Status'] !== undefined) {
         self.#fulfill_promise(message_id, message_data, true)
       } else if (message_data['Patch'] !== undefined) {
         // Nothing ever requests patch data, so we can ignore this.
         store.patchData(message_data)
       } else if (message_data === 'Ok' || message_data['Pipewire'] !== undefined) {
-        self.#fulfill_promise(message_id, message_data, true)
+
+        if (message_data['Pipewire']['Err'] !== undefined) {
+          console.log(`FAILED: ` + message_data['Pipewire']['Err'])
+          self.#fulfill_promise(message_id, message_data['Pipewire']['Err'], false)
+        } else {
+          self.#fulfill_promise(message_id, message_data, true)
+        }
       } else {
         self.#fulfill_promise(message_id, message_data, false)
         console.log('Received Error from Websocket: ' + event.data)
@@ -102,7 +111,7 @@ export class Websocket {
     let request = {
       Pipewire: command
     }
-    return this.#sendRequest(request)
+    return this.#sendRequest(request);
   }
 
   #sendRequest(request) {

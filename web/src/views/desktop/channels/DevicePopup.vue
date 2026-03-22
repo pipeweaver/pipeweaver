@@ -173,7 +173,9 @@ export default {
         let command = {
           "RenameNode": [this.getId(), name]
         }
-        websocket.send_command(command)
+        websocket.send_command(command).catch(err => {
+          alert("Error: " + err);
+        });
         this.$refs.popup.hideDialog();
       }
     },
@@ -226,7 +228,7 @@ export default {
       <span>Change Colour</span>
     </div>
     <div class="separator"/>
-    
+
     <div v-if="order_group !== DeviceOrderType.Pinned" class="entry"
          @click="e => onPinClicked(true, e)">
       <span class="selected"></span>
