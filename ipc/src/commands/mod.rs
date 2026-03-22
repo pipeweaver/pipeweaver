@@ -56,34 +56,63 @@ pub enum DaemonCommand {
 pub enum APICommand {
     CreateNode(NodeType, String),
     RenameNode(Ulid, String),
+    RenameNodeByName(String, String),
+
     SetNodeColour(Ulid, Colour),
+    SetNodeColourByName(String, Colour),
+
     RemoveNode(Ulid),
+    RemoveNodeByName(String),
 
     SetSourceVolume(Ulid, Mix, u8),
-    SetSourceVolumeLinked(Ulid, bool),
     SetTargetVolume(Ulid, u8),
+    SetVolumeByName(String, Option<Mix>, u8),
+
+    SetSourceVolumeLinked(Ulid, bool),
+
     SetTargetMix(Ulid, Mix),
+    SetTargetMixByName(String, Mix),
 
     SetRoute(Ulid, Ulid, bool),
+    SetRouteBySourceName(String, Ulid, bool),
+    SetRouteByTargetName(Ulid, String, bool),
+    SetRouteByNames(String, String, bool),
 
     AddSourceMuteTarget(Ulid, MuteTarget),
+    AddSourceMuteTargetByName(String, MuteTarget),
     DelSourceMuteTarget(Ulid, MuteTarget),
+    DelSourceMuteTargetByName(String, MuteTarget),
 
     AddMuteTargetNode(Ulid, MuteTarget, Ulid),
+    AddMuteTargetNodeBySourceName(String, MuteTarget, Ulid),
+    AddMuteTargetNodeByTargetName(Ulid, MuteTarget, String),
+    AddMuteTargetNodeByNames(String, MuteTarget, String),
+
     DelMuteTargetNode(Ulid, MuteTarget, Ulid),
+    DelMuteTargetNodeBySourceName(String, MuteTarget, Ulid),
+    DelMuteTargetNodeByTargetName(Ulid, MuteTarget, String),
+    DelMuteTargetNodeByNames(String, MuteTarget, String),
+
     ClearMuteTargetNodes(Ulid, MuteTarget),
+    ClearMuteTargetNodesByName(String, MuteTarget),
 
     SetTargetMuteState(Ulid, MuteState),
+    SetTargetMuteStatesByName(String, MuteState),
 
     // Attach or Detach physical nodes
     AttachPhysicalNode(Ulid, u32),
+    AttachPhysicalNodeByName(String, u32),
+
     RemovePhysicalNode(Ulid, usize),
+    RemovePhysicalNodeByName(String, usize),
 
     // Used for Application Routing
     SetApplicationRoute(AppDefinition, Ulid),
+    SetApplicationRouteByName(AppDefinition, String),
     ClearApplicationRoute(AppDefinition),
 
     SetTransientApplicationRoute(u32, Ulid),
+    SetTransientApplicationRouteByName(u32, String),
     ClearTransientApplicationRoute(u32),
 
     SetApplicationVolume(u32, u8),
@@ -92,6 +121,7 @@ pub enum APICommand {
     // Set the position of a node in the order tree
     SetOrderGroup(Ulid, OrderGroup),
     SetOrder(Ulid, u8),
+    SetOrderByName(String, u8),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
