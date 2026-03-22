@@ -12,6 +12,10 @@ pub struct Cli {
     #[arg(long)]
     pub status: bool,
 
+    /// Use HTTP Instead of IPC. Specify base path as the param (defaults to http://localhost:14565)
+    #[arg(long, num_args=0..=1, default_missing_value="http://localhost:14565")]
+    pub use_http: Option<String>,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

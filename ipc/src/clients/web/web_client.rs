@@ -19,7 +19,7 @@ impl WebClient {
         Ok(Self::new(url))
     }
 
-    fn new(url: String) -> Self {
+    pub fn new(url: String) -> Self {
         Self {
             url,
             status: DaemonStatus::default(),

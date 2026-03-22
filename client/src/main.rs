@@ -1,22 +1,57 @@
 mod cli;
-use anyhow::Result;
-use clap::Parser;
-use pipeweaver_ipc::commands::{APICommand, DaemonCommand, DaemonRequest};
-use pipeweaver_shared::AppDefinition;
 
-fn main() -> Result<()> {
+use anyhow::{Error, Result};
+use clap::Parser;
+use directories::BaseDirs;
+use interprocess::local_socket::GenericFilePath;
+use interprocess::local_socket::ToFsName;
+use interprocess::local_socket::tokio::prelude::LocalSocketStream;
+use interprocess::local_socket::traits::tokio::Stream;
+use pipeweaver_ipc::client::Client;
+use pipeweaver_ipc::clients::ipc::ipc_client::IPCClient;
+use pipeweaver_ipc::clients::ipc::ipc_socket::Socket;
+use pipeweaver_ipc::clients::web::web_client::WebClient;
+use pipeweaver_ipc::commands::{APICommand, DaemonCommand, DaemonRequest, DaemonResponse};
+use pipeweaver_shared::AppDefinition;
+use std::path::PathBuf;
+use std::{env, fs};
+
+const APP_NAME: &str = "PipeWeaver";
+const APP_NAME_ID: &str = "pipeweaver";
+
+#[tokio::main]
+async fn main() -> Result<()> {
     let cli = cli::Cli::parse();
 
-    let msg = match cli.command {
-        Some(command) => match command {
-            cli::Commands::Node { command } => handle_node_command(command),
-            cli::Commands::App { command } => handle_app_command(command),
-            cli::Commands::Route { command } => handle_route_command(command),
-            cli::Commands::Daemon { command } => handle_daemon_command(command),
-        },
-        None => return Ok(()),
+    // Attempt an IPC connection
+    let mut client: Box<dyn Client> = if let Some(url) = cli.use_http {
+        Box::new(WebClient::new(format!("{url}/api/command")))
+    } else {
+        let path = get_socket_path()?;
+
+        let connection = LocalSocketStream::connect(path.to_fs_name::<GenericFilePath>()?).await?;
+        let socket: Socket<DaemonResponse, DaemonRequest> = Socket::new(connection);
+        Box::new(IPCClient::new(socket))
     };
-    println!("PipeWeaver message: {msg:#?}");
+
+    // Poll the Status
+    client.poll_status().await?;
+
+    let msg = cli.command.map(|command| match command {
+        cli::Commands::Node { command } => handle_node_command(command),
+        cli::Commands::App { command } => handle_app_command(command),
+        cli::Commands::Route { command } => handle_route_command(command),
+        cli::Commands::Daemon { command } => handle_daemon_command(command),
+    });
+    if let Some(msg) = msg {
+        client.send(msg).await?;
+    }
+
+    if cli.status {
+        // Ok, convert this object to json for outputs
+        let out = serde_json::to_string_pretty(client.status())?;
+        println!("{}", out);
+    }
 
     Ok(())
 }
@@ -127,4 +162,20 @@ fn handle_daemon_command(cmd: cli::DaemonCommands) -> DaemonRequest {
         ResetAudio => DaemonCommand::ResetAudio,
     };
     DaemonRequest::Daemon(daemon_cmd)
+}
+
+pub fn get_socket_path() -> Result<PathBuf> {
+    let path = BaseDirs::new()
+        .and_then(|base| base.runtime_dir().map(|p| p.to_path_buf()))
+        .map(Ok::<PathBuf, Error>)
+        .unwrap_or_else(|| {
+            let tmp_dir = env::temp_dir().join(APP_NAME);
+            if !tmp_dir.exists() {
+                fs::create_dir_all(&tmp_dir)?;
+            }
+            Ok(tmp_dir)
+        })?;
+
+    let socket_path = path.join(format!("{}.socket", APP_NAME_ID));
+    Ok(socket_path)
 }

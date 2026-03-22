@@ -1945,8 +1945,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "directories",
+ "interprocess",
  "pipeweaver-ipc",
  "pipeweaver-shared",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

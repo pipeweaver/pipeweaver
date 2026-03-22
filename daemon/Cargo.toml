@@ -47,7 +47,7 @@ directories = "6.0.0"
 simplelog = "0.12.2"
 
 ### Async Runtime ###
-tokio = { version = "1.41.1", features = ["rt-multi-thread", "sync", "macros"] }
+tokio = { workspace = true }
 
 ### HTTP Server ###
 actix-web = { version = "4.12.1", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "ws"] }
