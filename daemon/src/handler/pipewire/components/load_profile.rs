@@ -6,9 +6,11 @@ use anyhow::Result;
 use log::debug;
 use pipeweaver_profile::DeviceDescription;
 use pipeweaver_shared::{NodeType, OrderGroup};
+use ulid::Ulid;
 
 pub(crate) trait LoadProfile {
     async fn load_profile(&mut self) -> Result<()>;
+    fn get_node_id_by_name(&self, name: &str) -> Option<Ulid>;
 }
 
 impl LoadProfile for PipewireManager {
@@ -19,6 +21,35 @@ impl LoadProfile for PipewireManager {
 
         Ok(())
     }
+
+    fn get_node_id_by_name(&self, name: &str) -> Option<Ulid> {
+        for device in &self.profile.devices.sources.physical_devices {
+            if device.description.name == name {
+                return Some(device.description.id);
+            }
+        }
+
+        for device in &self.profile.devices.sources.virtual_devices {
+            if device.description.name == name {
+                return Some(device.description.id);
+            }
+        }
+
+        for device in &self.profile.devices.targets.physical_devices {
+            if device.description.name == name {
+                return Some(device.description.id);
+            }
+        }
+
+        for device in &self.profile.devices.targets.virtual_devices {
+            if device.description.name == name {
+                return Some(device.description.id);
+            }
+        }
+
+        // This name wasn't found, so return none
+        None
+    }
 }
 
 trait LoadProfileLocal {
@@ -26,35 +57,77 @@ trait LoadProfileLocal {
     async fn profile_load_volumes(&mut self) -> Result<()>;
     async fn profile_apply_routing(&mut self) -> Result<()>;
     fn check_device_order_present(&mut self, dev: &DeviceDescription, source: bool) -> Result<()>;
+    fn validate_name(description: &mut DeviceDescription, all_devices: &mut Vec<(Ulid, String)>);
     fn validate_device_order(&mut self, source: bool) -> Result<()>;
 }
 
 impl LoadProfileLocal for PipewireManager {
     async fn profile_create_nodes(&mut self) -> Result<()> {
-        // Ok, iterate through the profile device node types, and make them
-        for device in self.profile.devices.sources.physical_devices.clone() {
-            self.node_create(NodeType::PhysicalSource, &device.description)
-                .await?;
-            self.check_device_order_present(&device.description, true)?;
+        // Collect all device (id, name) pairs for uniqueness checking
+        let mut all_devices: Vec<(Ulid, String)> = Vec::new();
+        for device in &self.profile.devices.sources.physical_devices {
+            all_devices.push((device.description.id, device.description.name.clone()));
+        }
+        for device in &self.profile.devices.sources.virtual_devices {
+            all_devices.push((device.description.id, device.description.name.clone()));
+        }
+        for device in &self.profile.devices.targets.physical_devices {
+            all_devices.push((device.description.id, device.description.name.clone()));
+        }
+        for device in &self.profile.devices.targets.virtual_devices {
+            all_devices.push((device.description.id, device.description.name.clone()));
         }
 
-        for device in self.profile.devices.sources.virtual_devices.clone() {
-            self.node_create(NodeType::VirtualSource, &device.description)
-                .await?;
-            self.check_device_order_present(&device.description, true)?;
+        // Validate names for all devices
+        for device in &mut self.profile.devices.sources.physical_devices {
+            Self::validate_name(&mut device.description, &mut all_devices);
+        }
+        for device in &mut self.profile.devices.sources.virtual_devices {
+            Self::validate_name(&mut device.description, &mut all_devices);
+        }
+        for device in &mut self.profile.devices.targets.physical_devices {
+            Self::validate_name(&mut device.description, &mut all_devices);
+        }
+        for device in &mut self.profile.devices.targets.virtual_devices {
+            Self::validate_name(&mut device.description, &mut all_devices);
+        }
+
+        // Second pass: create nodes and check device order
+        let mut physical_sources = Vec::new();
+        for device in &self.profile.devices.sources.physical_devices {
+            physical_sources.push(device.description.clone());
+        }
+        for desc in &physical_sources {
+            self.node_create(NodeType::PhysicalSource, desc).await?;
+            self.check_device_order_present(desc, true)?;
+        }
+
+        let mut virtual_sources = Vec::new();
+        for device in &self.profile.devices.sources.virtual_devices {
+            virtual_sources.push(device.description.clone());
+        }
+        for desc in &virtual_sources {
+            self.node_create(NodeType::VirtualSource, desc).await?;
+            self.check_device_order_present(desc, true)?;
         }
         self.validate_device_order(true)?;
 
-        for device in self.profile.devices.targets.physical_devices.clone() {
-            self.node_create(NodeType::PhysicalTarget, &device.description)
-                .await?;
-            self.check_device_order_present(&device.description, false)?;
+        let mut physical_targets = Vec::new();
+        for device in &self.profile.devices.targets.physical_devices {
+            physical_targets.push(device.description.clone());
+        }
+        for desc in &physical_targets {
+            self.node_create(NodeType::PhysicalTarget, desc).await?;
+            self.check_device_order_present(desc, false)?;
         }
 
-        for device in self.profile.devices.targets.virtual_devices.clone() {
-            self.node_create(NodeType::VirtualTarget, &device.description)
-                .await?;
-            self.check_device_order_present(&device.description, false)?;
+        let mut virtual_targets = Vec::new();
+        for device in &self.profile.devices.targets.virtual_devices {
+            virtual_targets.push(device.description.clone());
+        }
+        for desc in &virtual_targets {
+            self.node_create(NodeType::VirtualTarget, desc).await?;
+            self.check_device_order_present(desc, false)?;
         }
         self.validate_device_order(false)?;
 
@@ -82,6 +155,41 @@ impl LoadProfileLocal for PipewireManager {
         }
 
         Ok(())
+    }
+
+    fn validate_name(description: &mut DeviceDescription, all_devices: &mut Vec<(Ulid, String)>) {
+        let id = description.id;
+        let base_name = description.name.clone();
+        let mut count = 0;
+        loop {
+            let name = &description.name;
+            let mut found_duplicate = false;
+            for (other_id, other_name) in all_devices.iter() {
+                if *other_id != id && other_name == name {
+                    found_duplicate = true;
+                    break;
+                }
+            }
+            if found_duplicate {
+                count += 1;
+                description.name = format!("{}_{}", base_name, count);
+                // Update the name in all_devices for this id
+                for (other_id, other_name) in all_devices.iter_mut() {
+                    if *other_id == id {
+                        *other_name = description.name.clone();
+                    }
+                }
+            } else {
+                // Update the name in all_devices for this id (in case it changed)
+                for (other_id, other_name) in all_devices.iter_mut() {
+                    if *other_id == id {
+                        *other_name = description.name.clone();
+                    }
+                }
+                break;
+            }
+        }
+        // When we get here, we should be unique.
     }
 
     fn validate_device_order(&mut self, source: bool) -> Result<()> {
