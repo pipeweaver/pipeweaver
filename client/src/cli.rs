@@ -1,3 +1,4 @@
+use clap::ArgAction;
 use clap::{Parser, Subcommand};
 use pipeweaver_shared::{
     Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType, OrderGroup, Quantum,
@@ -81,6 +82,7 @@ pub enum NodeIdCommands {
         mix: Option<Mix>,
     },
     SetSourceVolumeLinked {
+        #[arg(value_parser, action = ArgAction::Set)]
         linked: bool,
     },
     SetTargetMix {
@@ -134,6 +136,8 @@ pub enum RouteCommands {
     Set {
         source: String,
         target: String,
+
+        #[arg(value_parser, action = ArgAction::Set)]
         enabled: bool,
     },
 }
@@ -167,6 +171,8 @@ pub enum AppCommands {
     },
     SetMute {
         process_id: u32,
+
+        #[arg(value_parser, action = ArgAction::Set)]
         muted: bool,
     },
 }
@@ -175,6 +181,7 @@ pub enum AppCommands {
 #[command(arg_required_else_help = true)]
 pub enum DaemonCommands {
     SetAutoStart {
+        #[arg(value_parser, action = ArgAction::Set)]
         enabled: bool,
     },
     SetAudioQuantum {
