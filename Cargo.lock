@@ -1947,7 +1947,6 @@ dependencies = [
  "clap",
  "pipeweaver-ipc",
  "pipeweaver-shared",
- "ulid",
 ]
 
 [[package]]

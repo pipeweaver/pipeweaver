@@ -8,10 +8,12 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
+
 clap = { workspace = true }
-ulid = { workspace = true }
 
 pipeweaver-shared = { path = "../shared" }
+pipeweaver-ipc = { path = "../ipc" }
 
 
 [build-dependencies]
