@@ -85,6 +85,13 @@ impl NodeManagement for PipewireManager {
             bail!("Node with name {} already exists", name);
         }
 
+        if !Self::is_valid_name(&name) {
+            bail!(
+                "Node name {} is invalid, must be 1-20 characters and only contain letters, numbers, spaces, dashes and underscores",
+                name
+            );
+        }
+
         // This is relatively simple, firstly generate the ID, and build the description
         let id = Ulid::new();
         let description = DeviceDescription {
@@ -179,6 +186,13 @@ impl NodeManagement for PipewireManager {
         // Verify that the new node name isn't in use
         if self.get_node_id_by_name(&name).is_some() {
             bail!("Node with name {} already exists", name);
+        }
+
+        if !Self::is_valid_name(&name) {
+            bail!(
+                "New name {} is invalid, must be 1-20 characters and only contain letters, numbers, spaces, dashes and underscores",
+                name
+            );
         }
 
         // Now we remove it, and all associated filters, while leaving it in the profile
