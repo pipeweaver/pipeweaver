@@ -8,9 +8,12 @@ use pipeweaver_profile::DeviceDescription;
 use pipeweaver_shared::{NodeType, OrderGroup};
 use ulid::Ulid;
 
+pub const MAX_NODE_NAME_LENGTH: usize = 20;
+
 pub(crate) trait LoadProfile {
     async fn load_profile(&mut self) -> Result<()>;
     fn get_node_id_by_name(&self, name: &str) -> Option<Ulid>;
+    fn is_valid_name(name: &str) -> bool;
 }
 
 impl LoadProfile for PipewireManager {
@@ -49,6 +52,14 @@ impl LoadProfile for PipewireManager {
 
         // This name wasn't found, so return none
         None
+    }
+
+    fn is_valid_name(name: &str) -> bool {
+        !name.is_empty()
+            && name.len() <= MAX_NODE_NAME_LENGTH
+            && name
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == ' ' || c == '_' || c == '-')
     }
 }
 
@@ -158,6 +169,23 @@ impl LoadProfileLocal for PipewireManager {
     }
 
     fn validate_name(description: &mut DeviceDescription, all_devices: &mut Vec<(Ulid, String)>) {
+        // Before we do anything, check whether this name is valid, and if not, immediately
+        // sanitise it
+        if !Self::is_valid_name(&description.name) {
+            let sanitized: String = description
+                .name
+                .chars()
+                .filter(|c| c.is_alphanumeric() || *c == ' ' || *c == '_' || *c == '-')
+                .take(MAX_NODE_NAME_LENGTH)
+                .collect();
+
+            description.name = if sanitized.is_empty() {
+                "UNNAMED".to_string()
+            } else {
+                sanitized
+            };
+        }
+
         let id = description.id;
         let base_name = description.name.clone();
         let mut count = 0;
