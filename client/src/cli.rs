@@ -140,6 +140,10 @@ pub enum RouteCommands {
         #[arg(value_parser, action = ArgAction::Set)]
         enabled: bool,
     },
+    Toggle {
+        source: String,
+        target: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]

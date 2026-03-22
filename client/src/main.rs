@@ -165,6 +165,7 @@ fn handle_route_command(cmd: cli::RouteCommands) -> DaemonRequest {
             target,
             enabled,
         } => APICommand::SetRouteByNames(source, target, enabled),
+        Toggle { source, target } => APICommand::ToggleRouteByNames(source, target),
     };
     DaemonRequest::Pipewire(api_cmd)
 }
