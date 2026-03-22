@@ -170,7 +170,7 @@ impl RoutingManagement for PipewireManager {
             .profile
             .routes
             .get(&source)
-            .map_or(false, |targets| targets.contains(&target)))
+            .is_some_and(|targets| targets.contains(&target)))
     }
 
     async fn routing_get_target_mix(&self, id: &Ulid) -> Result<Mix> {
