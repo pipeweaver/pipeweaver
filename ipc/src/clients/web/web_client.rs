@@ -26,7 +26,7 @@ impl WebClient {
 
 #[async_trait]
 impl Client for WebClient {
-    async fn send(&mut self, request: DaemonRequest) -> Result<DaemonResponse> {
+    async fn send(&mut self, request: &DaemonRequest) -> Result<DaemonResponse> {
         reqwest::Client::new()
             .post(&self.url)
             .json(&request)
@@ -38,7 +38,7 @@ impl Client for WebClient {
     }
 
     async fn get_status(&mut self) -> Result<DaemonStatus> {
-        let status = self.send(DaemonRequest::GetStatus).await?;
+        let status = self.send(&DaemonRequest::GetStatus).await?;
         match status {
             DaemonResponse::Status(status) => Ok(status),
             DaemonResponse::Err(error) => Err(anyhow!("{}", error)),

@@ -8,12 +8,12 @@ use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{Error, bail};
 use log::debug;
-use pipeweaver_ipc::commands::{APICommand, APICommandResponse};
+use pipeweaver_ipc::commands::{APICommand, PWCommandResponse};
 use pipeweaver_shared::MuteState::{Muted, Unmuted};
 use pipeweaver_shared::{Mix, NodeType};
 
 type Cmd = APICommand;
-type Resp = APICommandResponse;
+type Resp = PWCommandResponse;
 pub(crate) trait IPCHandler {
     async fn handle_command(&mut self, command: Cmd) -> Result<Resp, Error>;
 }

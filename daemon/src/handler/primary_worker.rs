@@ -14,7 +14,7 @@ use ini::Ini;
 use json_patch::diff;
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{
-    APICommand, APICommandResponse, AudioConfiguration, DaemonCommand, DaemonResponse, DaemonStatus,
+    APICommand, AudioConfiguration, DaemonCommand, DaemonResponse, DaemonStatus, PWCommandResponse,
 };
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::Quantum;
@@ -228,7 +228,7 @@ impl PrimaryWorker {
             DaemonMessage::RunPipewire(command, response) => {
                 let (tx, rx) = oneshot::channel();
                 if let Err(e) = pw_tx.send(Execute(command, tx)).await {
-                    let _ = response.send(APICommandResponse::Err(e.to_string()));
+                    let _ = response.send(PWCommandResponse::Err(e.to_string()));
                     return MessageResult::None;
                 }
                 match rx.await {
@@ -237,7 +237,7 @@ impl PrimaryWorker {
                         update = true;
                     }
                     Err(e) => {
-                        let _ = response.send(APICommandResponse::Err(e.to_string()));
+                        let _ = response.send(PWCommandResponse::Err(e.to_string()));
                     }
                 }
             }
@@ -454,7 +454,7 @@ pub enum MessageResult {
 
 #[derive(Debug)]
 pub enum ManagerMessage {
-    Execute(APICommand, oneshot::Sender<APICommandResponse>),
+    Execute(APICommand, oneshot::Sender<PWCommandResponse>),
     GetAudioConfiguration(oneshot::Sender<AudioConfiguration>),
     SetMetering(bool),
     SetAudioQuantum(Quantum, oneshot::Sender<()>),

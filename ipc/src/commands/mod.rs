@@ -34,7 +34,7 @@ pub enum DaemonResponse {
     Err(String),
     Patch(Patch),
     Status(DaemonStatus),
-    Pipewire(APICommandResponse),
+    Pipewire(PWCommandResponse),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,7 +128,7 @@ pub enum APICommand {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum APICommandResponse {
+pub enum PWCommandResponse {
     Ok,
     Id(Ulid),
     Err(String),

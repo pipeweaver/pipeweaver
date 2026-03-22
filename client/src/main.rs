@@ -1,6 +1,6 @@
 mod cli;
 
-use anyhow::{Error, Result};
+use anyhow::{Error, Result, bail};
 use clap::Parser;
 use directories::BaseDirs;
 use interprocess::local_socket::GenericFilePath;
@@ -11,7 +11,9 @@ use pipeweaver_ipc::client::Client;
 use pipeweaver_ipc::clients::ipc::ipc_client::IPCClient;
 use pipeweaver_ipc::clients::ipc::ipc_socket::Socket;
 use pipeweaver_ipc::clients::web::web_client::WebClient;
-use pipeweaver_ipc::commands::{APICommand, DaemonCommand, DaemonRequest, DaemonResponse};
+use pipeweaver_ipc::commands::{
+    APICommand, DaemonCommand, DaemonRequest, DaemonResponse, PWCommandResponse,
+};
 use pipeweaver_shared::AppDefinition;
 use std::path::PathBuf;
 use std::{env, fs};
@@ -44,7 +46,21 @@ async fn main() -> Result<()> {
         cli::Commands::Daemon { command } => handle_daemon_command(command),
     });
     if let Some(msg) = msg {
-        client.send(msg).await?;
+        let response = client.send(&msg).await?;
+        match response {
+            DaemonResponse::Ok => {}
+            DaemonResponse::Err(e) => {
+                bail!("A General Error Occurred: {}", e);
+            }
+            DaemonResponse::Pipewire(e) => match e {
+                PWCommandResponse::Ok => {}
+                PWCommandResponse::Id(e) => {
+                    println!("Received: {}", e);
+                }
+                PWCommandResponse::Err(e) => bail!("{}", e),
+            },
+            _ => bail!("Unexpected Response"),
+        }
     }
 
     if cli.status {

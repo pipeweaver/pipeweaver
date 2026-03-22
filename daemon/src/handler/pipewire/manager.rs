@@ -12,7 +12,7 @@ use crate::servers::http_server::MeterEvent;
 use enum_map::{EnumMap, enum_map};
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{
-    APICommandResponse, Application, AudioConfiguration, PhysicalDevice,
+    Application, AudioConfiguration, PWCommandResponse, PhysicalDevice,
 };
 use pipeweaver_pipewire::{
     ApplicationNode, DeviceNode, MediaClass, NodeTarget, PipewireMessage, PipewireReceiver,
@@ -230,7 +230,7 @@ impl PipewireManager {
                             // Map the result to a PW Response and send it
                             let _ = tx.send(match result {
                                 Ok(response) => response,
-                                Err(e) => APICommandResponse::Err(e.to_string())
+                                Err(e) => PWCommandResponse::Err(e.to_string())
                             });
                         }
                         ManagerMessage::GetAudioConfiguration(tx) => {

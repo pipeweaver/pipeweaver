@@ -18,9 +18,9 @@ impl IPCClient {
 
 #[async_trait]
 impl Client for IPCClient {
-    async fn send(&mut self, request: DaemonRequest) -> Result<DaemonResponse> {
+    async fn send(&mut self, request: &DaemonRequest) -> Result<DaemonResponse> {
         self.socket
-            .send(request)
+            .send(request.clone())
             .await
             .context("Failed to send a command to the GoXLR daemon process")?;
 
@@ -32,7 +32,7 @@ impl Client for IPCClient {
     }
 
     async fn get_status(&mut self) -> Result<DaemonStatus> {
-        let status = self.send(DaemonRequest::GetStatus).await?;
+        let status = self.send(&DaemonRequest::GetStatus).await?;
         match status {
             DaemonResponse::Status(status) => Ok(status),
             DaemonResponse::Err(error) => Err(anyhow!("{}", error)),
