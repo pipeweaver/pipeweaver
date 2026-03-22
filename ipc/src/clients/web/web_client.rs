@@ -2,7 +2,6 @@ use crate::client::Client;
 use anyhow::{Result, anyhow};
 
 use crate::commands::{DaemonRequest, DaemonResponse, DaemonStatus};
-use anyhow::bail;
 use async_trait::async_trait;
 
 #[derive(Debug)]

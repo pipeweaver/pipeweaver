@@ -1,5 +1,5 @@
-use crate::commands::{APICommand, DaemonRequest, DaemonResponse, DaemonStatus};
-use anyhow::{Result, anyhow};
+use crate::commands::{DaemonRequest, DaemonResponse, DaemonStatus};
+use anyhow::Result;
 use async_trait::async_trait;
 
 #[async_trait]

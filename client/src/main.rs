@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
     };
 
     // Poll the Status
-    client.poll_status().await?;
+    let status = client.get_status().await?;
 
     let msg = cli.command.map(|command| match command {
         cli::Commands::Node { command } => handle_node_command(command),
@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
 
     if cli.status {
         // Ok, convert this object to json for outputs
-        let out = serde_json::to_string_pretty(client.status())?;
+        let out = serde_json::to_string_pretty(&status)?;
         println!("{}", out);
     }
 
