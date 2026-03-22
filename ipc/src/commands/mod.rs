@@ -64,6 +64,7 @@ pub enum APICommand {
     RemoveNode(Ulid),
     RemoveNodeByName(String),
 
+    SetVolume(Ulid, Option<Mix>, u8),
     SetSourceVolume(Ulid, Mix, u8),
     SetTargetVolume(Ulid, u8),
     SetVolumeByName(String, Option<Mix>, u8),

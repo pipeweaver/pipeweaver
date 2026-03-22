@@ -45,10 +45,30 @@ impl IPCHandler for PipewireManager {
 
             Cmd::RemoveNode(id) => self.node_remove(id).await.map(|_| Resp::Ok),
             Cmd::RemoveNodeByName(name) => {
-                if let Some(id) = self.get_node_id_by_name(&*name) {
+                if let Some(id) = self.get_node_id_by_name(&name) {
                     self.node_remove(id).await.map(|_| Resp::Ok)
                 } else {
                     bail!("Node name {} not Found", name);
+                }
+            }
+
+            Cmd::SetVolume(id, mix, volume) => {
+                let mix = if let Some(mix) = mix { mix } else { Mix::A };
+                if let Some(node_type) = self.get_node_type(id) {
+                    if matches!(
+                        node_type,
+                        NodeType::PhysicalTarget | NodeType::VirtualTarget
+                    ) {
+                        self.set_target_volume(id, volume, true)
+                            .await
+                            .map(|_| Resp::Ok)
+                    } else {
+                        self.set_source_volume(id, mix, volume, true)
+                            .await
+                            .map(|_| Resp::Ok)
+                    }
+                } else {
+                    bail!("Node type for id {} not found", id);
                 }
             }
 
