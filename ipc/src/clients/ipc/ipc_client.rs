@@ -30,4 +30,13 @@ impl Client for IPCClient {
             .context("Failed to retrieve the command result from the GoXLR daemon process")?
             .context("Failed to parse the command result from the GoXLR daemon process")
     }
+
+    async fn get_status(&mut self) -> Result<DaemonStatus> {
+        let status = self.send(DaemonRequest::GetStatus).await?;
+        match status {
+            DaemonResponse::Status(status) => Ok(status),
+            DaemonResponse::Err(error) => Err(anyhow!("{}", error)),
+            _ => Err(anyhow!("Expected Status response, got {:?}", status)),
+        }
+    }
 }

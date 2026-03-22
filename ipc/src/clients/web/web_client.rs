@@ -37,4 +37,13 @@ impl Client for WebClient {
             .await
             .map_err(|e| e.into())
     }
+
+    async fn get_status(&mut self) -> Result<DaemonStatus> {
+        let status = self.send(DaemonRequest::GetStatus).await?;
+        match status {
+            DaemonResponse::Status(status) => Ok(status),
+            DaemonResponse::Err(error) => Err(anyhow!("{}", error)),
+            _ => Err(anyhow!("Expected Status response, got {:?}", status)),
+        }
+    }
 }
