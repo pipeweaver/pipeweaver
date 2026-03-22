@@ -39,7 +39,6 @@ export default {
     },
 
     getCheckColour: function (target) {
-      console.log(target);
       let dev = get_device_by_id(target.id);
       if (dev.mix === "B") {
         return "#e07c24";
