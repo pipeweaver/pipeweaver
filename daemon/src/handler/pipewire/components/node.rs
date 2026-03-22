@@ -1,6 +1,7 @@
 use crate::handler::pipewire::components::application::ApplicationManagement;
 use crate::handler::pipewire::components::filters::FilterManagement;
 use crate::handler::pipewire::components::links::LinkManagement;
+use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
 use crate::handler::pipewire::components::profile::ProfileManagement;
 use crate::handler::pipewire::components::routing::RoutingManagement;
@@ -79,6 +80,11 @@ impl NodeManagement for PipewireManager {
     }
 
     async fn node_new(&mut self, node_type: NodeType, name: String) -> Result<Ulid> {
+        // Ok, before we do anything, make sure this node name is unique
+        if self.get_node_id_by_name(&name).is_some() {
+            bail!("Node with name {} already exists", name);
+        }
+
         // This is relatively simple, firstly generate the ID, and build the description
         let id = Ulid::new();
         let description = DeviceDescription {
@@ -169,6 +175,11 @@ impl NodeManagement for PipewireManager {
         // First thing we need to do, is to find this node
         let err = anyhow!("Unable to find Node");
         let node_type = self.get_node_type(id).ok_or(err)?;
+
+        // Verify that the new node name isn't in use
+        if self.get_node_id_by_name(&name).is_some() {
+            bail!("Node with name {} already exists", name);
+        }
 
         // Now we remove it, and all associated filters, while leaving it in the profile
         match node_type {
