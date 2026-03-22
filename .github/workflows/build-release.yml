@@ -11,7 +11,7 @@ jobs:
     needs: [ get_version ]
     steps:
       - name: "Check out Repository"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: "Install Rust"
         uses: dtolnay/rust-toolchain@stable
