@@ -29,19 +29,19 @@ jobs:
         shell: bash
 
       - name: "Upload DEB Artifact"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: debian-artifact
           path: ./target/debian/*.deb
 
       - name: "Upload RPM Artifact"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: rpm-artifact
           path: ./target/generate-rpm/*.rpm
 
       - name: "Upload Basic Binary Artifact"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: binary-artifact
           path: ./pipeweaver.zip
