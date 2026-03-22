@@ -14,7 +14,7 @@ ulid = { workspace = true }
 log = { workspace = true }
 
 pipewire = { git = "https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git", features = ["v0_3_45"] }
-oneshot = "0.1.11"
+oneshot = { version = "0.2.1", features = ["std", "async"] }
 
 enum-map = { workspace = true }
 strum = { workspace = true }

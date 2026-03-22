@@ -11,7 +11,6 @@ homepage.workspace = true
 clap = { workspace = true }
 
 serde = { workspace = true }
-serde_json = { workspace = true }
 
 ulid = { workspace = true }
 enum-map = { workspace = true }
