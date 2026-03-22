@@ -147,6 +147,41 @@ impl IPCHandler for PipewireManager {
                     bail!("Source name {} not Found", source_name);
                 }
             }
+            Cmd::ToggleRoute(source, target) => self
+                .routing_toggle_route(source, target)
+                .await
+                .map(|_| Resp::Ok),
+            Cmd::ToggleRouteBySourceName(source_name, target) => {
+                if let Some(source_id) = self.get_node_id_by_name(&source_name) {
+                    self.routing_toggle_route(source_id, target)
+                        .await
+                        .map(|_| Resp::Ok)
+                } else {
+                    bail!("Node name {} not Found", source_name);
+                }
+            }
+            Cmd::ToggleRouteByTargetName(source, target_name) => {
+                if let Some(target_id) = self.get_node_id_by_name(&target_name) {
+                    self.routing_toggle_route(source, target_id)
+                        .await
+                        .map(|_| Resp::Ok)
+                } else {
+                    bail!("Node name {} not Found", target_name);
+                }
+            }
+            Cmd::ToggleRouteByNames(source_name, target_name) => {
+                if let Some(source_id) = self.get_node_id_by_name(&source_name) {
+                    if let Some(target_id) = self.get_node_id_by_name(&target_name) {
+                        self.routing_toggle_route(source_id, target_id)
+                            .await
+                            .map(|_| Resp::Ok)
+                    } else {
+                        bail!("Target name {} not Found", target_name);
+                    }
+                } else {
+                    bail!("Source name {} not Found", source_name);
+                }
+            }
 
             Cmd::AddSourceMuteTarget(id, target) => self
                 .set_source_mute_state(id, target, Muted)
@@ -180,7 +215,6 @@ impl IPCHandler for PipewireManager {
                 .add_target_mute_node(id, target, target_id)
                 .await
                 .map(|_| Resp::Ok),
-
             Cmd::AddMuteTargetNodeBySourceName(source_name, target, target_id) => {
                 if let Some(id) = self.get_node_id_by_name(&source_name) {
                     self.add_target_mute_node(id, target, target_id)
@@ -320,7 +354,6 @@ impl IPCHandler for PipewireManager {
                 .clear_application_target(definition)
                 .await
                 .map(|_| Resp::Ok),
-
             Cmd::SetTransientApplicationRoute(id, route) => self
                 .set_application_transient_target(id, route)
                 .await

@@ -12,6 +12,7 @@ pub(crate) trait RoutingManagement {
     async fn routing_load(&mut self) -> Result<()>;
     async fn routing_load_source(&mut self, source: &Ulid) -> Result<()>;
     async fn routing_load_target(&mut self, target: &Ulid) -> Result<()>;
+    async fn routing_toggle_route(&mut self, source: Ulid, target: Ulid) -> Result<()>;
 
     async fn routing_set_route(&mut self, source: Ulid, target: Ulid, enabled: bool) -> Result<()>;
     async fn routing_route_exists(&self, source: Ulid, target: Ulid) -> Result<bool>;
@@ -84,31 +85,17 @@ impl RoutingManagement for PipewireManager {
         Ok(())
     }
 
-    async fn routing_set_route(&mut self, source: Ulid, target: Ulid, enabled: bool) -> Result<()> {
-        // This is actually more complicated that it sounds, first lets find some stuff out..
-        let source_type = self
-            .get_node_type(source)
-            .ok_or(anyhow!("Source Not Found"))?;
-        let target_type = self
-            .get_node_type(target)
-            .ok_or(anyhow!("Target Not Found"))?;
+    async fn routing_toggle_route(&mut self, source: Ulid, target: Ulid) -> Result<()> {
+        // Check if the route currently exists, then toggle..
+        let exists = self.routing_route_exists(source, target).await?;
+        self.routing_set_route(source, target, !exists).await
+    }
 
-        // Make sure the user is being sane
-        if !matches!(
-            source_type,
-            NodeType::PhysicalSource | NodeType::VirtualSource
-        ) {
-            bail!("Provided Source is a Target Node");
-        }
-        if !matches!(
-            target_type,
-            NodeType::PhysicalTarget | NodeType::VirtualTarget
-        ) {
-            bail!("Provided Target is a Source Node");
-        }
+    async fn routing_set_route(&mut self, source: Ulid, target: Ulid, enabled: bool) -> Result<()> {
+        // Validate and check if the route exists using routing_route_exists
+        let exists = self.routing_route_exists(source, target).await?;
 
         // This should already be here, but it's not, so create it
-        //let target_id = self.get_target_filter_node(target)?;
         self.profile.routes.entry(source).or_insert_with(|| {
             warn!("[Routing] Table Missing for Source {}, Creating", source);
             Default::default()
@@ -116,7 +103,7 @@ impl RoutingManagement for PipewireManager {
 
         // This unwrap is safe, so just grab the Set and check what we're doing
         let route = self.profile.routes.get_mut(&source).unwrap();
-        if enabled == route.contains(&target) {
+        if enabled == exists {
             bail!("Requested route change already set");
         }
         if enabled {
@@ -126,6 +113,7 @@ impl RoutingManagement for PipewireManager {
         }
 
         // Next, we need to get the A/B IDs for the Source
+        let target_type = self.get_node_type(target).unwrap();
         if let Some(map) = self.source_map.get(&source).copied() {
             // Set up the Pipewire Links
             if enabled {
@@ -156,6 +144,7 @@ impl RoutingManagement for PipewireManager {
     }
 
     async fn routing_route_exists(&self, source: Ulid, target: Ulid) -> Result<bool> {
+        // Validate source and target node types
         let source_type = self
             .get_node_type(source)
             .ok_or(anyhow!("Source Not Found"))?;
@@ -163,7 +152,7 @@ impl RoutingManagement for PipewireManager {
             .get_node_type(target)
             .ok_or(anyhow!("Target Not Found"))?;
 
-        // Make sure the user is being sane
+        // Only allow valid source/target combinations
         if !matches!(
             source_type,
             NodeType::PhysicalSource | NodeType::VirtualSource
@@ -177,11 +166,11 @@ impl RoutingManagement for PipewireManager {
             bail!("Provided Target is a Source Node");
         }
 
-        if !self.profile.routes.contains_key(&source) {
-            return Ok(false);
-        }
-
-        Ok(self.profile.routes.get(&source).unwrap().contains(&target))
+        Ok(self
+            .profile
+            .routes
+            .get(&source)
+            .map_or(false, |targets| targets.contains(&target)))
     }
 
     async fn routing_get_target_mix(&self, id: &Ulid) -> Result<Mix> {

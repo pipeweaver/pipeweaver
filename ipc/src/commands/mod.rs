@@ -79,6 +79,11 @@ pub enum APICommand {
     SetRouteByTargetName(Ulid, String, bool),
     SetRouteByNames(String, String, bool),
 
+    ToggleRoute(Ulid, Ulid),
+    ToggleRouteBySourceName(String, Ulid),
+    ToggleRouteByTargetName(Ulid, String),
+    ToggleRouteByNames(String, String),
+
     AddSourceMuteTarget(Ulid, MuteTarget),
     AddSourceMuteTargetByName(String, MuteTarget),
     DelSourceMuteTarget(Ulid, MuteTarget),
