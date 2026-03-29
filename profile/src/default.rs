@@ -41,6 +41,7 @@ impl Profile {
                             volumes_linked: Some(1.),
                         },
                         attached_devices: vec![],
+                        attached_port_maps: vec![],
                     }],
                     virtual_devices: vec![
                         VirtualSourceDevice {
@@ -108,6 +109,7 @@ impl Profile {
                         volume: 100,
                         mix: Mix::A,
                         attached_devices: vec![],
+                        attached_port_maps: vec![],
                     }],
                     virtual_devices: vec![VirtualTargetDevice {
                         description: DeviceDescription {
@@ -124,6 +126,7 @@ impl Profile {
                         mix: Mix::A,
 
                         attached_devices: Default::default(),
+                        attached_port_maps: vec![],
                     }],
 
                     device_order: enum_map! {
@@ -135,6 +138,7 @@ impl Profile {
                         OrderGroup::Pinned => vec![mic_id],
                     },
                 },
+                physical_device_port_maps: Default::default(),
             },
             routes: vec![
                 (mic_id, [chat_mic_id].into_iter().collect()),
