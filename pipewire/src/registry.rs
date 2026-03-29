@@ -114,16 +114,10 @@ impl PipewireRegistry {
                                             if store.unmanaged_device_node_get(id).is_some() {
                                                 store.unmanaged_node_port_count_update(id, inputs, outputs);
 
-                                                if let Some(props) = info.props() {
-                                                    let is_driver = props.get("node.driver")
-                                                        .and_then(|v| v.parse::<bool>().ok())
-                                                        .unwrap_or(false);
-                                                    let has_driver = props.get("node.driver-id").is_some();
-
-                                                    if (is_driver || has_driver) && store.unmanaged_node_set_clock_ready(id) {
-                                                        let seq = core_local.sync(0).expect("core sync failed");
-                                                        store.add_pending_device_sync(seq.raw(), id);
-                                                    }
+                                                if info.props().is_some()
+                                                    && store.unmanaged_node_set_clock_ready(id) {
+                                                    let seq = core_local.sync(0).expect("core sync failed");
+                                                    store.add_pending_device_sync(seq.raw(), id);
                                                 }
                                             }
                                         }
@@ -134,8 +128,6 @@ impl PipewireRegistry {
                                 }
                                 // All unmanaged nodes should be handled, even if they don't have a parent
                                 store.unmanaged_device_node_add(id, node);
-
-
                             } else if let Ok(mut node) = RegistryClientNode::try_from(props) {
                                 if let Some(client) = store.unmanaged_client_get(node.parent_id) {
                                     let bound: Option<Node> = registry.borrow().bind(global).ok();
