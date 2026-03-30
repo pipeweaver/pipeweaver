@@ -568,9 +568,9 @@ impl Store {
         }
     }
 
-    pub fn managed_link_remove(&mut self, source: LinkType, destination: LinkType) {
+    pub fn managed_link_remove(&mut self, source: &LinkType, destination: &LinkType) {
         self.managed_links
-            .retain(|_, link| link.source != source || link.destination != destination)
+            .retain(|_, link| link.source != *source || link.destination != *destination)
     }
 
     pub fn managed_link_remove_for_type(&mut self, id: LinkType) {

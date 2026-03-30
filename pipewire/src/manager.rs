@@ -1,8 +1,8 @@
 use crate::registry::PipewireRegistry;
 use crate::store::{FilterStore, LinkStore, LinkStoreMap, NodeStore, PortLocation, Store};
 use crate::{
-    FilterHandler, FilterProperties, FilterProperty, FilterValue, LinkType, NodeProperties,
-    PipewireInternalMessage, PipewireReceiver,
+    Direction, FilterHandler, FilterProperties, FilterProperty, FilterValue, LinkType,
+    NodeProperties, PipewireInternalMessage, PipewireReceiver,
 };
 use crate::{MediaClass, PWReceiver};
 use anyhow::Result;
@@ -31,7 +31,6 @@ use pipewire::spa::sys::{
     SPA_PROP_mute, SPA_TYPE_OBJECT_ParamProcessLatency, spa_process_latency_build,
     spa_process_latency_info,
 };
-use pipewire::spa::utils::Direction;
 
 use enum_map::{EnumMap, enum_map};
 use oneshot::Sender;
@@ -424,7 +423,7 @@ impl PipewireManager {
                 input_ports.borrow_mut().push(
                     filter
                         .add_port(
-                            Direction::Input,
+                            utils::Direction::Input,
                             PortFlags::MAP_BUFFERS,
                             properties! {
                                 *FORMAT_DSP => "32 bit float mono audio",
@@ -448,7 +447,7 @@ impl PipewireManager {
                 output_ports.borrow_mut().push(
                     filter
                         .add_port(
-                            Direction::Output,
+                            utils::Direction::Output,
                             PortFlags::MAP_BUFFERS,
                             properties! {
                                 *FORMAT_DSP => "32 bit float mono audio",
@@ -545,8 +544,8 @@ impl PipewireManager {
             _filter: filter,
 
             port_map: enum_map! {
-                crate::Direction::In => input_port_map,
-                crate::Direction::Out=> output_port_map,
+                Direction::In => input_port_map,
+                Direction::Out=> output_port_map,
             },
 
             _input_ports: input_ports,
@@ -583,7 +582,7 @@ impl PipewireManager {
         sender: Sender<()>,
     ) -> Result<()> {
         // First, check if a managed link already exists and remove it
-        self.store.borrow_mut().managed_link_remove(source, dest);
+        self.store.borrow_mut().managed_link_remove(&source, &dest);
 
         let parent_id = Ulid::new();
         let mut port_map: EnumMap<PortLocation, Option<LinkStoreMap>> = Default::default();
@@ -591,8 +590,8 @@ impl PipewireManager {
         // Collect all the port pairs we're going to link
         let mut port_pairs = Vec::new();
         for port in PortLocation::iter() {
-            let (_, src_index) = self.get_port(source, crate::Direction::Out, port)?;
-            let (_, tgt_index) = self.get_port(dest, crate::Direction::In, port)?;
+            let (_, src_index) = self.get_port(&source, Direction::Out, port)?;
+            let (_, tgt_index) = self.get_port(&dest, Direction::In, port)?;
             port_pairs.push((src_index, tgt_index));
         }
 
@@ -628,13 +627,13 @@ impl PipewireManager {
             let link_id = Ulid::new();
 
             // Next, obtain the source and destination port indexes
-            let (src_id, src_index) = self.get_port(source, crate::Direction::Out, port)?;
-            let (tgt_id, tgt_index) = self.get_port(dest, crate::Direction::In, port)?;
+            let (src_id, src_index) = self.get_port(&source, Direction::Out, port)?;
+            let (tgt_id, tgt_index) = self.get_port(&dest, Direction::In, port)?;
 
             // If the Source and Destination aren't physical nodes, we should flag the link as
             // passive, otherwise it should be active.
-            let is_passive = !matches!(source, LinkType::UnmanagedNode(_))
-                && !matches!(dest, LinkType::UnmanagedNode(_));
+            let is_passive = !matches!(&source, LinkType::UnmanagedNode(_, _))
+                && !matches!(&dest, LinkType::UnmanagedNode(_, _));
 
             // Now we simply create the link
             let (link, proxy_lis) = self.create_port_link(
@@ -656,8 +655,8 @@ impl PipewireManager {
 
         // Ok, we're done here, create the main store object
         let group = LinkStore {
-            source,
-            destination: dest,
+            source: source.clone(),
+            destination: dest.clone(),
             links: port_map,
             ready_sender: Some(sender),
         };
@@ -674,7 +673,7 @@ impl PipewireManager {
     pub fn remove_link(&mut self, source: LinkType, destination: LinkType) -> Result<()> {
         self.store
             .borrow_mut()
-            .managed_link_remove(source, destination);
+            .managed_link_remove(&source, &destination);
         Ok(())
     }
 
@@ -690,7 +689,7 @@ impl PipewireManager {
 
     fn get_port(
         &mut self,
-        link: LinkType,
+        link: &LinkType,
         direction: crate::Direction,
         location: PortLocation,
     ) -> Result<(u32, u32)> {
@@ -698,7 +697,7 @@ impl PipewireManager {
         let mut store = self.store.borrow_mut();
         match link {
             LinkType::Node(id) => {
-                let node = store.managed_node_get(id).unwrap();
+                let node = store.managed_node_get(*id).unwrap();
 
                 let id = node.pw_id.unwrap();
                 let port = node.port_map[location].unwrap();
@@ -706,25 +705,41 @@ impl PipewireManager {
                 Ok((id, port))
             }
             LinkType::Filter(id) => {
-                let filter = store.managed_filter_get(id).unwrap();
+                let filter = store.managed_filter_get(*id).unwrap();
 
                 let id = filter.pw_id.unwrap();
                 let port = filter.port_map[direction][location];
 
                 Ok((id, port))
             }
-            LinkType::UnmanagedNode(id) => {
+            LinkType::UnmanagedNode(id, port_map) => {
                 let node = store
-                    .unmanaged_device_node_get(id)
+                    .unmanaged_device_node_get(*id)
                     .ok_or_else(|| anyhow!("Unmanaged Device Node not Found"))?;
 
                 let ports = &node.ports[direction];
+
+                // Check whether the caller has explicitly told us which port to use
+                if let Some(link_ports) = port_map {
+                    let find = match location {
+                        PortLocation::Left => &link_ports.left,
+                        PortLocation::Right => &link_ports.right,
+                    };
+
+                    for (index, port) in ports.iter() {
+                        if port.channel == *find {
+                            return Ok((*id, *index));
+                        }
+                    }
+
+                    bail!("Unable to find channel");
+                }
 
                 // Check whether this is a mono device
                 if ports.iter().count() == 1
                     && let Some(index) = ports.keys().next()
                 {
-                    return Ok((id, *index));
+                    return Ok((*id, *index));
                 }
 
                 // Iterate over the ports, try and find the location
@@ -732,7 +747,7 @@ impl PipewireManager {
                     if let Ok(port_location) = PortLocation::from_str(&port.channel)
                         && port_location == location
                     {
-                        return Ok((id, *index));
+                        return Ok((*id, *index));
                     }
                 }
 

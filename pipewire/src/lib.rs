@@ -360,11 +360,17 @@ pub enum Direction {
     Out,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LinkType {
     Node(Ulid),
     Filter(Ulid),
-    UnmanagedNode(u32),
+    UnmanagedNode(u32, Option<LinkPorts>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinkPorts {
+    left: String,
+    right: String,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
