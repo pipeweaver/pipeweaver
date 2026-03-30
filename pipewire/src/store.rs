@@ -737,19 +737,29 @@ impl Store {
             let old_in_count = node.port_count[Direction::In];
             let old_out_count = node.port_count[Direction::Out];
 
-            let port_counts_changed =
-                old_in_count != Some(in_count) || old_out_count != Some(out_count);
+            if old_in_count == Some(in_count) && old_out_count == Some(out_count) {
+                // Hasn't actually changed, nothing to do here
+                return;
+            }
+
+            debug!(
+                "Node {} port count updated (In: {:?} -> {}, Out: {:?} -> {})",
+                id, old_in_count, in_count, old_out_count, out_count
+            );
+
+            // If this node has gone upstream, we should flag it as a removal, so we can await
+            // for any new ports which may need to arrive, then we'll reset it once we're ready
+            if node.sent_upstream {
+                // Flag this for removal upstream, and reset its local state.
+                let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
+                node.ports = Default::default();
+                node.sent_upstream = false;
+            }
 
             node.port_count[Direction::In] = Some(in_count);
             node.port_count[Direction::Out] = Some(out_count);
 
-            if port_counts_changed {
-                debug!(
-                    "Node {} port count updated (In: {:?} -> {}, Out: {:?} -> {})",
-                    id, old_in_count, in_count, old_out_count, out_count
-                );
-                self.unmanaged_node_port_check(id);
-            }
+            self.unmanaged_node_port_check(id);
         }
     }
 
