@@ -729,50 +729,26 @@ impl Store {
     // }
 
     pub fn unmanaged_node_port_count_update(&mut self, id: u32, in_count: u32, out_count: u32) {
-        // Grab useful data from the node
-        let (old_in_count, old_out_count, was_sent_upstream) =
-            match self.unmanaged_device_nodes.get(&id) {
-                Some(node) => (
-                    node.port_count[Direction::In],
-                    node.port_count[Direction::Out],
-                    node.sent_upstream,
-                ),
-                None => return,
-            };
+        let node = match self.unmanaged_device_nodes.get_mut(&id) {
+            Some(node) => node,
+            None => return,
+        };
 
-        if old_in_count == Some(in_count) && old_out_count == Some(out_count) {
-            // Nothing has changed, bail out.
+        let current_in = node.port_count[Direction::In];
+        let current_out = node.port_count[Direction::Out];
+        if current_in == Some(in_count) && current_out == Some(out_count) {
+            // Nothing has changed, nothing to do.
             return;
         }
-
         debug!(
             "Node {} port count updated (In: {:?} -> {}, Out: {:?} -> {})",
-            id, old_in_count, in_count, old_out_count, out_count
+            id, current_in, in_count, current_out, out_count
         );
 
-        // Update the Counts
-        if let Some(node) = self.unmanaged_device_nodes.get_mut(&id) {
-            node.port_count[Direction::In] = Some(in_count);
-            node.port_count[Direction::Out] = Some(out_count);
-        }
+        node.port_count[Direction::In] = Some(in_count);
+        node.port_count[Direction::Out] = Some(out_count);
 
-        // Check whether we are now desynced
-        let is_desynced = self.unmanaged_node_port_desync(id);
-
-        if is_desynced {
-            // We've desynced, does upstream know about this node? If so, Detach it.
-            if was_sent_upstream {
-                let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
-
-                // Clear the 'Sent Upstream' flag, so we can resend when we're synced again
-                if let Some(node) = self.unmanaged_device_nodes.get_mut(&id) {
-                    node.sent_upstream = false;
-                }
-            }
-        } else {
-            // We've synced, flag the node for sending upstream
-            self.unmanaged_node_port_check(id);
-        }
+        self.unmanaged_node_reconcile(id);
     }
 
     pub fn unmanaged_node_port_removed(&mut self, node_id: u32, dir: Direction, port: u32) {
@@ -780,21 +756,7 @@ impl Store {
             node.ports[dir].remove(&port);
         }
 
-        if self.unmanaged_node_port_desync(node_id)
-            && let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id)
-        {
-            if node.sent_upstream {
-                warn!("Port removal resulting in desync, removing device");
-                let message = PipewireReceiver::DeviceRemoved(node_id);
-                let _ = self.callback_tx.send(message);
-
-                // Reset the Upstream message now it's been removed
-                node.sent_upstream = false;
-            }
-        } else {
-            // We've synced, send to the application
-            self.unmanaged_node_port_check(node_id);
-        }
+        self.unmanaged_node_reconcile(node_id);
     }
 
     pub fn unmanaged_node_port_add(&mut self, node_id: u32, dir: Direction, port: RegistryPort) {
@@ -802,23 +764,32 @@ impl Store {
             node.add_port(dir, port);
         }
 
-        if self.unmanaged_node_port_desync(node_id)
-            && let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id)
-        {
-            if node.sent_upstream {
-                warn!("Port added resulting in desync, removing device");
-                let message = PipewireReceiver::DeviceRemoved(node_id);
-                let _ = self.callback_tx.send(message);
-
-                // Reset the Upstream message now it's been removed
-                node.sent_upstream = false;
-            }
-        } else {
-            self.unmanaged_node_port_check(node_id);
-        }
+        self.unmanaged_node_reconcile(node_id);
     }
 
-    pub fn unmanaged_node_port_desync(&self, node_id: u32) -> bool {
+    fn unmanaged_node_reconcile(&mut self, id: u32) {
+        let (is_desynced, was_sent_upstream) = match self.unmanaged_device_nodes.get(&id) {
+            Some(node) => (self.unmanaged_node_is_desynced(id), node.sent_upstream),
+            None => return,
+        };
+
+        if is_desynced {
+            if was_sent_upstream {
+                let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
+
+                if let Some(node) = self.unmanaged_device_nodes.get_mut(&id) {
+                    node.sent_upstream = false;
+                }
+            }
+
+            return;
+        }
+
+        // If we're synced, try progressing state
+        self.unmanaged_node_port_check(id);
+    }
+
+    pub fn unmanaged_node_is_desynced(&self, node_id: u32) -> bool {
         if let Some(node) = self.unmanaged_device_nodes.get(&node_id) {
             for direction in Direction::iter() {
                 if node.port_count[direction].is_none() {
