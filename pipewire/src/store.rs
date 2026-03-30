@@ -729,38 +729,111 @@ impl Store {
     // }
 
     pub fn unmanaged_node_port_count_update(&mut self, id: u32, in_count: u32, out_count: u32) {
-        // Ok, new plan here, because this can change on-the-fly we need to be able to work and
-        // correctly handle that. So we'll check the 'old' one and the 'new' one and see if there's
-        // a specific change.
+        // Grab useful data from the node
+        let (old_in_count, old_out_count, was_sent_upstream) =
+            match self.unmanaged_device_nodes.get(&id) {
+                Some(node) => (
+                    node.port_count[Direction::In],
+                    node.port_count[Direction::Out],
+                    node.sent_upstream,
+                ),
+                None => return,
+            };
 
+        if old_in_count == Some(in_count) && old_out_count == Some(out_count) {
+            // Nothing has changed, bail out.
+            return;
+        }
+
+        debug!(
+            "Node {} port count updated (In: {:?} -> {}, Out: {:?} -> {})",
+            id, old_in_count, in_count, old_out_count, out_count
+        );
+
+        // Update the Counts
         if let Some(node) = self.unmanaged_device_nodes.get_mut(&id) {
-            let old_in_count = node.port_count[Direction::In];
-            let old_out_count = node.port_count[Direction::Out];
-
-            if old_in_count == Some(in_count) && old_out_count == Some(out_count) {
-                // Hasn't actually changed, nothing to do here
-                return;
-            }
-
-            debug!(
-                "Node {} port count updated (In: {:?} -> {}, Out: {:?} -> {})",
-                id, old_in_count, in_count, old_out_count, out_count
-            );
-
-            // If this node has gone upstream, we should flag it as a removal, so we can await
-            // for any new ports which may need to arrive, then we'll resend it once
-            // the ports are synced up again.
-            if node.sent_upstream {
-                // Flag this for removal upstream, and reset its local state.
-                let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
-                node.sent_upstream = false;
-            }
-
             node.port_count[Direction::In] = Some(in_count);
             node.port_count[Direction::Out] = Some(out_count);
+        }
 
+        // Check whether we are now desynced
+        let is_desynced = self.unmanaged_node_port_desync(id);
+
+        if is_desynced {
+            // We've desynced, does upstream know about this node? If so, Detach it.
+            if was_sent_upstream {
+                let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
+
+                // Clear the 'Sent Upstream' flag, so we can resend when we're synced again
+                if let Some(node) = self.unmanaged_device_nodes.get_mut(&id) {
+                    node.sent_upstream = false;
+                }
+            }
+        } else {
+            // We've synced, flag the node for sending upstream
             self.unmanaged_node_port_check(id);
         }
+    }
+
+    pub fn unmanaged_node_port_removed(&mut self, node_id: u32, dir: Direction, port: u32) {
+        if let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id) {
+            node.ports[dir].remove(&port);
+        }
+
+        if self.unmanaged_node_port_desync(node_id)
+            && let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id)
+        {
+            if node.sent_upstream {
+                warn!("Port removal resulting in desync, removing device");
+                let message = PipewireReceiver::DeviceRemoved(node_id);
+                let _ = self.callback_tx.send(message);
+
+                // Reset the Upstream message now it's been removed
+                node.sent_upstream = false;
+            }
+        } else {
+            // We've synced, send to the application
+            self.unmanaged_node_port_check(node_id);
+        }
+    }
+
+    pub fn unmanaged_node_port_add(&mut self, node_id: u32, dir: Direction, port: RegistryPort) {
+        if let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id) {
+            node.add_port(dir, port);
+        }
+
+        if self.unmanaged_node_port_desync(node_id)
+            && let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id)
+        {
+            if node.sent_upstream {
+                warn!("Port added resulting in desync, removing device");
+                let message = PipewireReceiver::DeviceRemoved(node_id);
+                let _ = self.callback_tx.send(message);
+
+                // Reset the Upstream message now it's been removed
+                node.sent_upstream = false;
+            }
+        } else {
+            self.unmanaged_node_port_check(node_id);
+        }
+    }
+
+    pub fn unmanaged_node_port_desync(&self, node_id: u32) -> bool {
+        if let Some(node) = self.unmanaged_device_nodes.get(&node_id) {
+            for direction in Direction::iter() {
+                if node.port_count[direction].is_none() {
+                    return true;
+                }
+
+                if Some(node.ports[direction].len() as u32) != node.port_count[direction] {
+                    return true;
+                }
+            }
+        } else {
+            return true;
+        }
+
+        false
     }
 
     pub fn unmanaged_node_set_clock_ready(&mut self, id: u32) -> bool {
@@ -1285,20 +1358,25 @@ impl Store {
         }
 
         // This might be a port removal from an unmanaged node
-        // TODO: Check if port removal breaks count
-        // In theory, if a port is removed from a node, it may no longer match the expected count,
-        // if this happens, we need to detach the device until it's fixed.
+        struct NodePort {
+            node_id: u32,
+            direction: Direction,
+            port_id: u32,
+        }
         let mut nodes_to_check = Vec::new();
         for (node_id, node) in self.unmanaged_device_nodes.iter_mut() {
             for direction in Direction::iter() {
                 if node.ports[direction].contains_key(&id) {
-                    node.ports[direction].remove(&id);
-                    nodes_to_check.push(*node_id);
+                    nodes_to_check.push(NodePort {
+                        node_id: *node_id,
+                        direction,
+                        port_id: id,
+                    });
                 }
             }
         }
         for node in nodes_to_check {
-            self.unmanaged_node_port_check(node);
+            self.unmanaged_node_port_removed(node.node_id, node.direction, node.port_id);
         }
     }
 

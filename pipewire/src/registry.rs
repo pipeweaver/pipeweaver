@@ -244,11 +244,8 @@ impl PipewireRegistry {
                             let port = RegistryPort::new(id, name, channel, is_monitor);
 
                             if let Some(node_id) = node_id.and_then(|s| s.parse::<u32>().ok()) && let Some(port_id) = pid.and_then(|s| s.parse::<u32>().ok()) {
-                                if let Some(node) = store.unmanaged_device_node_get(node_id) {
-                                    node.add_port(id, direction, port);
-
-                                    // Check if we now have all ports and can send DeviceAdded
-                                    store.unmanaged_node_port_check(node_id);
+                                if store.unmanaged_device_node_get(node_id).is_some() {
+                                    store.unmanaged_node_port_add(node_id, direction, port);
                                     return;
                                 }
                                 if let Some(node) = store.unmanaged_client_node_get(node_id) {
@@ -586,8 +583,8 @@ impl Debug for RegistryDeviceNode {
 }
 
 impl RegistryDeviceNode {
-    pub(crate) fn add_port(&mut self, id: u32, direction: Direction, port: RegistryPort) {
-        self.ports[direction].insert(id, port);
+    pub(crate) fn add_port(&mut self, direction: Direction, port: RegistryPort) {
+        self.ports[direction].insert(port.global_id, port);
     }
 }
 
