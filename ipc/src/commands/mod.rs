@@ -184,6 +184,7 @@ pub struct PhysicalDevice {
 /// Just port information about the device
 pub struct PhysicalDevicePort {
     pub name: String,
+    pub channel: String,
 }
 
 /// This will be extended over time, for now we'll just include the node id and the name.

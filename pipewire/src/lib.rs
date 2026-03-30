@@ -425,6 +425,7 @@ pub struct DeviceNode {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NodePort {
     pub name: String,
+    pub channel: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]

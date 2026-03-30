@@ -323,9 +323,11 @@ impl PipewireManager {
                                 ports: enum_map!{
                                     PortDirection::In => node.ports[Direction::In].iter().map(|port| PhysicalDevicePort {
                                         name: port.name.clone(),
+                                        channel: port.channel.clone(),
                                     }).collect(),
                                     PortDirection::Out => node.ports[Direction::Out].iter().map(|port| PhysicalDevicePort {
                                         name: port.name.clone(),
+                                        channel: port.channel.clone(),
                                     }).collect(),
                                 }
                             };
@@ -396,9 +398,11 @@ impl PipewireManager {
                                     ports: enum_map!{
                                         PortDirection::In => dev.ports[Direction::In].iter().map(|port| PhysicalDevicePort {
                                             name: port.name.clone(),
+                                            channel: port.channel.clone(),
                                         }).collect(),
                                         PortDirection::Out => dev.ports[Direction::Out].iter().map(|port| PhysicalDevicePort {
                                             name: port.name.clone(),
+                                            channel: port.channel.clone(),
                                         }).collect(),
                                     }
                                 };

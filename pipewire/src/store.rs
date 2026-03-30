@@ -2,7 +2,7 @@ use crate::default_device::{DefaultDefinition, DefaultDevice};
 use crate::manager::FilterData;
 use crate::registry::{
     MetadataStore, RegistryClient, RegistryClientNode, RegistryDevice, RegistryDeviceNode,
-    RegistryFactory, RegistryLink,
+    RegistryFactory, RegistryLink, RegistryPort,
 };
 use crate::{
     ApplicationNode, DeviceNode, Direction, FilterProperty, FilterValue, LinkType, MediaClass,
@@ -748,11 +748,11 @@ impl Store {
             );
 
             // If this node has gone upstream, we should flag it as a removal, so we can await
-            // for any new ports which may need to arrive, then we'll reset it once we're ready
+            // for any new ports which may need to arrive, then we'll resend it once
+            // the ports are synced up again.
             if node.sent_upstream {
                 // Flag this for removal upstream, and reset its local state.
                 let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
-                node.ports = Default::default();
                 node.sent_upstream = false;
             }
 
@@ -778,7 +778,8 @@ impl Store {
     pub fn unmanaged_node_port_check(&mut self, id: u32) {
         // Check if a node is ready to be sent upstream or needs an update.
         // Called when:
-        // - A port is added (ports may now be complete)
+        // - A port is added
+        // - A port is removed
         // - Port count info is updated (via unmanaged_node_port_count_update)
 
         let node = if let Some(node) = self.unmanaged_device_nodes.get(&id) {
@@ -884,6 +885,7 @@ impl Store {
                 if !port.is_monitor {
                     ports[direction].push(NodePort {
                         name: port.name.clone(),
+                        channel: port.channel.clone(),
                     });
                 }
             }
@@ -1276,11 +1278,27 @@ impl Store {
         if let Some(id) = self.is_managed_link(id)
             && let Some(link) = self.managed_links.remove(&id)
         {
-            debug!("IT HERE!");
             let _ = self.callback_tx.send(PipewireReceiver::ManagedLinkDropped(
                 link.source,
                 link.destination,
             ));
+        }
+
+        // This might be a port removal from an unmanaged node
+        // TODO: Check if port removal breaks count
+        // In theory, if a port is removed from a node, it may no longer match the expected count,
+        // if this happens, we need to detach the device until it's fixed.
+        let mut nodes_to_check = Vec::new();
+        for (node_id, node) in self.unmanaged_device_nodes.iter_mut() {
+            for direction in Direction::iter() {
+                if node.ports[direction].contains_key(&id) {
+                    node.ports[direction].remove(&id);
+                    nodes_to_check.push(*node_id);
+                }
+            }
+        }
+        for node in nodes_to_check {
+            self.unmanaged_node_port_check(node);
         }
     }
 

@@ -591,7 +591,7 @@ impl RegistryDeviceNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(unused)]
 pub(crate) struct RegistryPort {
     pub global_id: u32,
