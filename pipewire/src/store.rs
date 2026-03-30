@@ -1,12 +1,12 @@
 use crate::default_device::{DefaultDefinition, DefaultDevice};
 use crate::manager::FilterData;
 use crate::registry::{
-    Direction, MetadataStore, RegistryClient, RegistryClientNode, RegistryDevice,
-    RegistryDeviceNode, RegistryFactory, RegistryLink,
+    MetadataStore, RegistryClient, RegistryClientNode, RegistryDevice, RegistryDeviceNode,
+    RegistryFactory, RegistryLink,
 };
 use crate::{
-    ApplicationNode, DeviceNode, FilterProperty, FilterValue, LinkType, MediaClass, NodeTarget,
-    PipewireReceiver,
+    ApplicationNode, DeviceNode, Direction, FilterProperty, FilterValue, LinkType, MediaClass,
+    NodePort, NodeTarget, PipewireReceiver,
 };
 use anyhow::Result;
 use anyhow::{anyhow, bail};
@@ -867,6 +867,18 @@ impl Store {
 
         let is_usable = self.is_usable_unmanaged_device_node(id).is_some();
 
+        let mut ports: EnumMap<Direction, Vec<NodePort>> = Default::default();
+        for direction in Direction::iter() {
+            for (_, port) in node.ports[direction].iter() {
+                // Don't send Monitor ports
+                if !port.is_monitor {
+                    ports[direction].push(NodePort {
+                        name: port.name.clone(),
+                    });
+                }
+            }
+        }
+
         // Create the virtual node and send it upstream
         let device_node = DeviceNode {
             node_id: id,
@@ -875,6 +887,8 @@ impl Store {
             name: node.name.clone(),
             nickname: node.nickname.clone(),
             description: node.description.clone(),
+
+            ports,
         };
 
         // Mark as sent BEFORE sending to prevent race conditions
@@ -994,7 +1008,6 @@ impl Store {
     pub fn unmanaged_client_node_set_target(&mut self, id: u32, target: TargetType) {
         // So we need to locate the target, which might be tricky as the target is passed as an
         // object serial, and not a node id, meaning we need to do some digging.
-
         let mut result: Option<NodeTarget> = None;
 
         match target {

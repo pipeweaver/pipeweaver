@@ -2,7 +2,7 @@ use crate::registry::PipewireRegistry;
 use crate::store::{FilterStore, LinkStore, LinkStoreMap, NodeStore, PortLocation, Store};
 use crate::{
     FilterHandler, FilterProperties, FilterProperty, FilterValue, LinkType, NodeProperties,
-    PipewireInternalMessage, PipewireReceiver, registry,
+    PipewireInternalMessage, PipewireReceiver,
 };
 use crate::{MediaClass, PWReceiver};
 use anyhow::Result;
@@ -545,8 +545,8 @@ impl PipewireManager {
             _filter: filter,
 
             port_map: enum_map! {
-                registry::Direction::In => input_port_map,
-                registry::Direction::Out=> output_port_map,
+                crate::Direction::In => input_port_map,
+                crate::Direction::Out=> output_port_map,
             },
 
             _input_ports: input_ports,
@@ -591,8 +591,8 @@ impl PipewireManager {
         // Collect all the port pairs we're going to link
         let mut port_pairs = Vec::new();
         for port in PortLocation::iter() {
-            let (_, src_index) = self.get_port(source, registry::Direction::Out, port)?;
-            let (_, tgt_index) = self.get_port(dest, registry::Direction::In, port)?;
+            let (_, src_index) = self.get_port(source, crate::Direction::Out, port)?;
+            let (_, tgt_index) = self.get_port(dest, crate::Direction::In, port)?;
             port_pairs.push((src_index, tgt_index));
         }
 
@@ -628,8 +628,8 @@ impl PipewireManager {
             let link_id = Ulid::new();
 
             // Next, obtain the source and destination port indexes
-            let (src_id, src_index) = self.get_port(source, registry::Direction::Out, port)?;
-            let (tgt_id, tgt_index) = self.get_port(dest, registry::Direction::In, port)?;
+            let (src_id, src_index) = self.get_port(source, crate::Direction::Out, port)?;
+            let (tgt_id, tgt_index) = self.get_port(dest, crate::Direction::In, port)?;
 
             // If the Source and Destination aren't physical nodes, we should flag the link as
             // passive, otherwise it should be active.
@@ -691,7 +691,7 @@ impl PipewireManager {
     fn get_port(
         &mut self,
         link: LinkType,
-        direction: registry::Direction,
+        direction: crate::Direction,
         location: PortLocation,
     ) -> Result<(u32, u32)> {
         // Ok, simple enough, pull out the relevant type, and get the port at location

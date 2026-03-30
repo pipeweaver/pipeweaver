@@ -6,6 +6,7 @@ mod store;
 
 use crate::manager::run_pw_main_loop;
 use anyhow::{Result, anyhow, bail};
+use enum_map::{Enum, EnumMap};
 use log::{info, trace, warn};
 use oneshot::TryRecvError;
 use std::collections::HashMap;
@@ -14,6 +15,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::thread::{JoinHandle, sleep};
 use std::time::{Duration, Instant};
+use strum_macros::EnumIter;
 use ulid::Ulid;
 
 type PWSender = pipewire::channel::Sender<PipewireInternalMessage>;
@@ -352,6 +354,12 @@ pub enum MediaClass {
     Duplex,
 }
 
+#[derive(Debug, Copy, Clone, Enum, EnumIter)]
+pub enum Direction {
+    In,
+    Out,
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum LinkType {
     Node(Ulid),
@@ -410,6 +418,13 @@ pub struct DeviceNode {
     pub name: Option<String>,
     pub nickname: Option<String>,
     pub description: Option<String>,
+
+    pub ports: EnumMap<Direction, Vec<NodePort>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodePort {
+    pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]

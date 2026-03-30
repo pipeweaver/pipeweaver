@@ -1,8 +1,8 @@
-use crate::NodeTarget;
 use crate::default_device::DefaultDefinition;
 use crate::store::{Store, TargetType};
+use crate::{Direction, NodeTarget};
 use anyhow::{anyhow, bail};
-use enum_map::{Enum, EnumMap};
+use enum_map::EnumMap;
 use log::debug;
 use pipewire::client::{Client, ClientChangeMask, ClientListener};
 use pipewire::core::Core;
@@ -28,7 +28,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
-use strum_macros::EnumIter;
 
 pub(crate) struct PipewireRegistry {
     registry: Rc<RefCell<Registry>>,
@@ -498,12 +497,6 @@ impl RegistryDevice {
     pub fn add_node(&mut self, id: u32) {
         self.nodes.push(id);
     }
-}
-
-#[derive(Debug, Copy, Clone, Enum, EnumIter)]
-pub(crate) enum Direction {
-    In,
-    Out,
 }
 
 pub(crate) struct RegistryDeviceNode {

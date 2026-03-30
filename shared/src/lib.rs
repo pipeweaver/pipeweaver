@@ -36,6 +36,15 @@ pub enum DeviceType {
 }
 
 #[derive(
+    Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq, ValueEnum,
+)]
+pub enum PortDirection {
+    #[default]
+    In,
+    Out,
+}
+
+#[derive(
     Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq, ValueEnum,
 )]
 pub enum MuteState {

@@ -3,7 +3,7 @@ use json_patch::Patch;
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::{
     AppDefinition, AppTarget, Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType, OrderGroup,
-    Quantum,
+    PortDirection, Quantum,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -176,6 +176,14 @@ pub struct PhysicalDevice {
     pub name: Option<String>,
     pub description: Option<String>,
     pub is_usable: bool,
+
+    pub ports: EnumMap<PortDirection, Vec<PhysicalDevicePort>>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+/// Just port information about the device
+pub struct PhysicalDevicePort {
+    pub name: String,
 }
 
 /// This will be extended over time, for now we'll just include the node id and the name.

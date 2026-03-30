@@ -12,14 +12,14 @@ use crate::servers::http_server::MeterEvent;
 use enum_map::{EnumMap, enum_map};
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{
-    Application, AudioConfiguration, PWCommandResponse, PhysicalDevice,
+    Application, AudioConfiguration, PWCommandResponse, PhysicalDevice, PhysicalDevicePort,
 };
 use pipeweaver_pipewire::{
-    ApplicationNode, DeviceNode, MediaClass, NodeTarget, PipewireMessage, PipewireReceiver,
-    PipewireRunner,
+    ApplicationNode, DeviceNode, Direction, MediaClass, NodeTarget, PipewireMessage,
+    PipewireReceiver, PipewireRunner,
 };
 use pipeweaver_profile::Profile;
-use pipeweaver_shared::{AppTarget, DeviceType, Mix};
+use pipeweaver_shared::{AppTarget, DeviceType, Mix, PortDirection};
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
@@ -320,6 +320,14 @@ impl PipewireManager {
                                 name: node.name.clone(),
                                 description: node.description.clone(),
                                 is_usable: node.is_usable,
+                                ports: enum_map!{
+                                    PortDirection::In => node.ports[Direction::In].iter().map(|port| PhysicalDevicePort {
+                                        name: port.name.clone(),
+                                    }).collect(),
+                                    PortDirection::Out => node.ports[Direction::Out].iter().map(|port| PhysicalDevicePort {
+                                        name: port.name.clone(),
+                                    }).collect(),
+                                }
                             };
 
                             let (is_source, is_target) = match node.node_class {
@@ -384,6 +392,15 @@ impl PipewireManager {
                                     name: dev.name.clone(),
                                     description: dev.description.clone(),
                                     is_usable: usable,
+
+                                    ports: enum_map!{
+                                        PortDirection::In => dev.ports[Direction::In].iter().map(|port| PhysicalDevicePort {
+                                            name: port.name.clone(),
+                                        }).collect(),
+                                        PortDirection::Out => dev.ports[Direction::Out].iter().map(|port| PhysicalDevicePort {
+                                            name: port.name.clone(),
+                                        }).collect(),
+                                    }
                                 };
 
                                 // Update node_list
