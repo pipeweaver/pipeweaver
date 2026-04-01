@@ -1,6 +1,6 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Error, Result, anyhow, bail};
 use cpp::cpp;
-use dirs::runtime_dir;
+use directories::BaseDirs;
 use log::{debug, error, info, warn};
 use qmetaobject::QObjectPinned;
 use qmetaobject::prelude::*;
@@ -359,15 +359,28 @@ fn write_pid_file() {
 }
 
 fn get_socket_file_path() -> PathBuf {
-    let mut path = runtime_dir().unwrap_or_else(env::temp_dir);
+    let mut path = get_runtime_path().unwrap_or_else(|_| env::temp_dir());
     path.push(format!("{}.sock", APP_NAME));
     path
 }
 
 fn get_pid_file_path() -> PathBuf {
-    let mut path = runtime_dir().unwrap_or_else(env::temp_dir);
+    let mut path = get_runtime_path().unwrap_or_else(|_| env::temp_dir());
     path.push(format!("{}.pid", APP_NAME));
     path
+}
+
+fn get_runtime_path() -> Result<PathBuf> {
+    BaseDirs::new()
+        .and_then(|base| base.runtime_dir().map(|p| p.to_path_buf()))
+        .map(Ok::<PathBuf, Error>)
+        .unwrap_or_else(|| {
+            let tmp_dir = env::temp_dir().join(APP_NAME);
+            if !tmp_dir.exists() {
+                fs::create_dir_all(&tmp_dir)?;
+            }
+            Ok(tmp_dir)
+        })
 }
 
 pub fn display_error(message: String) {

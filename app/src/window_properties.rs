@@ -1,3 +1,4 @@
+use directories::BaseDirs;
 use log::debug;
 use qmetaobject::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -35,7 +36,10 @@ pub struct WindowProperties {
 
 impl WindowProperties {
     fn get_config_path() -> PathBuf {
-        let mut path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+        let mut path = BaseDirs::new()
+            .map(|dirs| dirs.config_dir().to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("."));
+
         path.push("pipeweaver");
         fs::create_dir_all(&path).ok();
         path.push("window.json");
