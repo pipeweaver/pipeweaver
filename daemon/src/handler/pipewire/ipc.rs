@@ -400,6 +400,30 @@ impl IPCHandler for PipewireManager {
                     bail!("Node name {} not Found", name);
                 }
             }
+            Cmd::CreatePhysicalNodePortMap(_, _, _, _) => {
+                bail!("Not Implemented");
+            }
+            Cmd::DeletePhysicalNodePortMap(_) => {
+                bail!("Not Implemented");
+            }
+            Cmd::AttachPhysicalNodePortMap(_, _) => {
+                bail!("Not Implemented");
+            }
+            Cmd::AttachPhysicalNodePortMapByName(_, _) => {
+                bail!("Not Implemented");
+            }
+            Cmd::AttachPhysicalNodePortMapByNames(_, _) => {
+                bail!("Not Implemented");
+            }
+            Cmd::DetachPhysicalNodePortMap(_, _) => {
+                bail!("Not Implemented");
+            }
+            Cmd::DetachPhysicalNodePortMapByName(_, _) => {
+                bail!("Not Implemented");
+            }
+            Cmd::DetachPhysicalNodePortMapByNames(_, _) => {
+                bail!("Not Implemented");
+            }
         }
     }
 }

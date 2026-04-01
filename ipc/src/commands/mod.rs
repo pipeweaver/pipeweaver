@@ -130,6 +130,19 @@ pub enum APICommand {
 
     SetOrder(Ulid, u8),
     SetOrderByName(String, u8),
+
+    // Node Map Handling
+    // NodeId, Name, Left Channel, Right Channel
+    CreatePhysicalNodePortMap(u32, String, String, String),
+    DeletePhysicalNodePortMap(Ulid),
+
+    AttachPhysicalNodePortMap(Ulid, Ulid),
+    AttachPhysicalNodePortMapByName(String, Ulid),
+    AttachPhysicalNodePortMapByNames(String, String),
+
+    DetachPhysicalNodePortMap(Ulid, Ulid),
+    DetachPhysicalNodePortMapByName(String, Ulid),
+    DetachPhysicalNodePortMapByNames(String, String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
