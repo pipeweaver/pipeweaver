@@ -19,8 +19,10 @@ fi
 # Neither 'cargo deb' or 'cargo generate-rpm' seem to provide a way to specify an asset that is created at build time.
 # To work around this, we force a release build, copy out the shell completions produced from that build, put it into
 # a predictable locaion and then build the packages, which knows where to look.
-cargo build --release --all-features
+cargo build --workspace --release --all-features
 strip target/release/pipeweaver-daemon
+strip target/release/pipeweaver-client
+strip target/release/pipeweaver-app
 
 # Now, first build the .deb file (We don't need to recompile the code here)..
 cargo deb -p pipeweaver-daemon --no-build
@@ -29,4 +31,4 @@ cargo deb -p pipeweaver-daemon --no-build
 cargo generate-rpm -p daemon
 
 # Now grab the generated binary and drop it into a zip file..
-zip -j pipeweaver.zip target/release/pipeweaver-daemon target/release/pipeweaver-client
+zip -j pipeweaver.zip target/release/pipeweaver-daemon target/release/pipeweaver-client target/release/pipeweaver-app

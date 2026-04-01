@@ -72,10 +72,12 @@ name = "pipeweaver"
 assets = [
     ["../target/release/pipeweaver-daemon", "usr/bin/", "755"],
     ["../target/release/pipeweaver-client", "usr/bin/", "755"],
+    ["../target/release/pipeweaver-app", "usr/bin/", "755"],
     ["../daemon/resources/icons/pipeweaver.png", "usr/share/icons/hicolor/48x48/apps/", "644"],
     ["../daemon/resources/icons/pipeweaver-large.png", "usr/share/pixmaps/pipeweaver.png", "644"],
     ["../daemon/resources/icons/pipeweaver.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["../daemon/resources/desktop/pipeweaver.desktop", "usr/share/applications/", "644"],
+    ["../app/resources/pipeweaver-app.desktop", "usr/share/applications/", "644"],
 ]
 
 section = "sound"
@@ -91,10 +93,12 @@ name = "pipeweaver"
 assets = [
     { source = "../target/release/pipeweaver-daemon", dest = "/usr/bin/pipeweaver-daemon", mode = "0755" },
     { source = "../target/release/pipeweaver-client", dest = "/usr/bin/pipeweaver-client", mode = "0755" },
+    { source = "../target/release/pipeweaver-app", dest = "/usr/bin/pipeweaver-app", mode = "0755" },
     { source = "../daemon/resources/icons/pipeweaver.png", dest = "/usr/share/icons/hicolor/48x48/apps/pipeweaver.png", mode = "0644" },
     { source = "../daemon/resources/icons/pipeweaver-large.png", dest = "/usr/share/pixmaps/pipeweaver.png", mode = "0644" },
     { source = "../daemon/resources/icons/pipeweaver.svg", dest = "/usr/share/icons/hicolor/scalable/apps/pipeweaver.svg", mode = "0644" },
     { source = "../daemon/resources/desktop/pipeweaver.desktop", dest = "/usr/share/applications/pipeweaver.desktop", mode = "0644" },
+    { source = "../app/resources/pipeweaver-app.desktop", dest = "/usr/share/applications/pipeweaver-app.desktop", mode = "0644" },
 ]
 
 # Because we build under Ubuntu in CI, generate-rpm is unable to calculate the dependencies required (no access

@@ -10,7 +10,7 @@ jobs:
       - name: "Install Dependencies"
         run: |
           sudo apt-get update
-          sudo apt-get install pkg-config libpipewire-0.3-dev
+          sudo apt-get install pkg-config libpipewire-0.3-dev qt6-webengine-dev
 
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -35,10 +35,10 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-debug-
 
       - name: Running Tests
-        run: cargo check --all-features
+        run: cargo --workspace check --all-features
 
       - name: Checking Formatting
-        run: cargo fmt --all -- --check
+        run: cargo --workspace fmt --all -- --check
 
       - name: Performing Clippy Test
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo --workspace clippy --all-targets --all-features -- -D warnings
