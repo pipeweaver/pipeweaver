@@ -60,10 +60,11 @@ Implemented:
 * Configuration Saving and Recall
 * Tray Icon and .desktop Files
 * Custom Channel Colours
+* Command Line configuration tool
+* Application Management (Move Applications to channels inside the UI)
 
 Planned:
 
-* Command Line configuration tool
 * A 'Tablet Mode' interface
 * Multiple Profile Support
 * Latency Tuning
@@ -71,6 +72,6 @@ Planned:
 
 Possible Future Plans:
 
-* Application Management (Move Applications to channels inside the UI)
+
 * LV2 support for Mic Effects (Gate, Compressor, Expander, Eq etc)
 * flatpak support
