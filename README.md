@@ -39,12 +39,48 @@ There are currently no builds available, so you'll have to do it yourself for no
 
 Firstly, ensure you have rust (and cargo) installed, as well as pipewire.
 
+#### Building the Pipeweaver Base
+
 1) Check out the repository
 2) Run `cargo build --release`
-3) Grab the `pipeweaver-daemon` binary from `target/release/`
-4) Run it (probably in a terminal, but you can also manually configure it to autostart).
+3) Grab the `pipeweaver-daemon` and `pipeweaver-client` binaries from `target/release/`
+4) Run `pipeweaver-daemon` (probably in a terminal, but you can also manually configure it to autostart).
 5) Pipeweaver will then create a 'Default' layout, with some nodes pre-routed
 6) The configuration UI will be available at http://localhost:14565
+
+#### Building Pipeweaver with the App
+
+Pipeweaver provides a 'wrapper' app for the UI based on Qt to provide a more integrated desktop experience. This is
+optional, and requires a few extra dependencies, but it is recommended for a better experience.
+
+Firstly, install the dependencies for the app depending on your distribution:
+
+Debian Based:
+
+```
+sudo apt-get install qt6-webengine-dev
+```
+
+Fedora Base:
+
+```
+sudo dnf install qt6-qtwebengine-devel
+```
+
+Arch Based:
+
+```
+sudo pacman -S qt6-webengine
+```
+
+Then perform the following:
+
+1) Check out the repository
+2) Run `cargo build --workspace --release`
+3) Grab the `pipeweaver-daemon`, `pipeweaver-client`, and `pipeweaver-app` binaries from `target/release/`
+4) Run `pipeweaver-daemon` (probably in a terminal, but you can also manually configure it to autostart).
+5) Pipeweaver will then create a 'Default' layout, with some nodes pre-routed
+6) The app will automatically launch for configuration
 
 When you shut down pipeweaver, all the nodes and routes will be automatically removed.
 
@@ -71,7 +107,6 @@ Planned:
 * Useful Documentation
 
 Possible Future Plans:
-
 
 * LV2 support for Mic Effects (Gate, Compressor, Expander, Eq etc)
 * flatpak support
