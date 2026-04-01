@@ -83,6 +83,7 @@ assets = [
 section = "sound"
 priority = "optional"
 depends = "$auto"
+conflicts = "pipeweaver-app"
 extended-description = """\
 A tool for audio control and routing via Pipewire
 """
@@ -106,4 +107,8 @@ assets = [
 auto-req = "no"
 
 [package.metadata.generate-rpm.requires]
+qt6-qtwebengine = ">= 6.2.0"
 pipewire = ">= 1.0.5"   # Should be Fedora 40+
+
+[package.metadata.generate-rpm.conflicts]
+pipeweaver-app = "*"
