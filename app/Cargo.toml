@@ -1,0 +1,67 @@
+[package]
+version = "0.1.0"
+edition = "2024"
+
+name = "pipeweaver-app"
+description = "A UI Wrapper app for Pipeweaver"
+
+build = "build.rs"
+
+authors = ["Craig McLure <craig@mclure.net>"]
+license = "MIT"
+
+homepage = "https://pipeweaver.github.io/"
+repository = "https://github.com/pipeweaver/pipeweaver"
+
+[dependencies]
+anyhow = "1.0.100"
+log = "0.4.28"
+env_logger = "0.11.8"
+
+qmetaobject = { version = "0.2.10", features = ["webengine"] }
+qttypes = "0.2.12"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dirs = "6.0.0"
+open = "5.3.3"
+
+tungstenite = "0.28.0"
+cpp = "0.5.10"
+libc = "0.2.177"
+
+[build-dependencies]
+semver = "1"
+cpp_build = "0.5"
+pkg-config = "0.3.32"
+
+## Ok, Build Stuff Time :D
+[package.metadata.deb]
+name = "pipeweaver-app"
+assets = [
+    # In theory, all the Pipeweaver icons should already be present when installing
+    ["target/release/pipeweaver-app", "usr/bin/", "755"],
+    ["resources/pipeweaver-app.desktop", "usr/share/applications/", "644"],
+]
+
+section = "sound"
+priority = "optional"
+depends = "pipeweaver (>= 0.1.0), libqt6webenginewidgets6 (>= 6.2.0), qml6-module-qtwebengine (>= 6.2.0)"
+extended-description = """\
+A QT based wrapper around the Pipeweaver UI
+"""
+revision = "1"
+
+[package.metadata.generate-rpm]
+name = "pipeweaver-app"
+assets = [
+    { source = "target/release/pipeweaver-app", dest = "/usr/bin/pipeweaver-app", mode = "0755" },
+    { source = "resources/pipeweaver-app.desktop", dest = "/usr/share/applications/pipeweaver-app.desktop", mode = "0644" },
+]
+
+# Because we build under Ubuntu in CI, generate-rpm is unable to calculate the dependencies required (no access
+# to rpm / yum), so we need to disable the auto and specify dependencies manually.
+auto-req = "no"
+
+[package.metadata.generate-rpm.requires]
+pipeweaver = ">= 0.1.0"
+qt6-qtwebengine = ">= 6.2.0"

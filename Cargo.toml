@@ -8,6 +8,15 @@ members = [
     "pipewire",
     "profile",
     "shared",
+    "app",
+]
+default-members = [
+    "client",
+    "daemon",
+    "ipc",
+    "pipewire",
+    "profile",
+    "shared",
 ]
 
 [workspace.package]

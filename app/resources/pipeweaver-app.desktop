@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Pipeweaver App
+Comment=A Frontend App for Pipeweaver
+Path=/usr/bin
+Exec=/usr/bin/pipeweaver-app
+Icon=pipeweaver
+Terminal=false
+Categories=Utility
+NoDisplay=true
