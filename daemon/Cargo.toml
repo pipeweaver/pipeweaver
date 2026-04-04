@@ -82,7 +82,7 @@ assets = [
 
 section = "sound"
 priority = "optional"
-depends = "pipewire (>=1.0.5), libqt6webenginewidgets6 (>= 6.2.0), qml6-module-qtwebengine (>= 6.2.0)"
+depends = "pipewire (>=1.0.5), libqt6webenginewidgets6 (>= 6.2.0), qml6-module-qtwebengine (>= 6.2.0), qml6-module-qtquick-controls (>= 6.2.0), qml6-module-qtquick (>= 6.2.0), qml6-module-qtqml-workerscript (>= 6.2.0), qml6-module-qtquick-window (>= 6.2.0), qml6-module-qtquick-templates (>= 6.2.0)"
 conflicts = "pipeweaver-app"
 extended-description = """\
 A tool for audio control and routing via Pipewire
