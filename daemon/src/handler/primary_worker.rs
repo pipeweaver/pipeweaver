@@ -115,6 +115,10 @@ impl PrimaryWorker {
                             MessageResult::Reset => {
                                 // Restart the Pipewire Manager, so continue on the main loop
                                 info!("[PrimaryWorker] Restarting Pipewire Manager, Saving Profile");
+
+                                // We should fetch the 'latest' profile from the Pipeweaver runner
+                                self.update_status(&command_sender, false).await;
+
                                 let _ = self.save_profile(&profile_path, &self.last_status.audio.profile);
                                 let _ = command_sender.send(ManagerMessage::Quit).await;
                                 continue 'main;
