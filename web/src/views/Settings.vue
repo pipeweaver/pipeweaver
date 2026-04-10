@@ -110,7 +110,8 @@ export default {
         <div style="margin-bottom: 10px;">
           The setting below will adjust the buffers pipewire uses when handling Pipeweaver
           audio.<br/><br/>
-          The lower the setting, the higher chance of cutouts and issues, the higher the setting,
+          The lower the setting, the higher the CPU and chance of cutouts and issues, the higher the
+          setting,
           the more latency will be added to the audio. Changing this setting will restart the audio
           engine.
         </div>
