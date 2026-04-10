@@ -61,4 +61,4 @@ interprocess = { version = "2.4.0", features = ["tokio"] }
 ulid = { version = "1.2.1", features = ["serde"] }
 
 ### TokIO
-tokio = { version = "1.50.0", features = ["rt-multi-thread", "sync", "macros"] }
+tokio = { version = "1.51.1", features = ["rt-multi-thread", "sync", "macros"] }
