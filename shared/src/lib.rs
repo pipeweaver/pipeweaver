@@ -105,6 +105,7 @@ pub enum Quantum {
     #[default]
     Quantum512,
     Quantum1024,
+    Quantum2048,
 }
 
 impl From<Quantum> for u32 {
@@ -118,6 +119,7 @@ impl From<Quantum> for u32 {
             Quantum::Quantum256 => 256,
             Quantum::Quantum512 => 512,
             Quantum::Quantum1024 => 1024,
+            Quantum::Quantum2048 => 2048,
         }
     }
 }
