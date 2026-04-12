@@ -54,7 +54,7 @@ contains the following:
 
 * `.rpm` package for Redhat based distributions (Fedora, CentOS, RHEL, etc)
 * `.deb` package for Debian based distributions (Debian, Ubuntu, Linux Mint, Pop, etc)
-* `.flatpakref` A reference file for the Beacn Utility Flatpak repository
+* `.flatpakref` A reference file for the Pipeweaver Flatpak repository
 * Compile from Source (instructions below)
 
 ### Notes
