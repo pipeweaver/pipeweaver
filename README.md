@@ -28,12 +28,41 @@ UI from wherever you may need it. An API is also available, allowing other devic
 
 ****
 
-## Getting Started
+# Getting Started
 
 **NOTE**: We highly recommend Pipewire 1.4.0 and above, during development we encountered some strange latency issues,
 especially when UCM devices were in the routing tree, these seem to have been solved in 1.4.0.
 
-### Building
+## Installation
+
+### Automatic Installation
+Pipeweaver provides a simple script which will attempt to install the correct package for your
+distribution. This script will install the utility in such a way that future releases will be managed through your
+standard package manager.
+
+There is a [wiki page](https://github.com/pipeweaver/pipeweaver/wiki/Release-Transparency) which describes the
+process, and how you can verify that the code you're running is the same as what is in this repository.
+
+Run the following in a Terminal, and follow the prompts:
+```bash
+curl -fsSL https://pipeweaver.github.io/pipeweaver-repo/scripts/install.sh | bash
+```
+
+### Manual Installation
+If you don't want to use the script, there are still options available! The [releases page](https://github.com/pipeweaver/pipeweafver/releases/latest) 
+contains the following:
+
+* `.rpm` package for Redhat based distributions (Fedora, CentOS, RHEL, etc)
+* `.deb` package for Debian based distributions (Debian, Ubuntu, Linux Mint, Pop, etc)
+* `.flatpakref` A reference file for the Beacn Utility Flatpak repository
+* Compile from Source (instructions below)
+
+### Notes
+ * Pipeweaver is also available in the AUR as `pipeweaver`
+ * The RPM and DEB packages do not provide automatic updates, and there's no app check.
+ * For Bazzite, you can install the rpm via ostree, although I'd recommend the flatpak instead.
+
+## Building
 
 There are currently no builds available, so you'll have to do it yourself for now. The instructions are pretty simple.
 
