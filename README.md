@@ -49,7 +49,7 @@ curl -fsSL https://pipeweaver.github.io/pipeweaver-repo/scripts/install.sh | bas
 ```
 
 ### Manual Installation
-If you don't want to use the script, there are still options available! The [releases page](https://github.com/pipeweaver/pipeweafver/releases/latest) 
+If you don't want to use the script, there are still options available! The [releases page](https://github.com/pipeweaver/pipeweaver/releases/latest) 
 contains the following:
 
 * `.rpm` package for Redhat based distributions (Fedora, CentOS, RHEL, etc)
