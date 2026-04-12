@@ -62,11 +62,9 @@ contains the following:
  * The RPM and DEB packages do not provide automatic updates, and there's no app check.
  * For Bazzite, you can install the rpm via ostree, although I'd recommend the flatpak instead.
 
-## Building
+## Building from Source
 
-There are currently no builds available, so you'll have to do it yourself for now. The instructions are pretty simple.
-
-Firstly, ensure you have rust (and cargo) installed, as well as pipewire.
+Firstly, ensure you have rust (and cargo), npm, as well as pipewire.
 
 #### Building the Pipeweaver Base
 
