@@ -5,10 +5,9 @@
 //
 // Thanks to DesignGears for the idea :)
 
-use crate::APP_NAME;
-use std::env::temp_dir;
+use crate::get_runtime_path;
 use std::error::Error;
-use std::{env, fs, process};
+use std::{fs, process};
 use zbus::blocking::Connection;
 use zbus::proxy;
 
@@ -41,11 +40,11 @@ pub fn raise_window() -> Result<(), Box<dyn Error>> {
     let conn = Connection::session()?;
     let pid = process::id();
 
-    let condition = if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
-        format!("w[i].desktopFileName == {}", APP_NAME)
-    } else {
-        format!("w[i].pid === {pid}")
-    };
+    // let condition = if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
+    //     format!("w[i].desktopFileName == {}", APP_NAME)
+    // } else {
+    let condition = format!("w[i].pid === {pid}");
+    //};
 
     // This script loops through all the active windows, looks for the one assigned to our
     // pid, then flags it active in the workspace.
@@ -59,7 +58,7 @@ pub fn raise_window() -> Result<(), Box<dyn Error>> {
     let scripting = KWinScriptingProxyBlocking::new(&conn)?;
     let plugin = format!("kwin_raise_{pid}");
 
-    let tmp_path = temp_dir().join("{plugin}.js");
+    let tmp_path = get_runtime_path()?.join(format!("{plugin}.js"));
     fs::write(&tmp_path, &script)?;
 
     // Wrap everything in a result, so we can ensure the temp file is deleted before returning
