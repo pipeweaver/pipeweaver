@@ -28,6 +28,7 @@ open = "5.3.3"
 tungstenite = "0.29.0"
 cpp = "0.5.11"
 libc = "0.2.184"
+zbus = "5.14.0"
 
 [build-dependencies]
 semver = "1"

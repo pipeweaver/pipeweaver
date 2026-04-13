@@ -17,9 +17,11 @@ use std::{env, fs, thread};
 use tungstenite::http::Uri;
 use tungstenite::{Message, connect};
 
+mod raise_window;
 mod window_handler;
 mod window_properties;
 
+use crate::raise_window::raise_window;
 use crate::window_handler::{WindowHandler, WindowMessage};
 use window_properties::WindowProperties;
 
@@ -252,6 +254,9 @@ fn ipc_thread_main(tx: mpsc::Sender<WindowMessage>) -> Result<()> {
                         Ok(()) => {
                             // Qt is alive — now forward the actual trigger.
                             let _ = tx.send(WindowMessage::Trigger);
+                            if let Err(e) = raise_window() {
+                                warn!("Failed to raise window: {e}");
+                            }
                             let _ = stream.write_all(b"OK");
                         }
                         Err(_) => {
