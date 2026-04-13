@@ -7,6 +7,8 @@
 
 use crate::get_runtime_path;
 use std::error::Error;
+use std::fs::create_dir_all;
+use std::io::Write;
 use std::{fs, process};
 use zbus::blocking::Connection;
 use zbus::proxy;
@@ -55,11 +57,21 @@ pub fn raise_window() -> Result<(), Box<dyn Error>> {
          }}"
     );
 
+    let runtime_dir = get_runtime_path()?.join("pipeweaver");
+    create_dir_all(&runtime_dir)?;
+
     let scripting = KWinScriptingProxyBlocking::new(&conn)?;
     let plugin = format!("kwin_raise_{pid}");
 
-    let tmp_path = get_runtime_path()?.join(format!("{plugin}.js"));
-    fs::write(&tmp_path, &script)?;
+    let tmp_path = runtime_dir.join(format!("{plugin}.js"));
+
+    // Create the temporary file
+    {
+        let mut file = fs::File::create(&tmp_path)?;
+        file.write_all(script.as_bytes())?;
+        file.flush()?;
+        file.sync_all()?;
+    }
 
     // Wrap everything in a result, so we can ensure the temp file is deleted before returning
     let result = {
