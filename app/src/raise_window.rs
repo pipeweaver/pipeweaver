@@ -5,9 +5,10 @@
 //
 // Thanks to DesignGears for the idea :)
 
+use crate::APP_NAME;
 use std::env::temp_dir;
 use std::error::Error;
-use std::{fs, process};
+use std::{env, fs, process};
 use zbus::blocking::Connection;
 use zbus::proxy;
 
@@ -36,16 +37,22 @@ trait KWinScript {
     fn run(&self) -> zbus::Result<()>;
 }
 
-pub fn raise_window() -> Result<(), Box<dyn std::error::Error>> {
+pub fn raise_window() -> Result<(), Box<dyn Error>> {
     let conn = Connection::session()?;
     let pid = process::id();
+
+    let condition = if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
+        format!("w[i].desktopFileName == {}", APP_NAME)
+    } else {
+        format!("w[i].pid === {pid}")
+    };
 
     // This script loops through all the active windows, looks for the one assigned to our
     // pid, then flags it active in the workspace.
     let script = format!(
         "var w = workspace.windowList(); \
          for (var i in w) {{ \
-             if (w[i].pid === {pid}) {{ workspace.activeWindow = w[i]; break; }} \
+             if ({condition}) {{ workspace.activeWindow = w[i]; break; }} \
          }}"
     );
 
