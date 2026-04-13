@@ -5,11 +5,11 @@
 //
 // Thanks to DesignGears for the idea :)
 
-use crate::get_runtime_path;
+use crate::{APP_NAME, get_runtime_path};
 use std::error::Error;
 use std::fs::create_dir_all;
 use std::io::Write;
-use std::{fs, process};
+use std::{env, fs, process};
 use zbus::blocking::Connection;
 use zbus::proxy;
 
@@ -42,11 +42,11 @@ pub fn raise_window() -> Result<(), Box<dyn Error>> {
     let conn = Connection::session()?;
     let pid = process::id();
 
-    // let condition = if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
-    //     format!("w[i].desktopFileName == {}", APP_NAME)
-    // } else {
-    let condition = format!("w[i].pid === {pid}");
-    //};
+    let condition = if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
+        format!("w[i].desktopFileName == {}", APP_NAME)
+    } else {
+        format!("w[i].pid === {pid}")
+    };
 
     // This script loops through all the active windows, looks for the one assigned to our
     // pid, then flags it active in the workspace.
