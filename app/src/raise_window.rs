@@ -42,6 +42,8 @@ pub fn raise_window() -> Result<(), Box<dyn Error>> {
     let conn = Connection::session()?;
     let pid = process::id();
 
+    // If we're in a flatpak the process::id won't necessarily match for this window
+    // so we need the second most reliable check, the .desktop file name
     let condition = if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
         format!("w[i].desktopFileName === \"{}\"", APP_NAME)
     } else {
@@ -49,7 +51,7 @@ pub fn raise_window() -> Result<(), Box<dyn Error>> {
     };
 
     // This script loops through all the active windows, looks for the one assigned to our
-    // pid, then flags it active in the workspace.
+    // condition, then flags it active in the workspace.
     let script = format!(
         "var w = workspace.windowList(); \
          for (var i in w) {{ \
@@ -57,6 +59,8 @@ pub fn raise_window() -> Result<(), Box<dyn Error>> {
          }}"
     );
 
+    // Create the runtime path if it doesn't exist, we need to append a pipeweaver
+    // dir here, so we can allow exposure to the host and kwin
     let runtime_dir = get_runtime_path()?.join("pipeweaver");
     create_dir_all(&runtime_dir)?;
 
@@ -65,7 +69,7 @@ pub fn raise_window() -> Result<(), Box<dyn Error>> {
 
     let tmp_path = runtime_dir.join(format!("{plugin}.js"));
 
-    // Create the temporary file
+    // Create the temporary file (scope this so we close the file correctly)
     {
         let mut file = fs::File::create(&tmp_path)?;
         file.write_all(script.as_bytes())?;
@@ -73,7 +77,8 @@ pub fn raise_window() -> Result<(), Box<dyn Error>> {
         file.sync_all()?;
     }
 
-    // Wrap everything in a result, so we can ensure the temp file is deleted before returning
+    // Wrap everything in a result, so we can ensure the temp file is deleted before returning,
+    // but simply load the script, run the script, unload the script.
     let result = {
         let file_path = tmp_path.to_str().ok_or("non-UTF8 temp path")?;
         let script_id = scripting.load_script(file_path, &plugin)?;
@@ -87,6 +92,7 @@ pub fn raise_window() -> Result<(), Box<dyn Error>> {
         Ok::<_, Box<dyn Error>>(())
     };
 
+    // Nuke the script file
     let _ = fs::remove_file(&tmp_path);
     result?;
 
