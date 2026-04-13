@@ -43,7 +43,7 @@ pub fn raise_window() -> Result<(), Box<dyn Error>> {
     let pid = process::id();
 
     let condition = if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
-        format!("w[i].desktopFileName == {}", APP_NAME)
+        format!("w[i].desktopFileName === \"{}\"", APP_NAME)
     } else {
         format!("w[i].pid === {pid}")
     };
