@@ -95,6 +95,9 @@ async fn main() -> Result<()> {
     ));
 
     CombinedLogger::init(log_targets)?;
+
+    log_panics::init();
+
     info!("Starting {} v{} - {}", APP_NAME, VERSION, HASH);
 
     let shutdown = Stop::new();

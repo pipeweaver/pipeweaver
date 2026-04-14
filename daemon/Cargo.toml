@@ -35,6 +35,7 @@ rust-ini = "0.21.3"
 
 ### Logging
 file-rotate = "0.8.0"
+log-panics = "2.1.0"
 
 ### Enum Handling
 enum-map = { workspace = true }
