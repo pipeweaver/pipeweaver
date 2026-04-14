@@ -1,10 +1,10 @@
-use anyhow::{Context, Result, anyhow};
-use log::info;
+use anyhow::{Context, Error, Result, anyhow};
+use log::{debug, error, info};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 
 use crate::handler::messaging::DaemonMessage;
-use pipeweaver_ipc::commands::{DaemonRequest, DaemonResponse};
+use pipeweaver_ipc::commands::{DaemonRequest, DaemonResponse, PWCommandResponse};
 
 pub type Messenger = Sender<DaemonMessage>;
 type Response = Result<DaemonResponse>;
@@ -50,8 +50,14 @@ pub async fn handle_packet(request: DaemonRequest, sender: &Messenger) -> Respon
         }
     };
 
-    if let Err(e) = &response {
-        info!("IPC Command Failed: {:?}", e);
+    match &response {
+        Ok(DaemonResponse::Pipewire(PWCommandResponse::Err(e))) => {
+            error!("Pipewire Command Failed: {}", e);
+        }
+        Err(e) => {
+            error!("IPC Command Failed: {}", e);
+        }
+        _ => {}
     }
 
     response
