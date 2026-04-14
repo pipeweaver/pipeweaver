@@ -139,10 +139,7 @@ impl PhysicalDevices for PipewireManager {
                     if let Some(name) = &dev.name
                         && name == node_name
                     {
-                        debug!(
-                            "Attaching Node {} to {}",
-                            node.node_id, device.description.id
-                        );
+                        debug!("Attaching Node {} to {}", node_name, device.description.id);
 
                         // Got a hit, attach to our filter, and bring it into the tree
                         self.link_create_unmanaged_to_filter(node.node_id, device.description.id)
@@ -171,10 +168,7 @@ impl PhysicalDevices for PipewireManager {
                         && desc == node_desc
                     {
                         // Firstly, attach the Node
-                        debug!(
-                            "Attaching Node {} to {}",
-                            node.node_id, device.description.id
-                        );
+                        debug!("Attaching Node {} to {}", node_desc, device.description.id);
                         self.link_create_unmanaged_to_filter(node.node_id, device.description.id)
                             .await?;
 
@@ -213,10 +207,7 @@ impl PhysicalDevices for PipewireManager {
                     if let Some(name) = &dev.name
                         && name == node_name
                     {
-                        debug!(
-                            "Attaching Node {} to {}",
-                            node.node_id, device.description.id
-                        );
+                        debug!("Attaching Node {} to {}", node_name, device.description.id);
 
                         // Got a hit, attach to our filter, and bring it into the tree
                         self.link_create_filter_to_unmanaged(device.description.id, node.node_id)
