@@ -48,6 +48,7 @@ pub enum DaemonCommand {
     SetAutoStart(bool),
     SetAudioQuantum(Quantum),
     SetMetering(bool),
+    SetUseBrowser(bool),
     OpenInterface,
     ResetAudio,
 }
@@ -168,6 +169,7 @@ pub struct AudioConfiguration {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct DaemonConfig {
+    pub global_settings: GlobalSettings,
     pub http_settings: HttpSettings,
     pub auto_start: bool,
 }
@@ -178,6 +180,13 @@ pub struct HttpSettings {
     pub bind_address: String,
     pub cors_enabled: bool,
     pub port: u16,
+}
+
+#[derive(Debug, Default, Copy, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GlobalSettings {
+    #[serde(default)]
+    pub use_browser: bool,
 }
 
 /// The API generally doesn't need to care about all the general minutia of how a Pipewire

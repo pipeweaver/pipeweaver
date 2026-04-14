@@ -4,6 +4,7 @@ use crate::handler::primary_worker::ManagerMessage::{
     Execute, GetAudioConfiguration, SetAudioQuantum, SetMetering,
 };
 use crate::servers::http_server::{MeterEvent, PatchEvent};
+use crate::settings::save_settings;
 use crate::stop::Stop;
 use crate::{APP_DAEMON_NAME, APP_ID};
 use crate::{APP_NAME_ID, BACKGROUND_PARAM};
@@ -14,7 +15,8 @@ use ini::Ini;
 use json_patch::diff;
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{
-    APICommand, AudioConfiguration, DaemonCommand, DaemonResponse, DaemonStatus, PWCommandResponse,
+    APICommand, AudioConfiguration, DaemonCommand, DaemonResponse, DaemonStatus, GlobalSettings,
+    PWCommandResponse,
 };
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::Quantum;
@@ -22,10 +24,11 @@ use std::collections::HashSet;
 use std::fs::{File, create_dir_all};
 use std::io::ErrorKind;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{env, fs};
 use tokio::sync::broadcast::Sender;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{RwLock, mpsc, oneshot};
 use tokio::time::sleep;
 use tokio::{select, task, time};
 use which::which;
@@ -39,16 +42,23 @@ pub struct PrimaryWorker {
     meter_broadcast: Sender<MeterEvent>,
 
     shutdown: Stop,
+    settings: Arc<RwLock<GlobalSettings>>,
 }
 
 impl PrimaryWorker {
-    fn new(shutdown: Stop, patch: Sender<PatchEvent>, meter: Sender<MeterEvent>) -> Self {
+    fn new(
+        shutdown: Stop,
+        patch: Sender<PatchEvent>,
+        meter: Sender<MeterEvent>,
+        settings: Arc<RwLock<GlobalSettings>>,
+    ) -> Self {
         Self {
             last_status: DaemonStatus::default(),
             patch_broadcast: patch,
             meter_broadcast: meter,
 
             shutdown,
+            settings,
         }
     }
 
@@ -180,6 +190,10 @@ impl PrimaryWorker {
                     DaemonCommand::SetMetering(enabled) => {
                         let _ = pw_tx.send(SetMetering(enabled)).await;
                     }
+                    DaemonCommand::SetUseBrowser(enabled) => {
+                        self.settings.write().await.use_browser = enabled;
+                        let _ = save_settings(*self.settings.read().await);
+                    }
                     DaemonCommand::SetAudioQuantum(value) => {
                         let (tx, rx) = oneshot::channel();
                         let _ = pw_tx.send(SetAudioQuantum(value, tx)).await;
@@ -188,7 +202,11 @@ impl PrimaryWorker {
                         reset = true;
                     }
                     DaemonCommand::OpenInterface => {
-                        if let Some(app_path) = get_ui_app_path() {
+                        let force_browser = self.settings.read().await.use_browser;
+
+                        if let Some(app_path) = get_ui_app_path()
+                            && !force_browser
+                        {
                             use std::process::{Command, Stdio};
                             let tmp_dir = env::temp_dir();
 
@@ -278,6 +296,7 @@ impl PrimaryWorker {
             warn!("Unable to obtain autostart status: {}", e);
             false
         });
+        status.config.global_settings = *self.settings.read().await;
 
         if self.patch_broadcast.receiver_count() > 0 && !initial {
             let previous = serde_json::to_value(&self.last_status).unwrap();
@@ -497,7 +516,8 @@ pub async fn start_primary_worker(
     broadcast_tx: Sender<PatchEvent>,
     meter_tx: Sender<MeterEvent>,
     config_path: PathBuf,
+    settings: Arc<RwLock<GlobalSettings>>,
 ) {
-    let mut manager = PrimaryWorker::new(shutdown, broadcast_tx, meter_tx);
+    let mut manager = PrimaryWorker::new(shutdown, broadcast_tx, meter_tx, settings);
     manager.run(message_receiver, config_path).await;
 }

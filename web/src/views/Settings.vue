@@ -19,6 +19,13 @@ export default {
       websocket.send_daemon_command({"SetAutoStart": e.target.checked})
     },
 
+    get_use_browser() {
+      return store.getConfig().global_settings.use_browser;
+    },
+    set_use_browser(e) {
+      websocket.send_daemon_command({"SetUseBrowser": e.target.checked})
+    },
+
     restart_audio(e) {
       websocket.send_daemon_command("ResetAudio");
     },
@@ -85,8 +92,15 @@ export default {
 
   <div class="settings">
     <div class="flex-settings">
-      <input id="auto-start" :checked="get_autostart()" type="checkbox" @change="set_autostart"/>
-      <label for="auto-start">Auto start</label>
+      <div style="margin-bottom: 10px">
+        <input id="auto-start" :checked="get_autostart()" type="checkbox" @change="set_autostart"/>
+        <label for="auto-start">Auto start</label>
+      </div>
+      <div>
+        <input id="use-browser" :checked="get_use_browser()" type="checkbox"
+               @change="set_use_browser"/>
+        <label for="use-browser">Use Browser instead of App</label>
+      </div>
     </div>
     <div>
       <div class="warning">

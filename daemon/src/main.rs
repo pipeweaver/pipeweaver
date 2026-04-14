@@ -9,6 +9,7 @@ use crate::handler::primary_worker::start_primary_worker;
 use crate::platform::{spawn_runtime, spawn_tray};
 use crate::servers::http_server::spawn_http_server;
 use crate::servers::ipc_server::{ErrorState, bind_socket, spawn_ipc_server};
+use crate::settings::load_settings;
 use crate::stop::Stop;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
@@ -23,7 +24,8 @@ use simplelog::{
 };
 use std::env;
 use std::fs::create_dir_all;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use std::sync::Arc;
+use tokio::sync::{RwLock, broadcast, mpsc, oneshot};
 use tokio::{join, task};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -100,6 +102,8 @@ async fn main() -> Result<()> {
 
     info!("Starting {} v{} - {}", APP_NAME, VERSION, HASH);
 
+    let global_settings = Arc::new(RwLock::new(load_settings()));
+
     let shutdown = Stop::new();
     let (broadcast_tx, broadcast_rx) = broadcast::channel(16);
 
@@ -158,6 +162,7 @@ async fn main() -> Result<()> {
         broadcast_tx.clone(),
         meter_tx.clone(),
         config_dir,
+        global_settings.clone(),
     ));
 
     if !args.background {
