@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, anyhow};
+use log::info;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 
@@ -11,7 +12,7 @@ type Response = Result<DaemonResponse>;
 /// This is pretty similar to the GoXLR Utility, as very little really needs to change here.
 pub async fn handle_packet(request: DaemonRequest, sender: &Messenger) -> Response {
     // Ok, we just match the request, and send it off where it needs to go..
-    match request {
+    let response = match request {
         DaemonRequest::Ping => Ok(DaemonResponse::Ok),
         DaemonRequest::GetStatus => {
             let (tx, rx) = oneshot::channel();
@@ -47,5 +48,11 @@ pub async fn handle_packet(request: DaemonRequest, sender: &Messenger) -> Respon
             let result = rx.await.context("Error from Device Manager")?;
             Ok(DaemonResponse::Pipewire(result))
         }
+    };
+
+    if let Err(e) = &response {
+        info!("IPC Command Failed: {:?}", e);
     }
+
+    response
 }
