@@ -83,7 +83,7 @@ pub struct MuteStates {
     pub mute_targets: EnumMap<MuteTarget, HashSet<Ulid>>,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub struct PhysicalDeviceDescriptor {
     pub name: Option<String>,
     pub description: Option<String>,

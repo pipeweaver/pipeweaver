@@ -18,6 +18,7 @@ use pipeweaver_ipc::commands::{
 };
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::Quantum;
+use std::collections::HashSet;
 use std::fs::{File, create_dir_all};
 use std::io::ErrorKind;
 use std::path::PathBuf;
@@ -294,7 +295,7 @@ impl PrimaryWorker {
 
     fn load_profile(&self, path: &PathBuf) -> Profile {
         info!("[Profile] Loading");
-        match File::open(path) {
+        let mut profile = match File::open(path) {
             Ok(reader) => {
                 let settings = serde_json::from_reader(reader);
                 settings.unwrap_or_else(|e| {
@@ -309,7 +310,27 @@ impl PrimaryWorker {
                 warn!("[Profile] Not Found, sending default");
                 Profile::base_settings()
             }
+        };
+
+        // This section primarily fixes historical issues with the profile.
+
+        // 1: Attached Physical Devices can be duplicated, clear duplicates.
+        for dev in &mut profile.devices.sources.physical_devices {
+            let mut seen = HashSet::new();
+            dev.attached_devices.retain(|i| seen.insert(i.clone()));
         }
+
+        for dev in &mut profile.devices.targets.physical_devices {
+            let mut seen = HashSet::new();
+            dev.attached_devices.retain(|i| seen.insert(i.clone()));
+        }
+
+        for dev in &mut profile.devices.targets.virtual_devices {
+            let mut seen = HashSet::new();
+            dev.attached_devices.retain(|i| seen.insert(i.clone()));
+        }
+
+        profile
     }
 
     fn save_profile(&self, path: &PathBuf, profile: &Profile) -> Result<()> {
