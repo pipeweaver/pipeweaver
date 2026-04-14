@@ -10,6 +10,7 @@
  * working correctly.
  */
 import {websocket_meter} from "@/app/sockets.js";
+import meter_scheduler from "@/app/meter_scheduler.js";
 
 export default {
   name: 'VerticalRange',
@@ -56,11 +57,7 @@ export default {
       meterDecayFactor: 0.01,
       meterContext: undefined,
 
-      targetFPS: 40, // Target Framerate
-      frameInterval: 0, // Will be populated on mount
-      lastFrameTime: 0,
-
-      animationFrameId: undefined,
+      lastDrawnLevel: -1,
     }
   },
 
@@ -87,25 +84,15 @@ export default {
         : null
     },
 
-    drawMeter: function (currentTime) {
+    drawMeter: function () {
       if (this.$refs.meter === null) {
-        this.animationFrameId = requestAnimationFrame(this.drawMeter);
         return;
       }
 
       // Skip if not visible
       if (this.$refs.meter.offsetParent === null || document.hidden) {
-        this.animationFrameId = requestAnimationFrame(this.drawMeter);
         return;
       }
-
-      // Frame limiting logic
-      const elapsed = currentTime - this.lastFrameTime;
-      if (elapsed < this.frameInterval) {
-        this.animationFrameId = requestAnimationFrame(this.drawMeter);
-        return;
-      }
-      this.lastFrameTime = currentTime - (elapsed % this.frameInterval);
 
       if (this.meterContext === undefined) {
         this.meterContext = this.$refs.meter.getContext('2d', {
@@ -122,6 +109,12 @@ export default {
       const decayAmount = 1 - Math.exp(-this.meterDecayFactor * delta);
       this.meterCurrentLevel += (this.localMeterValue - this.meterCurrentLevel) * decayAmount;
 
+      // Don't redraw this if there's been a non-visible change
+      if (Math.abs(this.meterCurrentLevel - this.lastDrawnLevel) < 0.1) {
+        return;
+      }
+      this.lastDrawnLevel = this.meterCurrentLevel;
+
       const canvas = this.$refs.meter;
       let barHeight = (this.meterCurrentLevel / 100) * (canvas.height / 100 * this.currentValue);
 
@@ -135,8 +128,6 @@ export default {
         this.meterContext.fillStyle = this.meterColour;
         this.meterContext.fillRect(0, y, canvas.width, barHeight);
       }
-
-      this.animationFrameId = requestAnimationFrame(this.drawMeter);
     },
 
     calcColour: function (boost) {
@@ -190,21 +181,8 @@ export default {
     },
 
     currentWidth() {
-      // This code essentially adjusts the background position to keep it below the 'thumb'..
-      let distance = this.maxValue - this.minValue
-      let position = 0
-
-      for (let i = this.minValue; i <= this.maxValue; i += this.step, position += this.step) {
-        if (i === parseFloat(this.localFieldValue)) {
-          break
-        }
-      }
-
-      let width = (position / distance) * 100
-      if (isNaN(width)) {
-        return '0%'
-      }
-      return width + '%'
+      const width = ((this.localFieldValue - this.minValue) / (this.maxValue - this.minValue)) * 100
+      return isNaN(width) ? '0%' : `${Math.max(0, Math.min(100, width))}%`
     }
   },
 
@@ -215,7 +193,6 @@ export default {
     this.localFieldValue = this.currentValue
     this.meterContext = this.$refs.meter.getContext('2d', {
       alpha: true,
-      desynchronized: true,
       willReadFrequently: false
     });
 
@@ -223,14 +200,11 @@ export default {
     websocket_meter.register_callback(this.id, (value) => {
       self.localMeterValue = value;
     });
-    this.animationFrameId = requestAnimationFrame(this.drawMeter)
+    meter_scheduler.register(this.drawMeter);
   },
 
-  beforeDestroy() {
-    if (this.animationFrameId) {
-      cancelAnimationFrame(this.animationFrameId);
-      this.animationFrameId = null;
-    }
+  beforeUnmount() {
+    meter_scheduler.unregister(this.drawMeter);
     this.meterContext = null;
   }
 }
