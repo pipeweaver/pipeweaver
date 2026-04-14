@@ -84,7 +84,7 @@ export default {
         : null
     },
 
-    drawMeter: function () {
+    drawMeter: function (currentTime) {
       if (this.$refs.meter === null) {
         return;
       }
@@ -102,9 +102,8 @@ export default {
         });
       }
 
-      const now = performance.now();
-      const delta = now - this.meterLastUpdate;
-      this.meterLastUpdate = now;
+      const delta = currentTime - this.meterLastUpdate;
+      this.meterLastUpdate = currentTime;
 
       const decayAmount = 1 - Math.exp(-this.meterDecayFactor * delta);
       this.meterCurrentLevel += (this.localMeterValue - this.meterCurrentLevel) * decayAmount;
@@ -187,7 +186,6 @@ export default {
   },
 
   mounted() {
-    this.frameInterval = 1000 / this.targetFPS;
     this.meterColour = this.calcColour(50);
 
     this.localFieldValue = this.currentValue
@@ -256,24 +254,6 @@ input[type='range'] {
     v-bind(deselectedColour) v-bind(currentWidth),
     v-bind(deselectedColour) 100%
   );
-
-
-  /*
-    If we ever were to do metering in the UI, we could use something like this to attach it
-    directly to the range bar:
-
-    TODO: This doesn't work, metering is too heavy to redraw a linear gradient
-
-    background: linear-gradient(
-      to right,
-      v-bind(meterColour) 0%,
-      v-bind(meterColour) 20%,
-      v-bind(selectedColour) 20%,
-      v-bind(selectedColour) v-bind(currentWidth),
-      v-bind(deselectedColour) v-bind(currentWidth),
-      v-bind(deselectedColour) 100%
-    );
-  */
 
   display: block;
   transform-origin: top right;
