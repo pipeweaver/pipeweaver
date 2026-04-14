@@ -49,6 +49,9 @@ simplelog = "0.12.2"
 ### Async Runtime ###
 tokio = { workspace = true }
 
+### CLI
+clap = { workspace = true }
+
 ### HTTP Server ###
 actix-web = { version = "4.13.0", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "ws"] }
 actix-ws = "0.4.0"

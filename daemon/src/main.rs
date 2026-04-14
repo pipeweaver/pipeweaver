@@ -11,6 +11,7 @@ use crate::servers::http_server::spawn_http_server;
 use crate::servers::ipc_server::{ErrorState, bind_socket, spawn_ipc_server};
 use crate::stop::Stop;
 use anyhow::{Context, Result, anyhow, bail};
+use clap::Parser;
 use directories::ProjectDirs;
 use file_rotate::compression::Compression;
 use file_rotate::suffix::AppendCount;
@@ -29,7 +30,6 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const HASH: &str = env!("GIT_HASH");
 
 const BACKGROUND_PARAM: &str = "--background";
-const LEGACY_BACKGROUND_PARAM: &str = "--startup";
 
 // Definitions used during node / filter declarations
 const APP_ID: &str = "io.github.pipeweaver";
@@ -38,8 +38,18 @@ const APP_NAME_ID: &str = "pipeweaver";
 const APP_DAEMON_NAME: &str = "pipeweaver-daemon";
 const ICON: &[u8] = include_bytes!("../resources/icons/pipeweaver-large.png");
 
+#[derive(Parser, Debug)]
+#[command(about, version, author)]
+pub struct Args {
+    /// Launch without starting the UI
+    #[arg(long, alias = "startup")]
+    pub background: bool,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args = Args::parse();
+
     let dirs = ProjectDirs::from("io", "github", APP_NAME_ID)
         .ok_or(anyhow!("Unable to locate project directory"))?;
 
@@ -147,11 +157,7 @@ async fn main() -> Result<()> {
         config_dir,
     ));
 
-    let args: Vec<String> = env::args().collect();
-    let hide_initial = args.contains(&BACKGROUND_PARAM.to_string())
-        || args.contains(&LEGACY_BACKGROUND_PARAM.to_string());
-
-    if !hide_initial {
+    if !args.background {
         let (tx, rx) = oneshot::channel();
         let message = DaemonMessage::RunDaemon(DaemonCommand::OpenInterface, tx);
         let _ = manager_send.send(message).await;
