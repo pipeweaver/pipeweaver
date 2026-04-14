@@ -192,6 +192,10 @@ pub enum DaemonCommands {
         #[arg(value_enum)]
         quantum: Quantum,
     },
+    SetUseBrowser {
+        #[arg(value_parser, action = ArgAction::Set)]
+        enabled: bool,
+    },
     OpenInterface,
     ResetAudio,
 }
