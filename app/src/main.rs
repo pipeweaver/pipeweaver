@@ -61,17 +61,13 @@ fn real_main() -> Result<()> {
         env::set_var("RUST_LOG", "debug");
         env::set_var(
             "QTWEBENGINE_CHROMIUM_FLAGS",
-            "  --enable-features=Canvas2DImageChromium \
-                     --enable-gpu-memory-buffer-compositor-resources \
-                     --enable-zero-copy \
-                     --force-gpu-mem-available-mb=256 \
-                     --max-decoded-image-size-mb=64 \
-                     --js-flags=--expose-gc,--max-old-space-size=128 \
-                     --disable-software-rasterizer \
-                     --disable-dev-shm-usage \
-                     --disable-gpu-shader-disk-cache \
-                     --num-raster-threads=2 \
-                     --single-process",
+            "--enable-features=Canvas2DImageChromium \
+             --max-decoded-image-size-mb=64 \
+             --js-flags=--expose-gc,--max-old-space-size=192 \
+             --disable-software-rasterizer \
+             --disable-dev-shm-usage \
+             --num-raster-threads=2 \
+             --single-process",
         );
     }
     env_logger::init();

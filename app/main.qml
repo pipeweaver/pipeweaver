@@ -36,7 +36,7 @@ ApplicationWindow {
 
     Timer {
         id: windowHandlerPollTimer
-        interval: 20
+        interval: 50
         repeat: true
         running: true
         onTriggered: {
@@ -77,14 +77,7 @@ ApplicationWindow {
         interval: 10000
         repeat: true
         running: true
-        onTriggered: {
-            webView.runJavaScript(`
-                if (window.gc) {
-                    window.gc();
-                    setTimeout(() => window.gc(), 50);
-                }
-            `);
-        }
+        onTriggered: webView.runJavaScript(`if (window.gc) window.gc();`)
     }
 
     // When the Window is closed, throw back to the windowProperties to handle any final saving
