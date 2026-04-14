@@ -475,6 +475,10 @@ impl PhysicalDevices for PipewireManager {
         match node_type {
             NodeType::PhysicalSource => {
                 let device = self.get_physical_source_mut(id).ok_or(error)?;
+                if vec_index >= device.attached_devices.len() {
+                    bail!("Invalid Device Index");
+                }
+
                 let descriptor = device.attached_devices.remove(vec_index);
 
                 // Attempt to locate this node in our list
@@ -486,6 +490,10 @@ impl PhysicalDevices for PipewireManager {
             }
             NodeType::PhysicalTarget => {
                 let device = self.get_physical_target_mut(id).ok_or(error)?;
+                if vec_index >= device.attached_devices.len() {
+                    bail!("Invalid Device Index");
+                }
+
                 let descriptor = device.attached_devices.remove(vec_index);
 
                 // Attempt to locate this node in our list
@@ -496,8 +504,11 @@ impl PhysicalDevices for PipewireManager {
                 }
             }
             NodeType::VirtualTarget => {
-                debug!("Removing From Virtual Target?");
                 let device = self.get_virtual_target_mut(id).ok_or(error)?;
+                if vec_index >= device.attached_devices.len() {
+                    bail!("Invalid Device Index");
+                }
+
                 let descriptor = device.attached_devices.remove(vec_index);
 
                 // Attempt to locate this node in our list
