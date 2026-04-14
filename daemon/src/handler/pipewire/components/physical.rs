@@ -425,6 +425,9 @@ impl PhysicalDevices for PipewireManager {
                     name: node.name.clone(),
                     description: node.description.clone(),
                 };
+                if device.attached_devices.contains(&new_node) {
+                    bail!("Device is already attached to this node");
+                }
 
                 device.attached_devices.push(new_node.clone());
                 let pw_node = self.locate_node(new_node);
@@ -441,6 +444,10 @@ impl PhysicalDevices for PipewireManager {
                     description: node.description.clone(),
                 };
 
+                if device.attached_devices.contains(&new_node) {
+                    bail!("Device is already attached to this node");
+                }
+
                 device.attached_devices.push(new_node.clone());
                 let pw_node = self.locate_node(new_node);
                 if let Some(node) = pw_node {
@@ -455,6 +462,10 @@ impl PhysicalDevices for PipewireManager {
                     name: node.name.clone(),
                     description: node.description.clone(),
                 };
+
+                if device.attached_devices.contains(&new_node) {
+                    bail!("Device is already attached to this node");
+                }
 
                 device.attached_devices.push(new_node.clone());
                 let pw_node = self.locate_node(new_node);
