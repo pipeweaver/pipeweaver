@@ -56,19 +56,27 @@ fn main() -> Result<()> {
 }
 
 fn real_main() -> Result<()> {
+    let mut flags = vec![
+        "--disable-software-rasterizer",
+        "--disable-dev-shm-usage",
+        "--disable-background-networking",
+        "--disable-renderer-backgrounding",
+        "--js-flags=--expose-gc,--max-old-space-size=192",
+        "--num-raster-threads=2",
+        "--single-process",
+    ];
+
+    // Disable the Chromium Sandbox when running from a flatpak, as flatpak handles
+    // the sandboxing, and this can conflict
+    if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
+        flags.push("--no-sandbox");
+        flags.push("--disable-setuid-sandbox");
+    }
+
     unsafe {
         //env::set_var("QT_QPA_PLATFORM", "xcb");
         env::set_var("RUST_LOG", "debug");
-        env::set_var(
-            "QTWEBENGINE_CHROMIUM_FLAGS",
-            "--enable-features=Canvas2DImageChromium \
-             --max-decoded-image-size-mb=64 \
-             --js-flags=--expose-gc,--max-old-space-size=192 \
-             --disable-software-rasterizer \
-             --disable-dev-shm-usage \
-             --num-raster-threads=2 \
-             --single-process",
-        );
+        env::set_var("QTWEBENGINE_CHROMIUM_FLAGS", flags.join(" "));
     }
     env_logger::init();
 
