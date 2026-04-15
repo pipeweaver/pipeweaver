@@ -485,9 +485,30 @@ pub fn get_autostart_file() -> Result<PathBuf> {
         create_dir_all(format!("{config_dir}/autostart"))?;
     }
 
-    Ok(PathBuf::from(format!(
-        "{config_dir}/autostart/{APP_ID}.{APP_NAME_ID}.desktop"
-    )))
+    let filename = format!("{APP_ID}.desktop");
+    let file_path = PathBuf::from(&config_dir).join("autostart").join(filename);
+
+    // If we're in the sandbox environment, we're already good.
+    if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
+        return Ok(file_path);
+    }
+
+    // This fixes an issue where the non-flatpak version was placing the autostart into a different
+    // location to the flatpak version, and the 'autostart checker' was expecting it to be there.
+    //
+    // We'll instead defer to where flatpack (via the XDG background portal) places the file,
+    // and move any files in the previously wrong place.
+    let bad_file = format!("{APP_ID}.{APP_NAME_ID}.desktop");
+    let bad_path = PathBuf::from(&config_dir).join("autostart").join(bad_file);
+    if bad_path.exists() {
+        // If the place we're going already exists, remove it and replace it with ours.
+        if file_path.exists() {
+            fs::remove_file(&file_path)?;
+        }
+        fs::rename(bad_path, &file_path)?;
+    }
+
+    Ok(file_path)
 }
 
 pub enum MessageResult {
