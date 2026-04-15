@@ -45,6 +45,14 @@ export default {
       return this.getDevice().description.id;
     },
 
+    getName: function () {
+      return this.getDevice().description.name;
+    },
+
+    getType: function () {
+      return this.isPhysicalNode() ? "Physical" : "Virtual";
+    },
+
     isPhysicalNode: function () {
       return is_physical(this.type);
     },
@@ -223,12 +231,15 @@ export default {
   </button>
 
   <PopupBox ref="popup" @closed="">
+    <div class="popup-title">
+      <span>{{ getName() }} - ({{ getType() }})</span>
+    </div>
+    <div class="separator"/>
     <div class="entry" @click="onColourClicked">
       <span class="color_icon"></span>
       <span>Change Colour</span>
     </div>
     <div class="separator"/>
-
     <div v-if="order_group !== DeviceOrderType.Pinned" class="entry"
          @click="e => onPinClicked(true, e)">
       <span class="selected"></span>
@@ -244,6 +255,9 @@ export default {
       <span>Hide Channel</span>
     </div>
     <div v-if="isPhysicalNode() || isTargetNode()" class="separator"/>
+    <div v-if="!isPhysicalNode() && isTargetNode()" class="entry-base">
+      Duplicate Audio:
+    </div>
     <div v-for="device of getDevices()" v-if="isPhysicalNode() || isTargetNode()"
          :class="{error: !isDevicePresent(device)}"
          class="entry"
@@ -311,6 +325,21 @@ button:hover {
 
 .title {
   white-space: nowrap;
+}
+
+.popup-title {
+  white-space: nowrap;
+  padding: 6px;
+  font-weight: bold;
+}
+
+.entry-base {
+  white-space: nowrap;
+  padding: 6px 6px 6px 10px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #3b413f;
 }
 
 .entry {
