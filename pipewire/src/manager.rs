@@ -630,15 +630,9 @@ impl PipewireManager {
             let (src_id, src_index) = self.get_port(&source, Direction::Out, port)?;
             let (tgt_id, tgt_index) = self.get_port(&dest, Direction::In, port)?;
 
-            // If the Source and Destination aren't physical nodes, we should flag the link as
-            // passive, otherwise it should be active.
-            let is_passive = !matches!(&source, LinkType::UnmanagedNode(_, _))
-                && !matches!(&dest, LinkType::UnmanagedNode(_, _));
-
             // Now we simply create the link
-            let (link, proxy_lis) = self.create_port_link(
-                link_id, parent_id, src_id, src_index, tgt_id, tgt_index, is_passive,
-            )?;
+            let (link, proxy_lis) =
+                self.create_port_link(link_id, parent_id, src_id, src_index, tgt_id, tgt_index)?;
 
             // Create the LinkStore Mapping for this link
             let store = LinkStoreMap {
@@ -766,7 +760,6 @@ impl PipewireManager {
         src_port: u32,
         dest_node: u32,
         dest_port: u32,
-        is_passive: bool,
     ) -> Result<(Link, ProxyListener)> {
         let listener_info_store = Rc::downgrade(&self.store);
         let link = self
@@ -779,8 +772,7 @@ impl PipewireManager {
                     *LINK_INPUT_NODE => dest_node.to_string(),
                     *LINK_INPUT_PORT => dest_port.to_string(),
                     *OBJECT_LINGER => "false",
-
-                    *NODE_PASSIVE => if is_passive { "true" } else { "false" },
+                    *NODE_PASSIVE => "false",
                 },
             )
             .map_err(|e| anyhow!("Failed to create link: {}", e))?;
