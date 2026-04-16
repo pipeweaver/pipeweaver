@@ -234,7 +234,7 @@ export default {
     <div class="popup-title">
       <span>{{ getName() }} - ({{ getType() }})</span>
     </div>
-    <div class="separator"/>
+    <div class="title-separator"/>
     <div class="entry" @click="onColourClicked">
       <span class="color_icon"></span>
       <span>Change Colour</span>
@@ -295,6 +295,12 @@ button:hover {
 .separator {
   height: 5px;
   background-color: #3b413f;
+}
+
+.title-separator {
+  height: 2px;
+  background-color: v-bind('getDevice().description.colour ? `rgb(${getDevice().description.colour.red}, ${getDevice().description.colour.green}, ${getDevice().description.colour.blue})` : "#000000"');
+  border-bottom: 3px solid #3b413f;
 }
 
 .selected {
