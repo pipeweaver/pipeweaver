@@ -256,7 +256,7 @@ export default {
     </div>
     <div v-if="isPhysicalNode() || isTargetNode()" class="separator"/>
     <div v-if="!isPhysicalNode() && isTargetNode()" class="entry-base">
-      Duplicate Audio:
+      Duplicate Output To:
     </div>
     <div v-for="device of getDevices()" v-if="isPhysicalNode() || isTargetNode()"
          :class="{error: !isDevicePresent(device)}"
@@ -340,6 +340,8 @@ button:hover {
 }
 
 .entry-base {
+  font-weight: normal;
+  font-style: italic;
   white-space: nowrap;
   padding: 6px 6px 6px 10px;
   text-align: left;
