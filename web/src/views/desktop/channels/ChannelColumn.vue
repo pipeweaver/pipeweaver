@@ -73,6 +73,14 @@ export default {
       }
     },
 
+    needsDevice: function () {
+      if (this.is_physical()) {
+        console.log(this.getDevice());
+        return this.getDevice().attached_devices.length === 0;
+      }
+      return false;
+    },
+
     getColourHex: function () {
       let color = this.getDevice().description.colour;
       return this.rgbToHex(color.red, color.green, color.blue);
@@ -251,12 +259,6 @@ export default {
     },
 
     colour_clicked: function (e) {
-      // const rgb = this.getColour();
-      //
-      // const hexColour = this.rgbToHex(rgb.red, rgb.green, rgb.blue);
-      //
-      // this.$refs.colour_picker.value = hexColour;
-      // this.$refs.colour_picker.click();
       this.$refs.colour.show(this.$refs['colour_section']);
     },
 
@@ -381,7 +383,7 @@ export default {
         <font-awesome-icon :icon="['fas', 'grip-vertical']"/>
       </div>
       <div class="name">{{ getChannelName() }}</div>
-      <div class="end">
+      <div class="end" :class="needsDevice() ? 'glow-box' : ''">
         <DevicePopup id="select_device" :colour_callback="colour_clicked" :device_id="id"
                      :order_group='order_group'
                      :type='type'/>
@@ -493,6 +495,46 @@ export default {
 
 .title .end {
   width: 20px;
+}
+
+.glow-box {
+  width: 20px;
+  height: 18px;
+  position: relative;
+  border-radius: 50%;
+  overflow: visible; /* important: we control containment manually */
+  cursor: pointer;
+
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 200, 0, 1) 0%,
+    rgba(255, 140, 0, 0.8) 40%,
+    rgba(255, 80, 0, 0.2) 70%,
+    transparent 100%
+  );
+}
+
+.glow-box::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+
+  border: 1px solid rgba(255, 180, 0, 0.9);
+  animation: pulse 1.6s ease-out infinite;
+
+  pointer-events: none;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
 }
 
 .title .end button {
