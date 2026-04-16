@@ -335,7 +335,7 @@ button:hover {
 
 .popup-title {
   white-space: nowrap;
-  padding: 6px;
+  padding: 6px 60px;
   font-weight: bold;
 }
 
