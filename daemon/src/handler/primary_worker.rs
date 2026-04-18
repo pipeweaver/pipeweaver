@@ -8,8 +8,8 @@ use crate::settings::save_settings;
 use crate::stop::Stop;
 use crate::{APP_DAEMON_NAME, APP_ID};
 use crate::{APP_NAME_ID, BACKGROUND_PARAM};
-use anyhow::Result;
 use anyhow::{Context, bail};
+use anyhow::{Result, anyhow};
 use ashpd::desktop::background::Background;
 use ini::Ini;
 use json_patch::diff;
@@ -442,15 +442,20 @@ async fn set_autostart(enabled: bool) -> Result<()> {
                     fs::remove_file(path.clone())?;
                 }
                 if enabled {
+                    let parent_err = anyhow!("Failed to get Parent Directory");
+
                     let exe = env::current_exe()?;
+                    let exe_path = exe.parent().ok_or(parent_err)?;
 
                     let mut conf = Ini::new();
                     let exe = exe.to_string_lossy().to_string();
+                    let exe_path = exe_path.to_string_lossy().to_string();
 
                     conf.with_section(Some("Desktop Entry"))
                         .set("Type", "Application")
                         .set("Name", "Pipeweaver")
                         .set("Comment", "Audio Control and Routing")
+                        .set("Path", exe_path)
                         .set("Exec", format!("{exe:?} {BACKGROUND_PARAM}"))
                         .set("Terminal", "false");
 
