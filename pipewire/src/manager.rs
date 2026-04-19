@@ -146,7 +146,6 @@ impl PipewireManager {
             *NODE_NAME => properties.node_name.clone(),
             *NODE_NICK => properties.node_nick,
             *NODE_DESCRIPTION => properties.node_description,
-            *NODE_ALWAYS_PROCESS => "true",
 
             *NODE_VIRTUAL => "true",
             *PORT_MONITOR => "false",
