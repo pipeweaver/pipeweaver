@@ -11,7 +11,7 @@ use crate::{
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use oneshot::Sender;
 use parking_lot::RwLock;
 use pipewire::filter::{Filter, FilterListener, FilterPort};
@@ -1286,27 +1286,27 @@ impl Store {
     // to go through our stored data, find the corresponding item, and handle it.
     pub fn remove_by_id(&mut self, id: u32) {
         if self.unmanaged_devices.contains_key(&id) {
-            debug!("Removing Unmanaged Device: {}", id);
+            trace!("Removing Unmanaged Device: {}", id);
             return self.unmanaged_device_remove(id);
         }
 
         if self.unmanaged_device_nodes.contains_key(&id) {
-            debug!("Removing Unmanaged Nodes: {}", id);
+            trace!("Removing Unmanaged Nodes: {}", id);
             return self.unmanaged_device_node_remove(id);
         }
 
         if self.unmanaged_clients.contains_key(&id) {
-            debug!("Removing Unmanaged Client: {}", id);
+            trace!("Removing Unmanaged Client: {}", id);
             return self.unmanaged_client_remove(id);
         }
 
         if self.unmanaged_client_nodes.contains_key(&id) {
-            debug!("Removing Unmanaged Client Node: {}", id);
+            trace!("Removing Unmanaged Client Node: {}", id);
             return self.unmanaged_client_node_remove(id);
         }
 
         if self.unmanaged_links.contains_key(&id) {
-            debug!("Removing Unmanaged Links: {}", id);
+            trace!("Removing Unmanaged Links: {}", id);
             return self.unmanaged_link_remove(id);
         }
 
