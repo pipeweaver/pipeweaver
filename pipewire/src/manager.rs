@@ -22,7 +22,7 @@ use pipewire::keys::{
 use pipewire::link::Link;
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
-use pipewire::proxy::{ProxyListener, ProxyT};
+use pipewire::proxy::ProxyT;
 use pipewire::registry::Registry;
 use pipewire::spa::pod::builder::Builder;
 use pipewire::spa::pod::deserialize::PodDeserializer;
@@ -61,8 +61,9 @@ struct PipewireManager {
     registry: PipewireRegistry,
 
     store: Rc<RefCell<Store>>,
+    mainloop: Rc<MainLoop>,
 
-    _core_listener: Listener,
+    _core_listener: Option<Listener>,
 }
 
 impl PipewireManager {
@@ -75,71 +76,99 @@ impl PipewireManager {
         let store = Rc::new(RefCell::new(Store::new(callback_tx.clone())));
         let registry = PipewireRegistry::new(registry, store.clone(), Rc::new(core.clone()));
 
-        let done_store = Rc::downgrade(&store);
-        let done_mainloop = Rc::downgrade(&mainloop);
-
-        let _core_listener = core
-            .add_listener_local()
-            .done(move |_id, seq| {
-                if let Some(store) = done_store.upgrade() {
-                    let mut store_ref = store.borrow_mut();
-
-                    if store_ref.pending_link_syncs.contains_key(&seq.raw()) {
-                        store_ref.resolve_pending_link_sync(seq.raw());
-                        return;
-                    }
-
-                    if let Some(id) = store_ref.pending_filter_syncs.remove(&seq.raw()) {
-                        debug!("Filter sync completed for node {}, scheduling send..", id);
-                        if let Some(mainloop) = done_mainloop.upgrade() {
-                            let timer_store = Rc::downgrade(&store);
-                            let timer = mainloop.loop_().add_timer(move |_| {
-                                if let Some(store) = timer_store.upgrade() {
-                                    let mut store = store.borrow_mut();
-                                    store.resolve_pending_filter_sync(id);
-                                }
-                            });
-                            timer.update_timer(Some(Duration::from_millis(50)), None);
-                            std::mem::forget(timer);
-                        }
-                    }
-
-                    if let Some(node_id) = store_ref.pending_device_syncs.remove(&seq.raw()) {
-                        debug!(
-                            "Device sync completed for node {}, scheduling port check",
-                            node_id
-                        );
-
-                        drop(store_ref);
-                        if let Some(mainloop) = done_mainloop.upgrade() {
-                            let timer_store = Rc::downgrade(&store);
-                            let timer = mainloop.loop_().add_timer(move |_| {
-                                debug!("TIMER HIT: Checking for ports on node {}", node_id);
-                                if let Some(store) = timer_store.upgrade() {
-                                    let mut store = store.borrow_mut();
-                                    if let Some(node) =
-                                        store.unmanaged_device_nodes.get_mut(&node_id)
-                                    {
-                                        node.is_synced = true;
-                                    }
-                                    store.unmanaged_node_port_check(node_id);
-                                }
-                            });
-                            timer.update_timer(Some(Duration::from_secs(1)), None);
-                            std::mem::forget(timer);
-                        }
-                    }
-                }
-            })
-            .register();
-
         Self {
             core,
             registry,
             store,
 
-            _core_listener,
+            mainloop,
+            _core_listener: None,
         }
+    }
+
+    pub fn create_core_listener(this: &Rc<RefCell<Self>>) {
+        let weak_self = Rc::downgrade(this);
+
+        let (core, store, mainloop) = {
+            let this_ref = this.borrow();
+            (
+                this_ref.core.clone(),
+                this_ref.store.clone(),
+                this_ref.mainloop.clone(),
+            )
+        };
+
+        let done_store = Rc::downgrade(&store);
+        let done_mainloop = Rc::downgrade(&mainloop);
+
+        let core_listener = core
+            .add_listener_local()
+            .done(move |_id, seq| {
+                let Some(this_rc) = weak_self.upgrade() else {
+                    return;
+                };
+                let Some(store_rc) = done_store.upgrade() else {
+                    return;
+                };
+
+                let mut store_ref = store_rc.borrow_mut();
+
+                // Pending Links
+                if let Some(parent) = store_ref.get_pending_link_parent_id_by_seq(seq.raw())
+                    && let Some(link_id) = store_ref.get_next_pending_link(seq.raw())
+                {
+                    let this = this_rc.borrow_mut();
+                    debug!("Attempting to Create next Link: {}", parent);
+                    let _ = this.create_port_link2(parent, link_id);
+                    return;
+                }
+
+                // Pending Filters
+                if let Some(id) = store_ref.pending_filter_syncs.remove(&seq.raw()) {
+                    drop(store_ref);
+
+                    if let Some(mainloop) = done_mainloop.upgrade() {
+                        let timer_store = Rc::downgrade(&store_rc);
+                        let timer = mainloop.loop_().add_timer(move |_| {
+                            if let Some(store) = timer_store.upgrade() {
+                                let mut store = store.borrow_mut();
+                                store.resolve_pending_filter_sync(id);
+                            }
+                        });
+
+                        timer.update_timer(Some(Duration::from_millis(50)), None);
+                        std::mem::forget(timer);
+                    }
+
+                    return;
+                }
+
+                // --- Device sync ---
+                if let Some(node_id) = store_ref.pending_device_syncs.remove(&seq.raw()) {
+                    drop(store_ref);
+
+                    if let Some(mainloop) = done_mainloop.upgrade() {
+                        let timer_store = Rc::downgrade(&store_rc);
+                        let timer = mainloop.loop_().add_timer(move |_| {
+                            if let Some(store) = timer_store.upgrade() {
+                                let mut store = store.borrow_mut();
+
+                                if let Some(node) = store.unmanaged_device_nodes.get_mut(&node_id) {
+                                    node.is_synced = true;
+                                }
+
+                                store.unmanaged_node_port_check(node_id);
+                            }
+                        });
+
+                        timer.update_timer(Some(Duration::from_secs(1)), None);
+                        std::mem::forget(timer);
+                    }
+                }
+            })
+            .register();
+
+        this.borrow_mut()._core_listener = Some(core_listener);
     }
 
     pub fn create_node(&mut self, properties: NodeProperties) -> Result<()> {
@@ -593,10 +622,34 @@ impl PipewireManager {
         dest: LinkType,
         sender: Sender<()>,
     ) -> Result<()> {
+        // Fetch the details of the links that need creating
+        let mut group = self.prepare_links(source, dest, sender)?;
+
+        // Create a Parent ID for this link set
+        let parent_id = Ulid::new();
+
+        // Find the first portmap and begin creation
+        for port in PortLocation::iter() {
+            let entry = &mut group.links[port];
+
+            if let Some(m) = entry.as_mut() {
+                // Ok, we have a LinkStoreMap, trigger the first creation.
+                self.create_port_link2(parent_id, m)?;
+                break;
+            }
+        }
+        self.store.borrow_mut().add_pending_link(parent_id, group);
+        Ok(())
+    }
+
+    pub fn prepare_links(
+        &mut self,
+        source: LinkType,
+        dest: LinkType,
+        sender: Sender<()>,
+    ) -> Result<LinkStore> {
         // First, check if a managed link already exists and remove it
         self.store.borrow_mut().managed_link_remove(&source, &dest);
-
-        let parent_id = Ulid::new();
         let mut port_map: EnumMap<PortLocation, Option<LinkStoreMap>> = Default::default();
 
         // Collect all the port pairs we're going to link
@@ -642,18 +695,17 @@ impl PipewireManager {
             let (src_id, src_index) = self.get_port(&source, Direction::Out, port)?;
             let (tgt_id, tgt_index) = self.get_port(&dest, Direction::In, port)?;
 
-            // Now we simply create the link
-            let (link, proxy_lis) =
-                self.create_port_link(link_id, parent_id, src_id, src_index, tgt_id, tgt_index)?;
-
             // Create the LinkStore Mapping for this link
             let store = LinkStoreMap {
                 pw_id: None,
                 internal_id: link_id,
-                _link: link,
-                _proxy_listener: proxy_lis,
-                _source_port_id: src_index,
-                _destination_port_id: tgt_index,
+
+                pending_seq_id: None,
+                _link: None,
+                _proxy_listener: None,
+
+                source_port: (src_id, src_index),
+                destination_port: (tgt_id, tgt_index),
             };
 
             port_map[port] = Some(store);
@@ -667,13 +719,7 @@ impl PipewireManager {
             ready_sender: Some(sender),
         };
 
-        // Queue a sync - when it fires, all server-side operations are complete
-        let seq = self.core.sync(0).expect("core sync failed");
-        self.store
-            .borrow_mut()
-            .add_pending_link(seq.raw(), parent_id, group);
-
-        Ok(())
+        Ok(group)
     }
 
     pub fn remove_link(&mut self, source: LinkType, destination: LinkType) -> Result<()> {
@@ -763,16 +809,11 @@ impl PipewireManager {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn create_port_link(
-        &self,
-        id: Ulid,
-        parent_id: Ulid,
-        src_node: u32,
-        src_port: u32,
-        dest_node: u32,
-        dest_port: u32,
-    ) -> Result<(Link, ProxyListener)> {
+    fn create_port_link2(&self, parent_id: Ulid, map: &mut LinkStoreMap) -> Result<()> {
+        let id = map.internal_id;
+        let (src_node, src_port) = map.source_port;
+        let (dest_node, dest_port) = map.destination_port;
+
         let listener_info_store = Rc::downgrade(&self.store);
         let link = self
             .core
@@ -820,7 +861,12 @@ impl PipewireManager {
             })
             .register();
 
-        Ok((link, proxy_listener))
+        let seq = self.core.sync(0).expect("core sync failed");
+        map.pending_seq_id = Some(seq.raw());
+        map._link = Some(link);
+        map._proxy_listener = Some(proxy_listener);
+
+        Ok(())
     }
 
     fn set_application_target(&mut self, app_id: u32, target: Ulid) -> Result<()> {
@@ -960,6 +1006,7 @@ pub fn run_pw_main_loop(
         registry,
         callback_tx,
     )));
+    PipewireManager::create_core_listener(&manager);
 
     let receiver_clone = mainloop.clone();
     let _receiver = pw_rx.attach(mainloop.loop_(), {

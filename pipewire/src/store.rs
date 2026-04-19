@@ -73,7 +73,7 @@ pub struct Store {
     usable_client_nodes: Vec<u32>,
 
     // Pending Stuff
-    pub(crate) pending_link_syncs: HashMap<i32, PendingLinkSync>,
+    pub(crate) pending_link_syncs: Vec<PendingLinkSync>,
     pub(crate) pending_device_syncs: HashMap<i32, u32>,
     pub(crate) pending_filter_syncs: HashMap<i32, Ulid>,
 
@@ -103,7 +103,7 @@ impl Store {
 
             unmanaged_links: HashMap::new(),
 
-            pending_link_syncs: HashMap::new(),
+            pending_link_syncs: vec![],
             pending_device_syncs: HashMap::new(),
             pending_filter_syncs: HashMap::new(),
 
@@ -554,34 +554,71 @@ impl Store {
         self.managed_links.insert(id, group);
     }
 
-    pub fn add_pending_link(&mut self, seq: i32, parent_id: Ulid, group: LinkStore) {
-        self.pending_link_syncs.insert(
-            seq,
-            PendingLinkSync {
-                parent_id,
-                group,
-                bound_ids: HashMap::new(),
-            },
-        );
+    pub fn add_pending_link(&mut self, parent_id: Ulid, group: LinkStore) {
+        self.pending_link_syncs.push(PendingLinkSync {
+            parent_id,
+            group,
+            bound_ids: HashMap::new(),
+        });
     }
 
-    pub fn resolve_pending_link_sync(&mut self, seq: i32) {
-        if let Some(pending) = self.pending_link_syncs.remove(&seq) {
-            let mut group = pending.group;
+    pub fn get_next_pending_link(&mut self, seq: i32) -> Option<&mut LinkStoreMap> {
+        let idx = self.get_pending_link_index_by_seq(seq)?;
 
-            // Apply collected pw_ids
-            for port in PortLocation::iter() {
-                if let Some(link) = &mut group.links[port]
-                    && let Some(pw_id) = pending.bound_ids.get(&link.internal_id)
-                {
-                    link.pw_id = Some(*pw_id);
-                }
-            }
+        // Scope to limit the mutable borrow
+        let port = {
+            let pending = &self.pending_link_syncs[idx];
 
-            debug!("Link Created {:?} to {:?}", group.source, group.destination);
-            self.managed_link_add(pending.parent_id, group);
-            self.managed_link_ready_check(pending.parent_id);
+            PortLocation::iter().find(|&port| {
+                pending.group.links[port]
+                    .as_ref()
+                    .is_some_and(|link| link.pending_seq_id.is_none())
+            })
+        };
+
+        if let Some(port) = port {
+            return self.pending_link_syncs[idx].group.links[port].as_mut();
         }
+
+        // No ports left, take ownership and finish up.
+        let pending = self.pending_link_syncs.remove(idx);
+        let mut group = pending.group;
+
+        for port in PortLocation::iter() {
+            if let Some(link) = &mut group.links[port]
+                && let Some(pw_id) = pending.bound_ids.get(&link.internal_id)
+            {
+                link.pw_id = Some(*pw_id);
+            }
+        }
+
+        debug!("Link Created {:?} to {:?}", group.source, group.destination);
+        self.managed_link_add(pending.parent_id, group);
+        self.managed_link_ready_check(pending.parent_id);
+
+        None
+    }
+
+    fn get_pending_link_index_by_seq(&self, seq: i32) -> Option<usize> {
+        self.pending_link_syncs.iter().position(|pending| {
+            PortLocation::iter().any(|port| {
+                pending.group.links[port]
+                    .as_ref()
+                    .is_some_and(|info| info.pending_seq_id == Some(seq))
+            })
+        })
+    }
+
+    pub fn get_pending_link_parent_id_by_seq(&self, seq: i32) -> Option<Ulid> {
+        // We need to iterate over all the pending link syncs, and see if a port has our seq
+        // id, if so return that parent.
+        self.pending_link_syncs.iter().find_map(|pending| {
+            PortLocation::iter().find_map(|port| {
+                pending.group.links[port].as_ref().and_then(|info| {
+                    (info.pending_seq_id == Some(seq)).then_some(pending.parent_id)
+                })
+            })
+        })
     }
 
     pub fn managed_link_remove(&mut self, source: &LinkType, destination: &LinkType) {
@@ -598,7 +635,7 @@ impl Store {
         // Check pending syncs first
         if let Some(pending) = self
             .pending_link_syncs
-            .values_mut()
+            .iter_mut()
             .find(|p| p.parent_id == id)
         {
             pending.bound_ids.insert(link_id, pw_id);
@@ -1280,7 +1317,7 @@ impl Store {
     pub fn unmanaged_link_add(&mut self, id: u32, link: RegistryLink) {
         let in_pending = self
             .pending_link_syncs
-            .values()
+            .iter()
             .any(|p| p.bound_ids.values().any(|&pw_id| pw_id == id));
 
         // Check our Managed Links to see if this is actually unmanaged
@@ -1471,12 +1508,13 @@ pub struct LinkStoreMap {
     pub(crate) internal_id: Ulid,
 
     /// Variables needed to keep this link alive
-    pub(crate) _link: Link,
-    pub(crate) _proxy_listener: pipewire::proxy::ProxyListener,
+    pub(crate) pending_seq_id: Option<i32>,
+    pub(crate) _link: Option<Link>,
+    pub(crate) _proxy_listener: Option<ProxyListener>,
 
     /// Internal Port Index Mapping
-    pub(crate) _source_port_id: u32,
-    pub(crate) _destination_port_id: u32,
+    pub(crate) source_port: (u32, u32),
+    pub(crate) destination_port: (u32, u32),
 }
 
 #[derive(Debug, Enum, EnumIter, Copy, Clone, PartialEq)]
