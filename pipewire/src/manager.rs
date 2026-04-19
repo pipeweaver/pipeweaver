@@ -1,5 +1,7 @@
 use crate::registry::PipewireRegistry;
-use crate::store::{FilterStore, LinkStore, LinkStoreMap, NodeStore, PortLocation, Store};
+use crate::store::{
+    FilterStore, LinkStore, LinkStoreMap, NodeStore, NodeStoreState, PortLocation, Store,
+};
 use crate::{
     Direction, FilterHandler, FilterProperties, FilterProperty, FilterValue, LinkType,
     NodeProperties, PipewireInternalMessage, PipewireReceiver,
@@ -260,6 +262,16 @@ impl PipewireManager {
                         }
                     }
                 }
+
+                if info.change_mask().contains(NodeChangeMask::STATE) {
+                    let new_state = NodeStoreState::from(info.state());
+
+                    if let Some(store) = listener_info_store.upgrade() {
+                        store
+                            .borrow_mut()
+                            .managed_node_state_changed(listener_id, new_state);
+                    }
+                }
             })
             .param(move |_seq, _type, _index, _next, param| {
                 if let Some(pod) = param {
@@ -371,6 +383,7 @@ impl PipewireManager {
             port_map: Default::default(),
             ports_ready: false,
 
+            node_state: NodeStoreState::Creating,
             ready_sender: Some(properties.ready_sender),
         };
 

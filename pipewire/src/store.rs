@@ -314,6 +314,18 @@ impl Store {
         }
     }
 
+    pub fn managed_node_state_changed(&mut self, id: Ulid, state: NodeStoreState) {
+        let node = self.managed_nodes.get_mut(&id).expect("Broke");
+        debug!("Node State Changed to: {:?}", state);
+
+        if let NodeStoreState::Error(error) = &state {
+            error!("Node {} entered error state: {}", id, error);
+        }
+
+        node.node_state = state;
+        self.managed_node_check_ready(id);
+    }
+
     pub fn managed_node_request_ports(&self, id: Ulid) {
         let node = self.managed_nodes.get(&id).expect("Broke");
         node.proxy
@@ -348,6 +360,10 @@ impl Store {
 
         if node.ports_ready
             && node.pw_id.is_some()
+            && !matches!(
+                node.node_state,
+                NodeStoreState::Creating | NodeStoreState::Error(_)
+            )
             && let Some(sender) = node.ready_sender.take()
         {
             debug!("[{}] Device Ready, sending callback", &id);
@@ -1386,8 +1402,30 @@ pub(crate) struct NodeStore {
     // don't need to track each side, we just need the ID and Location
     pub(crate) port_map: EnumMap<PortLocation, Option<u32>>,
     pub(crate) ports_ready: bool,
+    pub(crate) node_state: NodeStoreState,
 
     pub(crate) ready_sender: Option<Option<Sender<()>>>,
+}
+
+#[derive(Debug, Clone)]
+pub enum NodeStoreState {
+    Error(String),
+    Creating,
+    Suspending,
+    Idle,
+    Running,
+}
+
+impl From<NodeState<'_>> for NodeStoreState {
+    fn from(state: NodeState) -> Self {
+        match state {
+            NodeState::Error(e) => NodeStoreState::Error(e.to_owned()),
+            NodeState::Creating => NodeStoreState::Creating,
+            NodeState::Suspended => NodeStoreState::Suspending,
+            NodeState::Idle => NodeStoreState::Idle,
+            NodeState::Running => NodeStoreState::Running,
+        }
+    }
 }
 
 pub struct FilterStore {
