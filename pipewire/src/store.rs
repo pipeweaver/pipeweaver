@@ -551,7 +551,6 @@ impl Store {
 
     pub fn resolve_pending_link_sync(&mut self, seq: i32) {
         if let Some(pending) = self.pending_link_syncs.remove(&seq) {
-            debug!("Resolving Link Creation..");
             let mut group = pending.group;
 
             // Apply collected pw_ids
@@ -563,6 +562,7 @@ impl Store {
                 }
             }
 
+            debug!("Link Created {:?} to {:?}", group.source, group.destination);
             self.managed_link_add(pending.parent_id, group);
             self.managed_link_ready_check(pending.parent_id);
         }
@@ -608,7 +608,6 @@ impl Store {
     /// This notifies the sender so the caller doesn't hang waiting for a response
     pub fn managed_link_error(&mut self, parent_id: Ulid, link_id: Ulid) {
         if let Some(link) = self.managed_links.get_mut(&parent_id) {
-            // Remove the failed link from the store
             for port in PortLocation::iter() {
                 if let Some(port) = &link.links[port]
                     && port.internal_id == link_id
@@ -617,14 +616,19 @@ impl Store {
                 }
             }
 
-            // If this is the first error for this parent, notify the sender immediately
-            // so the caller doesn't hang waiting for links that will never succeed
             if let Some(sender) = link.ready_sender.take() {
-                warn!(
-                    "Link creation failed for parent {}, notifying sender",
-                    parent_id
-                );
+                warn!("Link creation failed for parent {}", parent_id);
                 let _ = sender.send(());
+            } else {
+                // Immediately flag this as removed, rather than having pipewire need to trigger
+                // from the registry change. This shouldn't break / fix anything, but is cleaner.
+                warn!("Link creation failed for parent {}", parent_id);
+                if let Some(link) = self.managed_links.remove(&parent_id) {
+                    let _ = self.callback_tx.send(PipewireReceiver::ManagedLinkDropped(
+                        link.source,
+                        link.destination,
+                    ));
+                }
             }
         }
     }
