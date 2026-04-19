@@ -119,7 +119,7 @@ impl PipewireManager {
                 {
                     let this = this_rc.borrow_mut();
                     debug!("Attempting to Create next Link: {}", parent);
-                    let _ = this.create_port_link2(parent, link_id);
+                    let _ = this.create_port_link(parent, link_id);
                     return;
                 }
 
@@ -634,7 +634,7 @@ impl PipewireManager {
 
             if let Some(m) = entry.as_mut() {
                 // Ok, we have a LinkStoreMap, trigger the first creation.
-                self.create_port_link2(parent_id, m)?;
+                self.create_port_link(parent_id, m)?;
                 break;
             }
         }
@@ -809,7 +809,7 @@ impl PipewireManager {
         }
     }
 
-    fn create_port_link2(&self, parent_id: Ulid, map: &mut LinkStoreMap) -> Result<()> {
+    fn create_port_link(&self, parent_id: Ulid, map: &mut LinkStoreMap) -> Result<()> {
         let id = map.internal_id;
         let (src_node, src_port) = map.source_port;
         let (dest_node, dest_port) = map.destination_port;
