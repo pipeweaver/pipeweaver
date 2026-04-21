@@ -29,5 +29,14 @@ fn main() {
     } else {
         panic!("Unable to find Qt6 installation via pkg-config");
     }
+
+    if let Ok(lib) = pkg_config::Config::new().probe("Qt6QuickControls2") {
+        for include_path in lib.include_paths {
+            cfg.include(include_path);
+        }
+    } else {
+        panic!("Unable to find Qt6QuickControls2 via pkg-config");
+    }
+
     cfg.build("src/main.rs");
 }

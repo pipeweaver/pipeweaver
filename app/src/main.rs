@@ -34,9 +34,13 @@ const QT_PING_TIMEOUT: Duration = Duration::from_millis(200);
 const IPC_REPLY_TIMEOUT: Duration = Duration::from_secs(1);
 
 cpp! {{
+    #include <QQuickStyle>
+    #include <QQmlEngine>
+    #include <QQmlComponent>
+
     #include <QGuiApplication>
-    #include <QIcon>
     #include <QString>
+    #include <QIcon>
 }}
 
 qrc!(pipeweaver_resources,
@@ -123,6 +127,7 @@ fn real_main() -> Result<()> {
 
     // Create the engine and link up the rust side
     let mut engine = QmlEngine::new();
+    sanitize_quick_controls_style();
 
     let window_props = Rc::new(RefCell::new(WindowProperties::new()));
     let ipc_handler = Rc::new(RefCell::new(WindowHandler::new(notify_rx)));
@@ -146,6 +151,38 @@ fn real_main() -> Result<()> {
     let _ = fs::remove_file(get_pid_file_path());
 
     Ok(())
+}
+
+fn sanitize_quick_controls_style() {
+    unsafe {
+        cpp!([] -> () as "void" {
+            QString style = qgetenv("QT_QUICK_CONTROLS_STYLE");
+            if (style.isEmpty()) style = qgetenv("QT_STYLE_OVERRIDE");
+            if (style.isEmpty()) return;
+
+            // Create a temporary engine just to test the import
+            QQmlEngine engine;
+            QQmlComponent comp(&engine);
+
+            // Try importing the style as the bare name
+            QString testQml =
+                "import QtQuick\n"
+                "import " + style + "\n"
+                "Item {}\n";
+
+            // Send it
+            comp.setData(testQml.toUtf8(), QUrl());
+
+            // If this failed to run, the import is bad, load the Fusion style
+            if (comp.isError()) {
+                qWarning() << "[WARN] Invalid Qt Quick Controls style:" << style << ", loading default";
+
+                // Default to an internal style
+                qunsetenv("QT_QUICK_CONTROLS_STYLE");
+                QQuickStyle::setStyle("Fusion");
+            }
+        });
+    }
 }
 
 fn websocket_main_thread(res: mpsc::Sender<Result<()>>, tx: mpsc::Sender<WindowMessage>) {
