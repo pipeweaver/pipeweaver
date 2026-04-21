@@ -2178,7 +2178,7 @@ dependencies = [
 
 [[package]]
 name = "pipeweaver-app"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "cpp",
@@ -2200,7 +2200,7 @@ dependencies = [
 
 [[package]]
 name = "pipeweaver-client"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "clap",
@@ -2214,7 +2214,7 @@ dependencies = [
 
 [[package]]
 name = "pipeweaver-daemon"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "actix-cors",
  "actix-web",
@@ -2251,7 +2251,7 @@ dependencies = [
 
 [[package]]
 name = "pipeweaver-ipc"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2270,7 +2270,7 @@ dependencies = [
 
 [[package]]
 name = "pipeweaver-pipewire"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "enum-map",
@@ -2286,7 +2286,7 @@ dependencies = [
 
 [[package]]
 name = "pipeweaver-profile"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "enum-map",
  "pipeweaver-shared",
@@ -2296,7 +2296,7 @@ dependencies = [
 
 [[package]]
 name = "pipeweaver-shared"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "clap",
  "enum-map",
