@@ -19,7 +19,7 @@ use pipewire::keys::{
     NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_NAME, NODE_NICK,
     NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME,
 };
-use pipewire::link::Link;
+use pipewire::link::{Link, LinkState};
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
 use pipewire::proxy::ProxyT;
@@ -43,7 +43,7 @@ use pipewire::spa::utils;
 
 use pipewire::main_loop::MainLoop;
 use pipewire::{context, main_loop};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::io::Cursor;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -125,8 +125,6 @@ impl PipewireManager {
 
                 // Pending Filters
                 if let Some(id) = store_ref.pending_filter_syncs.remove(&seq.raw()) {
-                    drop(store_ref);
-
                     if let Some(mainloop) = done_mainloop.upgrade() {
                         let timer_store = Rc::downgrade(&store_rc);
                         let timer = mainloop.loop_().add_timer(move |_| {
@@ -703,6 +701,7 @@ impl PipewireManager {
                 pending_seq_id: None,
                 _link: None,
                 _proxy_listener: None,
+                _info_listener: None,
 
                 source_port: (src_id, src_index),
                 destination_port: (tgt_id, tgt_index),
@@ -837,10 +836,8 @@ impl PipewireManager {
             .add_listener_local()
             .bound(move |pw_id| {
                 // The link is now bound and has an ID, notify the store
-                if let Some(listener_bound_store) = listener_bound_store.upgrade() {
-                    listener_bound_store
-                        .borrow_mut()
-                        .managed_link_bound(parent_id, id, pw_id);
+                if let Some(store) = listener_bound_store.upgrade() {
+                    store.borrow_mut().managed_link_bound(parent_id, id, pw_id);
                 }
             })
             .error(move |seq, res, message| {
@@ -853,18 +850,37 @@ impl PipewireManager {
                     message
                 );
                 // Notify the store about the error so the sender doesn't hang
-                if let Some(listener_error_store) = listener_error_store.upgrade() {
-                    listener_error_store
-                        .borrow_mut()
-                        .managed_link_error(parent_id, id);
+                if let Some(store) = listener_error_store.upgrade() {
+                    store.borrow_mut().managed_link_error(parent_id, id);
                 }
             })
             .register();
 
-        let seq = self.core.sync(0).expect("core sync failed");
-        map.pending_seq_id = Some(seq.raw());
+        let listener_done_store = listener_info_store.clone();
+        let listener_done_core = self.core.clone();
+        let state_done = Cell::new(false);
+        let link_listener = link
+            .add_listener_local()
+            .info(move |info| {
+                if state_done.get() {
+                    return;
+                }
+                if matches!(info.state(), LinkState::Active) {
+                    state_done.set(true);
+
+                    if let Some(store) = listener_done_store.upgrade() {
+                        let seq = listener_done_core.sync(0).expect("core sync failed");
+                        store
+                            .borrow_mut()
+                            .set_pending_link_done(parent_id, id, seq.raw());
+                    }
+                }
+            })
+            .register();
+
         map._link = Some(link);
         map._proxy_listener = Some(proxy_listener);
+        map._info_listener = Some(link_listener);
 
         Ok(())
     }

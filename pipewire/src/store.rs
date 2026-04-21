@@ -15,7 +15,7 @@ use log::{debug, error, info, trace, warn};
 use oneshot::Sender;
 use parking_lot::RwLock;
 use pipewire::filter::{Filter, FilterListener, FilterPort};
-use pipewire::link::Link;
+use pipewire::link::{Link, LinkListener};
 use pipewire::node::{Node, NodeListener, NodeState};
 use pipewire::properties::Properties;
 use pipewire::proxy::ProxyListener;
@@ -619,6 +619,22 @@ impl Store {
                 })
             })
         })
+    }
+
+    pub fn set_pending_link_done(&mut self, parent_id: Ulid, link_id: Ulid, seq_id: i32) {
+        for pending in &mut self.pending_link_syncs {
+            if pending.parent_id != parent_id {
+                continue;
+            }
+            for port in PortLocation::iter() {
+                if let Some(info) = pending.group.links[port].as_mut()
+                    && info.internal_id == link_id
+                {
+                    info.pending_seq_id = Some(seq_id);
+                    return; // stop as soon as it's found
+                }
+            }
+        }
     }
 
     pub fn managed_link_remove(&mut self, source: &LinkType, destination: &LinkType) {
@@ -1511,6 +1527,7 @@ pub struct LinkStoreMap {
     pub(crate) pending_seq_id: Option<i32>,
     pub(crate) _link: Option<Link>,
     pub(crate) _proxy_listener: Option<ProxyListener>,
+    pub(crate) _info_listener: Option<LinkListener>,
 
     /// Internal Port Index Mapping
     pub(crate) source_port: (u32, u32),
