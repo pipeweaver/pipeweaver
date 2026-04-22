@@ -148,7 +148,7 @@ impl Profile {
             .into_iter()
             .collect(),
 
-            audio_quantum: Quantum::Quantum512,
+            audio_quantum: Quantum::Quantum2048,
             application_mapping: enum_map! {
                 DeviceType::Source => {
                     HashMap::from([
