@@ -316,6 +316,8 @@ impl PipewireManager {
 
                             // Create the 'Status' object
                             let physical_node = PhysicalDevice {
+                                id: Ulid::new(),
+
                                 node_id: node.node_id,
                                 name: node.name.clone(),
                                 description: node.description.clone(),
@@ -378,6 +380,10 @@ impl PipewireManager {
                             }
                         }
                         PipewireReceiver::DeviceUsable(id, usable) => {
+                            // TODO: I shouldn't need to call this anymore
+                            // The usability of a device is known as soon as it arrives, and isn't
+                            // updated during runtime anymore (I think?)
+
                             if let Some(dev) = self.device_nodes.get_mut(&id) {
                                 if dev.is_usable == usable {
                                     continue;
@@ -390,6 +396,8 @@ impl PipewireManager {
 
                                 // Create physical node for attachment
                                 let physical_node = PhysicalDevice {
+                                    id: Ulid::new(),
+
                                     node_id: id,
                                     name: dev.name.clone(),
                                     description: dev.description.clone(),

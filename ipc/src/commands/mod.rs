@@ -194,6 +194,8 @@ pub struct GlobalSettings {
 /// an ID to be passed back to the daemon in IPC calls, and the nodes name.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PhysicalDevice {
+    pub id: Ulid,
+
     pub node_id: u32,
     pub name: Option<String>,
     pub description: Option<String>,
