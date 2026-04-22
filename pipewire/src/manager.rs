@@ -4,7 +4,7 @@ use crate::store::{
 };
 use crate::{
     Direction, FilterHandler, FilterProperties, FilterProperty, FilterValue, LinkType,
-    NodeProperties, PipewireInternalMessage, PipewireReceiver,
+    NodeProperties, NodeTarget, PipewireInternalMessage, PipewireReceiver,
 };
 use crate::{MediaClass, PWReceiver};
 use anyhow::Result;
@@ -968,6 +968,15 @@ impl PipewireManager {
         self.store.borrow_mut().set_application_muted(id, state)
     }
 
+    fn set_default_device(&mut self, class: MediaClass, node: NodeTarget) -> Result<()> {
+        match class {
+            MediaClass::Source => self.store.borrow_mut().set_default_source_node(node)?,
+            MediaClass::Sink => self.store.borrow_mut().set_default_sink_node(node)?,
+            MediaClass::Duplex => bail!("Can't set defaults on Duplex!"),
+        }
+        Ok(())
+    }
+
     fn set_node_mute(&mut self, id: Ulid, mute: bool) -> Result<()> {
         self.store.borrow_mut().set_mute(id, mute)
     }
@@ -1107,6 +1116,10 @@ pub fn run_pw_main_loop(
             PipewireInternalMessage::SetApplicationMute(id, state, result) => {
                 let _ = result.send(manager.borrow_mut().set_application_muted(id, state));
             }
+            PipewireInternalMessage::SetDefaultDevice(class, node, result) => {
+                let _ = result.send(manager.borrow_mut().set_default_device(class, node));
+            }
+
             PipewireInternalMessage::ClearApplicationTarget(id, result) => {
                 let _ = result.send(manager.borrow_mut().clear_application_target(id));
             }

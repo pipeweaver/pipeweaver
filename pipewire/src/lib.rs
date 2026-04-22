@@ -45,6 +45,8 @@ pub enum PipewireMessage {
     SetApplicationMute(u32, bool),
     ClearApplicationTarget(u32),
 
+    SetDefaultDevice(MediaClass, NodeTarget),
+
     DestroyUnmanagedLinks(u32),
 
     Quit,
@@ -74,6 +76,8 @@ pub enum PipewireInternalMessage {
 
     SetApplicationTarget(u32, Ulid, oneshot::Sender<Result<()>>),
     ClearApplicationTarget(u32, oneshot::Sender<Result<()>>),
+
+    SetDefaultDevice(MediaClass, NodeTarget, oneshot::Sender<Result<()>>),
 
     DestroyUnmanagedLinks(u32, oneshot::Sender<Result<()>>),
     Quit(oneshot::Sender<Result<()>>),
@@ -210,6 +214,9 @@ impl PipewireRunner {
             }
             PipewireMessage::SetApplicationMute(id, state) => {
                 PipewireInternalMessage::SetApplicationMute(id, state, tx)
+            }
+            PipewireMessage::SetDefaultDevice(class, target) => {
+                PipewireInternalMessage::SetDefaultDevice(class, target, tx)
             }
             PipewireMessage::ClearApplicationTarget(id) => {
                 PipewireInternalMessage::ClearApplicationTarget(id, tx)

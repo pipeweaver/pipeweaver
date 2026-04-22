@@ -15,6 +15,7 @@ use log::{debug, error, info, trace, warn};
 use oneshot::Sender;
 use parking_lot::RwLock;
 use pipewire::filter::{Filter, FilterListener, FilterPort};
+use pipewire::keys::MEDIA_CLASS;
 use pipewire::link::{Link, LinkListener};
 use pipewire::node::{Node, NodeListener, NodeState};
 use pipewire::properties::Properties;
@@ -248,6 +249,80 @@ impl Store {
             }
         }
         None
+    }
+
+    pub fn set_default_sink_node(&self, target: NodeTarget) -> Result<()> {
+        if !self.is_valid_target(target, MediaClass::Sink) {
+            bail!("Target {:?} is not a valid sink", target);
+        }
+
+        let name = self
+            .find_node_name_by_target(target)
+            .ok_or_else(|| anyhow!("Node not found for target {:?}", target))?;
+        let session = self
+            .session_proxy
+            .as_ref()
+            .ok_or_else(|| anyhow!("No session proxy available"))?;
+
+        session.metadata.set_property(
+            0,
+            "default.configured.audio.sink",
+            Some("Spa:String:JSON"),
+            Some(&format!(r#"{{"name":"{}"}}"#, name)),
+        );
+        Ok(())
+    }
+
+    pub fn set_default_source_node(&self, target: NodeTarget) -> Result<()> {
+        if !self.is_valid_target(target, MediaClass::Source) {
+            bail!("Target {:?} is not a valid source", target);
+        }
+
+        let name = self
+            .find_node_name_by_target(target)
+            .ok_or_else(|| anyhow!("Node not found for target {:?}", target))?;
+        let session = self
+            .session_proxy
+            .as_ref()
+            .ok_or_else(|| anyhow!("No session proxy available"))?;
+
+        session.metadata.set_property(
+            0,
+            "default.configured.audio.source",
+            Some("Spa:String:JSON"),
+            Some(&format!(r#"{{"name":"{}"}}"#, name)),
+        );
+        Ok(())
+    }
+
+    pub fn is_valid_target(&self, target: NodeTarget, class: MediaClass) -> bool {
+        let media_class = match target {
+            NodeTarget::Node(ulid) => self
+                .managed_nodes
+                .get(&ulid)
+                .and_then(|n| n.props.get(*MEDIA_CLASS))
+                .map(|s| s.to_string()),
+            NodeTarget::UnmanagedNode(id) => self
+                .unmanaged_device_nodes
+                .get(&id)
+                .and_then(|n| n.media_class.clone()),
+        };
+
+        media_class.is_some_and(|c| match class {
+            MediaClass::Sink => c.contains("Sink") || c.contains("Duplex"),
+            MediaClass::Source => c.contains("Source") || c.contains("Duplex"),
+            MediaClass::Duplex => c.contains("Duplex"),
+        })
+    }
+
+    fn find_node_name_by_target(&self, target: NodeTarget) -> Option<String> {
+        match target {
+            NodeTarget::Node(ulid) => {
+                let node = self.managed_nodes.get(&ulid)?;
+                node.props.get("node.name").map(|s| s.to_string())
+            }
+            NodeTarget::UnmanagedNode(id) => self.unmanaged_device_nodes.get(&id)?.name.clone(),
+        }
     }
 
     // ----- MANAGED NODES -----
