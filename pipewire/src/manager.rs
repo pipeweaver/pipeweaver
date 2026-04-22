@@ -540,6 +540,7 @@ impl PipewireManager {
 
                 let mut input_list = vec![];
                 let mut output_list = vec![];
+
                 for input in listener_input_ports.borrow().iter() {
                     let in_buffer = filter.get_dsp_buffer::<f32>(input, samples);
                     input_list.push(in_buffer.unwrap());
@@ -550,12 +551,16 @@ impl PipewireManager {
                     output_list.push(out_buffer.unwrap());
                 }
 
-                // If nothing is attached as an input, flush the output to prevent doubling
-                if input_list.is_empty() {
-                    for out in output_list.iter_mut() {
-                        out.fill(0.0);
+                // Check for inputs, output only filters don't need this
+                if !input_list.is_empty() {
+                    // Iterate over all the output lists
+                    for (i, out_buf) in output_list.iter_mut().enumerate() {
+                        // Fetch the matching input, if it's empty and the output ISN'T..
+                        if !out_buf.is_empty() && input_list.get(i).is_none_or(|b| b.is_empty()) {
+                            // Clear the output buffer
+                            out_buf.fill(0.0);
+                        }
                     }
-                    return;
                 }
 
                 data.write()
