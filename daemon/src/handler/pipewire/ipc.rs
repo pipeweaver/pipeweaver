@@ -1,4 +1,5 @@
 use crate::handler::pipewire::components::application::ApplicationManagement;
+use crate::handler::pipewire::components::defaults::DefaultHandlers;
 use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::mute::MuteManager;
 use crate::handler::pipewire::components::node::NodeManagement;
@@ -424,6 +425,9 @@ impl IPCHandler for PipewireManager {
             Cmd::DetachPhysicalNodePortMapByNames(_, _) => {
                 bail!("Not Implemented");
             }
+
+            Cmd::SetDefaultInput(id) => self.set_default_input(id).await.map(|_| Resp::Ok),
+            Cmd::SetDefaultOutput(id) => self.set_default_output(id).await.map(|_| Resp::Ok),
         }
     }
 }

@@ -144,6 +144,10 @@ pub enum APICommand {
     DetachPhysicalNodePortMap(Ulid, Ulid),
     DetachPhysicalNodePortMapByName(String, Ulid),
     DetachPhysicalNodePortMapByNames(String, String),
+
+    // Commands for Default Device changing
+    SetDefaultInput(Ulid),
+    SetDefaultOutput(Ulid),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
