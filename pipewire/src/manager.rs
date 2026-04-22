@@ -550,6 +550,14 @@ impl PipewireManager {
                     output_list.push(out_buffer.unwrap());
                 }
 
+                // If nothing is attached as an input, flush the output to prevent doubling
+                if input_list.is_empty() {
+                    for out in output_list.iter_mut() {
+                        out.fill(0.0);
+                    }
+                    return;
+                }
+
                 data.write()
                     .callback
                     .process_samples(input_list, output_list);
