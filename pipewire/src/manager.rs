@@ -16,10 +16,10 @@ use pipewire::keys::{
     APP_ICON_NAME, APP_ID, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME,
     FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT,
     MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_ALWAYS_PROCESS,
-    NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_NAME, NODE_NICK,
-    NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME,
+    NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_GROUP, NODE_NAME,
+    NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME,
 };
-use pipewire::link::{Link, LinkState};
+use pipewire::link::{Link, LinkChangeMask, LinkState};
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
 use pipewire::proxy::ProxyT;
@@ -176,12 +176,15 @@ impl PipewireManager {
             *NODE_NICK => properties.node_nick,
             *NODE_DESCRIPTION => properties.node_description,
 
+            *NODE_ALWAYS_PROCESS => "true",
             *NODE_VIRTUAL => "true",
             *PORT_MONITOR => "false",
 
             *APP_ICON_NAME => &*properties.app_id,
             *MEDIA_ICON_NAME => &*properties.app_id,
             *DEVICE_ICON_NAME => &*properties.app_id,
+
+            *NODE_GROUP => "pipeweaver-nodes",
 
             //*APP_NAME => properties.app_name,
             *OBJECT_LINGER => match properties.linger {
@@ -862,19 +865,22 @@ impl PipewireManager {
         let link_listener = link
             .add_listener_local()
             .info(move |info| {
-                if state_done.get() {
-                    return;
-                }
-                if matches!(info.state(), LinkState::Active | LinkState::Paused) {
-                    state_done.set(true);
+                if info.change_mask().contains(LinkChangeMask::STATE) {
+                    if state_done.get() {
+                        return;
+                    }
+                    if matches!(info.state(), LinkState::Active | LinkState::Paused) {
+                        state_done.set(true);
 
-                    if let Some(store) = listener_done_store.upgrade() {
-                        let seq = listener_done_core.sync(0).expect("core sync failed");
-                        store
-                            .borrow_mut()
-                            .set_pending_link_done(parent_id, id, seq.raw());
+                        if let Some(store) = listener_done_store.upgrade() {
+                            let seq = listener_done_core.sync(0).expect("core sync failed");
+                            store
+                                .borrow_mut()
+                                .set_pending_link_done(parent_id, id, seq.raw());
+                        }
                     }
                 }
+                //if matches!(info.state(), LinkState::Error(e) | LinkState::Unlinked) {}
             })
             .register();
 
