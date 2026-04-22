@@ -865,7 +865,7 @@ impl PipewireManager {
                 if state_done.get() {
                     return;
                 }
-                if matches!(info.state(), LinkState::Active) {
+                if matches!(info.state(), LinkState::Active | LinkState::Paused) {
                     state_done.set(true);
 
                     if let Some(store) = listener_done_store.upgrade() {
