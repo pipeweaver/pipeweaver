@@ -62,11 +62,11 @@ impl DefaultHandlersInternal for PipewireManager {
     async fn set_default_device(&self, id: Ulid, class: MediaClass) -> Result<()> {
         let (valid_types, device_type) = match class {
             MediaClass::Source => (
-                &[NodeType::PhysicalSource, NodeType::VirtualSource] as &[_],
+                &[NodeType::PhysicalSource, NodeType::VirtualTarget] as &[_],
                 DeviceType::Source,
             ),
             MediaClass::Sink => (
-                &[NodeType::PhysicalTarget, NodeType::VirtualTarget] as &[_],
+                &[NodeType::PhysicalTarget, NodeType::VirtualSource] as &[_],
                 DeviceType::Target,
             ),
             MediaClass::Duplex => bail!("Duplex is not a valid default device class"),
