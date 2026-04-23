@@ -1,6 +1,6 @@
 <template>
   <div v-show=is_visible class="modal-mask">
-    <div class="modal-wrapper">
+    <div class="modal-wrapper" @click.self="$emit('backdrop-click')">
       <div ref="dialog" class="modal-container" role="dialog" @keyup.esc.prevent="closeModalEsc">
         <div class="modal-header" tabindex="0">
           <div :id="`${id}_label`" role="heading">
@@ -32,7 +32,7 @@ import * as focusTrap from "focus-trap";
 
 export default {
   name: "ModalOverlay",
-  emits: ["modal-close"],
+  emits: ["modal-close", "backdrop-click"],
 
   props: {
     id: {type: String, required: true},
@@ -69,7 +69,9 @@ export default {
         }
 
         // Create the focus trap, to prevent moving out..
-        this.trap = focusTrap.createFocusTrap(this.$refs.dialog);
+        this.trap = focusTrap.createFocusTrap(this.$refs.dialog, {
+          allowOutsideClick: true,
+        });
         this.trap.activate();
       })
     },
