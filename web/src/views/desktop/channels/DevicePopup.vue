@@ -13,6 +13,7 @@ import {
   is_source
 } from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
+import ModalOverlay from "@/views/desktop/components/ModalOverlay.vue";
 
 export default {
   name: "DevicePopup",
@@ -21,7 +22,7 @@ export default {
       return DeviceOrderType
     }
   },
-  components: {PopupBox},
+  components: {ModalOverlay, PopupBox},
 
   props: {
     type: {type: String, required: true},
@@ -29,6 +30,12 @@ export default {
     order_group: {type: String, required: true},
     id: {type: String, required: true},
     colour_callback: {type: Function, required: true}
+  },
+
+  data() {
+    return {
+      textInputValue: "",
+    }
   },
 
   methods: {
@@ -173,11 +180,26 @@ export default {
       websocket.send_command(command);
     },
 
-    onRenameClick(e) {
-      let name = prompt("New Device Name:");
+    onRenameClick: function () {
+      this.$refs.popup.hideDialog();
+      this.$refs.modal.openModal(this.$refs.textInput, undefined);
+    },
 
+    handleRenameOk: function () {
+      this.doRename(this.textInputValue);
+      this.$refs.modal.closeModal();
+    },
+
+    handleRenameCancel: function () {
+      this.$refs.modal.closeModal();
+    },
+
+    handleRenameClose: function () {
+      this.textInputValue = "";
+    },
+
+    doRename(name) {
       if (name !== null) {
-        // CreateNode(NodeType, String),
         let command = {
           "RenameNode": [this.getId(), name]
         }
@@ -226,6 +248,22 @@ export default {
 </script>
 
 <template>
+  <ModalOverlay ref="modal" id="rename" @modal-close="handleRenameClose"
+                @backdrop-click="handleRenameCancel">
+    <template #title>Rename {{ getName() }}</template>
+
+    <div class="modal-content">
+      <div style="margin-bottom: 6px;">New Name:</div>
+      <input ref="textInput" v-model="textInputValue" type="text" @keyup.enter="handleRenameOk"/>
+    </div>
+
+    <template #footer class="modal-footer">
+      <button @click="handleRenameCancel" style="margin-right: 10px;">Cancel</button>
+      <button @click="handleRenameOk" style="background-color: #3b413f">Ok</button>
+    </template>
+  </ModalOverlay>
+
+
   <button @click="menuClick">
     <font-awesome-icon :icon="['fas', 'bars']"/>
   </button>
@@ -375,4 +413,46 @@ button:hover {
 span {
   text-align: left;
 }
+
+.modal-content {
+  text-align: left;
+  font-weight: normal;
+}
+
+.modal-footer {
+  background-color: #2d3230;
+  text-align: right;
+  padding-right: 10px;
+  padding-bottom: 10px;
+}
+
+.modal-footer button {
+  background-color: #353937;
+  color: #fff;
+  padding: 8px 30px;
+  border: 1px solid #2a2e2d;
+}
+
+.modal-footer button:hover {
+  background-color: #737775;
+  cursor: pointer;
+}
+
+.modal-content input[type=text] {
+  text-align: left;
+
+  padding: 5px;
+  color: #fff;
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #666;
+  outline: none;
+
+  background-color: #2d3230;
+}
+
+.modal-content input[type=text]:focus {
+  border-color: #4a90d9; /* active border colour */
+}
+
 </style>

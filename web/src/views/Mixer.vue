@@ -125,7 +125,7 @@ export default {
 </script>
 
 <template>
-  <ModalOverlay ref="modal" id="my-modal" @modal-close="handleClose" @backdrop-click="handleCancel">
+  <ModalOverlay ref="modal" id="create" @modal-close="handleClose" @backdrop-click="handleCancel">
     <template #title>Create {{ modalIsPhysical ? "Physical" : "Virtual" }}
       {{ is_source ? "Source" : "Target" }} Device
     </template>
