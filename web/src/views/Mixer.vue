@@ -279,6 +279,10 @@ export default {
   cursor: pointer;
 }
 
+.modal-footer button:focus {
+  border-color: #4a90d9; /* active border colour */
+}
+
 .modal-content input[type=text] {
   padding: 5px;
   color: #fff;

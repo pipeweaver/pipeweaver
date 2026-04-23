@@ -210,16 +210,25 @@ export default {
       }
     },
 
-    onRemoveClicked(e) {
-      let result = confirm("Are you sure you want to remove this channel?");
-      if (result) {
-        // CreateNode(NodeType, String),
-        let command = {
-          "RemoveNode": this.getId()
-        }
-        websocket.send_command(command)
-        this.$refs.popup.hideDialog();
+    onRemoveClick: function () {
+      this.$refs.popup.hideDialog();
+      this.$refs.remove_modal.openModal(this.$refs.okButton, undefined);
+    },
+
+    handleRemoveOk: function () {
+      this.doRemove(this.textInputValue);
+      this.$refs.remove_modal.closeModal();
+    },
+
+    handleRemoveCancel: function () {
+      this.$refs.remove_modal.closeModal();
+    },
+
+    doRemove() {
+      let command = {
+        "RemoveNode": this.getId()
       }
+      websocket.send_command(command);
     },
 
     onPinClicked(toggle, e) {
@@ -263,6 +272,18 @@ export default {
     </template>
   </ModalOverlay>
 
+  <ModalOverlay ref="remove_modal" id="remove" @backdrop-click="handleRemoveCancel">
+    <template #title>Remove {{ getName() }}</template>
+
+    <div class="modal-content">
+      <div>Are you sure you want to remove this device?</div>
+    </div>
+
+    <template #footer class="modal-footer">
+      <button @click="handleRemoveCancel" style="margin-right: 10px;">No</button>
+      <button ref="okButton" @click="handleRemoveOk" style="background-color: #3b413f">Yes</button>
+    </template>
+  </ModalOverlay>
 
   <button @click="menuClick">
     <font-awesome-icon :icon="['fas', 'bars']"/>
@@ -314,7 +335,7 @@ export default {
       <span class="selected"></span>
       <span>Rename Channel</span>
     </div>
-    <div class="entry" @click="onRemoveClicked">
+    <div class="entry" @click="onRemoveClick">
       <span class="selected"></span>
       <span>Remove Channel</span>
     </div>
@@ -436,6 +457,10 @@ span {
 .modal-footer button:hover {
   background-color: #737775;
   cursor: pointer;
+}
+
+.modal-footer button:focus {
+  border-color: #4a90d9; /* active border colour */
 }
 
 .modal-content input[type=text] {
