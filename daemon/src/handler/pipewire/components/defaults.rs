@@ -4,11 +4,13 @@ use anyhow::{Result, bail};
 use pipeweaver_pipewire::PipewireMessage::SetDefaultDevice;
 use pipeweaver_pipewire::{MediaClass, NodeTarget};
 use pipeweaver_shared::{DeviceType, NodeType};
+use strum::IntoEnumIterator;
 use ulid::Ulid;
 
 pub(crate) trait DefaultHandlers {
     async fn set_default_input(&self, id: Ulid) -> Result<()>;
     async fn set_default_output(&self, id: Ulid) -> Result<()>;
+    fn find_ulid_for_pw_id(&self, id: u32) -> Option<Ulid>;
 }
 
 impl DefaultHandlers for PipewireManager {
@@ -18,6 +20,18 @@ impl DefaultHandlers for PipewireManager {
 
     async fn set_default_output(&self, id: Ulid) -> Result<()> {
         self.set_default_device(id, MediaClass::Sink).await
+    }
+
+    fn find_ulid_for_pw_id(&self, id: u32) -> Option<Ulid> {
+        for node_type in DeviceType::iter() {
+            for node in &self.node_list[node_type] {
+                if node.node_id == id {
+                    return Some(node.id);
+                }
+            }
+        }
+
+        None
     }
 }
 

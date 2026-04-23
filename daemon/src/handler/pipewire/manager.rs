@@ -1,6 +1,7 @@
 use crate::handler::pipewire::components::application::{
     ApplicationManagement, get_application_type,
 };
+use crate::handler::pipewire::components::defaults::DefaultHandlers;
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
@@ -128,6 +129,23 @@ impl PipewireManager {
                     }
                 },
             },
+            defaults_id: enum_map! {
+                DeviceType::Source => match &self.default_source {
+                    None => None,
+                    Some(target) => match target {
+                        NodeTarget::Node(id) => Some(*id),
+                        NodeTarget::UnmanagedNode(id) => self.find_ulid_for_pw_id(*id),
+                    }
+                },
+                DeviceType::Target => match &self.default_target {
+                    None => None,
+                    Some(target) => match target {
+                        NodeTarget::Node(id) => Some(*id),
+                        NodeTarget::UnmanagedNode(id) => self.find_ulid_for_pw_id(*id),
+                    }
+                },
+            },
+
             applications: {
                 let mut sources: HashMap<String, HashMap<String, Vec<Application>>> =
                     HashMap::new();
@@ -155,6 +173,14 @@ impl PipewireManager {
                             Some(Some(target)) => match target {
                                 NodeTarget::Node(id) => Some(AppTarget::Managed(id)),
                                 NodeTarget::UnmanagedNode(id) => Some(AppTarget::Unmanaged(id)),
+                            },
+                        },
+                        target_id: match application.media_target {
+                            None => None,
+                            Some(None) => None,
+                            Some(Some(target)) => match target {
+                                NodeTarget::Node(id) => Some(id),
+                                NodeTarget::UnmanagedNode(id) => self.find_ulid_for_pw_id(id),
                             },
                         },
                     };

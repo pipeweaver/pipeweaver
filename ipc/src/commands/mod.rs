@@ -167,7 +167,13 @@ pub struct DaemonStatus {
 pub struct AudioConfiguration {
     pub profile: Profile,
     pub devices: EnumMap<DeviceType, Vec<PhysicalDevice>>,
+
+    // Default device assignments. The defaults field is legacy, and defaults_id should be used
+    // going forward. The original defaults is maintained for backwards compatibility and
+    // deserialization reasons.
     pub defaults: EnumMap<DeviceType, Option<AppTarget>>,
+    pub defaults_id: EnumMap<DeviceType, Option<Ulid>>,
+
     pub applications: EnumMap<DeviceType, HashMap<String, HashMap<String, Vec<Application>>>>,
 }
 
@@ -226,4 +232,9 @@ pub struct Application {
     pub title: Option<String>,
 
     pub target: Option<AppTarget>,
+
+    // This is an alternative to the above, and is now the preferred method, but I'm keeping the
+    // previous behaviour for backwards compatibility reasons, and to prevent deserialization
+    // breaking in apps that inherit this.
+    pub target_id: Option<Ulid>,
 }
