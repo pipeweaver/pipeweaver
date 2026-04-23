@@ -272,7 +272,8 @@ export default {
 
     <div class="modal-content">
       <div style="margin-bottom: 6px;">New Name:</div>
-      <input ref="textInput" v-model="textInputValue" type="text" @keyup.enter="handleRenameOk"/>
+      <input ref="textInput" v-model="textInputValue" maxlength="20" type="text"
+             @keyup.enter="handleRenameOk"/>
       <div v-if="nameValidationError" class="input-error">{{ nameValidationError }}</div>
     </div>
 

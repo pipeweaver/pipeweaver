@@ -146,7 +146,8 @@ export default {
 
     <div class="modal-content">
       <div style="margin-bottom: 6px;">Device Name:</div>
-      <input ref="textInput" v-model="textInputValue" type="text" @keyup.enter="handleOk"/>
+      <input ref="textInput" maxlength="20" v-model="textInputValue" type="text"
+             @keyup.enter="handleOk"/>
       <div v-if="nameValidationError" class="input-error">{{ nameValidationError }}</div>
     </div>
 
