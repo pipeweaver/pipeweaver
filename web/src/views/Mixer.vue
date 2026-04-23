@@ -4,15 +4,19 @@ import {DeviceOrderType, DeviceType, get_device_by_id, get_device_order} from "@
 import {websocket} from "@/app/sockets.js";
 import PopupBox from "@/views/desktop/inputs/PopupBox.vue";
 import DeviceList from "@/views/desktop/DeviceList.vue";
+import ModalOverlay from "@/views/desktop/components/ModalOverlay.vue";
 
 const INTERNAL_SCALE = 0.8;
 
 export default {
   name: "Mixer",
-  components: {DeviceList, PopupBox, ChannelColumn},
+  components: {ModalOverlay, DeviceList, PopupBox, ChannelColumn},
 
   data() {
-    return {}
+    return {
+      textInputValue: "",
+      modalIsPhysical: false,
+    }
   },
 
   props: {
@@ -52,9 +56,29 @@ export default {
 
     add_device(is_physical) {
       this.$refs.popup.hideDialog();
-      let name = prompt("Device Name:");
+      this.modalIsPhysical = is_physical;
+
+      this.$refs.modal.openModal(this.$refs.textInput, undefined);
+    },
+
+    handleOk() {
+      this.do_add_device(this.modalIsPhysical, this.textInputValue);
+      this.$refs.modal.closeModal();
+    },
+
+    handleCancel() {
+      this.$refs.modal.closeModal();
+    },
+
+    handleClose() {
+      this.textInputValue = "";
+    },
+
+    do_add_device(is_physical, name) {
+      console.log("DOING IT: " + is_physical + " " + name);
 
       if (name === undefined || name === "" || name === null) {
+        console.log("NO NAME");
         return;
       }
 
@@ -101,13 +125,29 @@ export default {
 </script>
 
 <template>
+  <ModalOverlay ref="modal" id="my-modal" @modal-close="handleClose">
+    <template #title>Create {{ modalIsPhysical ? "Physical" : "Virtual" }}
+      {{ is_source ? "Source" : "Target" }} Device
+    </template>
+
+    <div class="modal-content">
+      <div style="margin-bottom: 6px;">Device Name:</div>
+      <input ref="textInput" v-model="textInputValue" type="text" @keyup.enter="handleOk"/>
+    </div>
+
+    <template #footer class="modal-footer">
+      <button @click="handleCancel" style="margin-right: 10px;">Cancel</button>
+      <button @click="handleOk" style="background-color: #3b413f">Ok</button>
+    </template>
+  </ModalOverlay>
+
   <PopupBox ref="popup" @closed="">
     <div class="entry" @click="add_device(false)">
-      <span>Add Virtual Channel</span>
+      <span>Add Virtual Device</span>
     </div>
     <div class="separator"/>
     <div class="entry" @click="add_device(true)">
-      <span>Add Physical Channel</span>
+      <span>Add Physical Device</span>
     </div>
   </PopupBox>
   <PopupBox ref="hidden" @closed="">
@@ -218,6 +258,40 @@ export default {
 
 .entry:not(:last-child) {
   border-bottom: 1px solid #3b413f;
+}
+
+.modal-footer {
+  background-color: #2d3230;
+  text-align: right;
+  padding-right: 10px;
+  padding-bottom: 10px;
+}
+
+.modal-footer button {
+  background-color: #353937;
+  color: #fff;
+  padding: 8px 30px;
+  border: 1px solid #2a2e2d;
+}
+
+.modal-footer button:hover {
+  background-color: #737775;
+  cursor: pointer;
+}
+
+.modal-content input[type=text] {
+  padding: 5px;
+  color: #fff;
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #666;
+  outline: none;
+
+  background-color: #2d3230;
+}
+
+.modal-content input[type=text]:focus {
+  border-color: #4a90d9; /* active border colour */
 }
 
 </style>
