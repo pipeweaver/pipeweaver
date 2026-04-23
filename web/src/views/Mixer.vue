@@ -1,6 +1,12 @@
 <script>
 import ChannelColumn from "@/views/desktop/channels/ChannelColumn.vue";
-import {DeviceOrderType, DeviceType, get_device_by_id, get_device_order} from "@/app/util.js";
+import {
+  DeviceOrderType,
+  DeviceType,
+  get_device_by_id,
+  get_device_order,
+  isValidName
+} from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
 import PopupBox from "@/views/desktop/inputs/PopupBox.vue";
 import DeviceList from "@/views/desktop/DeviceList.vue";
@@ -23,6 +29,7 @@ export default {
     is_source: Boolean,
   },
   methods: {
+    isValidName,
     get_device_by_id,
 
 
@@ -62,6 +69,8 @@ export default {
     },
 
     handleOk() {
+      if (this.nameValidationError) return;
+
       this.do_add_device(this.modalIsPhysical, this.textInputValue);
       this.$refs.modal.closeModal();
     },
@@ -120,6 +129,11 @@ export default {
         return "50px"
       }
     },
+
+    nameValidationError() {
+      if (this.textInputValue.length === 0) return null;
+      return this.isValidName(this.textInputValue);
+    }
   }
 }
 </script>
@@ -133,11 +147,14 @@ export default {
     <div class="modal-content">
       <div style="margin-bottom: 6px;">Device Name:</div>
       <input ref="textInput" v-model="textInputValue" type="text" @keyup.enter="handleOk"/>
+      <div v-if="nameValidationError" class="input-error">{{ nameValidationError }}</div>
     </div>
 
     <template #footer class="modal-footer">
       <button @click="handleCancel" style="margin-right: 10px;">Cancel</button>
-      <button @click="handleOk" class="button-default">Ok</button>
+      <button @click="handleOk" class="button-default" :disabled="!!isValidName(textInputValue)">
+        Ok
+      </button>
     </template>
   </ModalOverlay>
 
@@ -292,6 +309,11 @@ export default {
   border-color: #4a90d9; /* active border colour */
 }
 
+.modal-footer button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .modal-content input[type=text] {
   padding: 5px;
   color: #fff;
@@ -305,6 +327,12 @@ export default {
 
 .modal-content input[type=text]:focus {
   border-color: #4a90d9; /* active border colour */
+}
+
+.input-error {
+  color: #e06c75;
+  font-size: 0.8em;
+  margin-top: 4px;
 }
 
 </style>

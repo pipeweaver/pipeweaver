@@ -10,7 +10,7 @@ import {
   getSourcePhysicalDevices,
   getTargetPhysicalDevices,
   is_physical,
-  is_source
+  is_source, isValidName
 } from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
 import ModalOverlay from "@/views/desktop/components/ModalOverlay.vue";
@@ -20,6 +20,11 @@ export default {
   computed: {
     DeviceOrderType() {
       return DeviceOrderType
+    },
+
+    nameValidationError() {
+      if (this.textInputValue.length === 0) return null;
+      return this.isValidName(this.textInputValue);
     }
   },
   components: {ModalOverlay, PopupBox},
@@ -39,6 +44,8 @@ export default {
   },
 
   methods: {
+    isValidName,
+
     show(e) {
       this.$refs.popup.showDialog(e, this.id)
     },
@@ -186,6 +193,8 @@ export default {
     },
 
     handleRenameOk: function () {
+      if (this.nameValidationError) return;
+
       this.doRename(this.textInputValue);
       this.$refs.modal.closeModal();
     },
@@ -252,7 +261,7 @@ export default {
       this.colour_callback(e);
       this.$refs.popup.hideDialog();
     }
-  }
+  },
 }
 </script>
 
@@ -264,11 +273,14 @@ export default {
     <div class="modal-content">
       <div style="margin-bottom: 6px;">New Name:</div>
       <input ref="textInput" v-model="textInputValue" type="text" @keyup.enter="handleRenameOk"/>
+      <div v-if="nameValidationError" class="input-error">{{ nameValidationError }}</div>
     </div>
 
     <template #footer class="modal-footer">
       <button @click="handleRenameCancel" style="margin-right: 10px;">Cancel</button>
-      <button @click="handleRenameOk" class="button-default" style="">Ok</button>
+      <button @click="handleRenameOk" class="default" :disabled="!!isValidName(textInputValue)">
+        Ok
+      </button>
     </template>
   </ModalOverlay>
 
@@ -463,14 +475,18 @@ span {
   border-color: #4a90d9;
 }
 
-.modal-footer .button-default {
+.modal-footer .default {
   background-color: #3b413f
 }
 
-.modal-footer .button-default:hover {
+.modal-footer .default:hover {
   background-color: #737775;
 }
 
+.modal-footer button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 .modal-content input[type=text] {
   text-align: left;
@@ -487,6 +503,12 @@ span {
 
 .modal-content input[type=text]:focus {
   border-color: #4a90d9; /* active border colour */
+}
+
+.input-error {
+  color: #e06c75;
+  font-size: 0.8em;
+  margin-top: 4px;
 }
 
 </style>

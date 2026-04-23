@@ -76,6 +76,29 @@ export function get_device_by_id(id) {
   return undefined;
 }
 
+export function get_device_by_name(name) {
+  if (store.getProfile().devices === undefined) {
+    return undefined;
+  }
+
+  const lower = name.toLowerCase();
+
+  for (let device of store.getProfile().devices.sources.physical_devices) {
+    if (device.description.name.toLowerCase() === lower) return device;
+  }
+  for (let device of store.getProfile().devices.sources.virtual_devices) {
+    if (device.description.name.toLowerCase() === lower) return device;
+  }
+  for (let device of store.getProfile().devices.targets.physical_devices) {
+    if (device.description.name.toLowerCase() === lower) return device;
+  }
+  for (let device of store.getProfile().devices.targets.virtual_devices) {
+    if (device.description.name.toLowerCase() === lower) return device;
+  }
+
+  return undefined;
+}
+
 export function get_device_type(id) {
   if (store.getProfile().devices === undefined) {
     return [];
@@ -205,4 +228,12 @@ export function useOrientation() {
   });
 
   return {isPortrait};
+}
+
+export function isValidName(name) {
+  if (name.length === 0) return "Name cannot be empty.";
+  if (name.length > 20) return "Name cannot be longer than 20 characters.";
+  if (!/^[a-zA-Z0-9 _-]+$/.test(name)) return "Name can only contain letters, numbers, spaces, - and _.";
+  if (get_device_by_name(name) !== undefined) return "Name cannot match an existing device.";
+  return null;
 }
