@@ -72,6 +72,8 @@ export function get_device_by_id(id) {
       return device;
     }
   }
+
+  return undefined;
 }
 
 export function get_device_type(id) {
