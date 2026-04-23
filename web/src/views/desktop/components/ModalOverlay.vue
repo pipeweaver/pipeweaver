@@ -116,7 +116,7 @@ export default {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: rgba(0, 0, 0, 0.6);
   display: table;
   transition: opacity 0.3s ease;
 }
@@ -134,10 +134,11 @@ export default {
   min-width: v-bind(width);
   max-width: min-content;
   margin: 0 auto;
-  background-color: #fff;
-  border-radius: 2px;
+  border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.33);
   transition: all 0.3s ease;
+
+  overflow: hidden;
 }
 
 /* Header Styling.. */
