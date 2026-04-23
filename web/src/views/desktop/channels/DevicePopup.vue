@@ -10,7 +10,7 @@ import {
   getSourcePhysicalDevices,
   getTargetPhysicalDevices,
   is_physical,
-  is_source, isValidName
+  is_source, nameError
 } from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
 import ModalOverlay from "@/views/desktop/components/ModalOverlay.vue";
@@ -24,7 +24,7 @@ export default {
 
     nameValidationError() {
       if (this.textInputValue.length === 0) return null;
-      return this.isValidName(this.textInputValue);
+      return nameError(this.textInputValue);
     }
   },
   components: {ModalOverlay, PopupBox},
@@ -44,8 +44,7 @@ export default {
   },
 
   methods: {
-    isValidName,
-
+    nameError,
     show(e) {
       this.$refs.popup.showDialog(e, this.id)
     },
@@ -193,7 +192,7 @@ export default {
     },
 
     handleRenameOk: function () {
-      if (this.nameValidationError) return;
+      if (nameError(this.textInputValue)) return;
 
       this.doRename(this.textInputValue);
       this.$refs.modal.closeModal();
@@ -279,7 +278,7 @@ export default {
 
     <template #footer class="modal-footer">
       <button @click="handleRenameCancel" style="margin-right: 10px;">Cancel</button>
-      <button @click="handleRenameOk" class="default" :disabled="!!isValidName(textInputValue)">
+      <button @click="handleRenameOk" class="default" :disabled="!!nameError(textInputValue)">
         Ok
       </button>
     </template>

@@ -5,7 +5,7 @@ import {
   DeviceType,
   get_device_by_id,
   get_device_order,
-  isValidName
+  nameError
 } from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
 import PopupBox from "@/views/desktop/inputs/PopupBox.vue";
@@ -29,7 +29,7 @@ export default {
     is_source: Boolean,
   },
   methods: {
-    isValidName,
+    nameError,
     get_device_by_id,
 
 
@@ -69,7 +69,7 @@ export default {
     },
 
     handleOk() {
-      if (this.nameValidationError) return;
+      if (nameError(this.textInputValue)) return;
 
       this.do_add_device(this.modalIsPhysical, this.textInputValue);
       this.$refs.modal.closeModal();
@@ -132,7 +132,7 @@ export default {
 
     nameValidationError() {
       if (this.textInputValue.length === 0) return null;
-      return this.isValidName(this.textInputValue);
+      return nameError(this.textInputValue);
     }
   }
 }
@@ -153,7 +153,7 @@ export default {
 
     <template #footer class="modal-footer">
       <button @click="handleCancel" style="margin-right: 10px;">Cancel</button>
-      <button @click="handleOk" class="button-default" :disabled="!!isValidName(textInputValue)">
+      <button @click="handleOk" class="button-default" :disabled="!!nameError(textInputValue)">
         Ok
       </button>
     </template>

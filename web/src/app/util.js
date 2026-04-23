@@ -230,7 +230,7 @@ export function useOrientation() {
   return {isPortrait};
 }
 
-export function isValidName(name) {
+export function nameError(name) {
   if (name.length === 0) return "Name cannot be empty.";
   if (name.length > 20) return "Name cannot be longer than 20 characters.";
   if (!/^[a-zA-Z0-9 _-]+$/.test(name)) return "Name can only contain letters, numbers, spaces, - and _.";
