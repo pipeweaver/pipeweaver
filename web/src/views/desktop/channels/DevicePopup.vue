@@ -268,7 +268,7 @@ export default {
 
     <template #footer class="modal-footer">
       <button @click="handleRenameCancel" style="margin-right: 10px;">Cancel</button>
-      <button @click="handleRenameOk" style="background-color: #3b413f">Ok</button>
+      <button @click="handleRenameOk" class="button-default" style="">Ok</button>
     </template>
   </ModalOverlay>
 
@@ -281,7 +281,7 @@ export default {
 
     <template #footer class="modal-footer">
       <button @click="handleRemoveCancel" style="margin-right: 10px;">No</button>
-      <button ref="okButton" @click="handleRemoveOk" style="background-color: #3b413f">Yes</button>
+      <button ref="okButton" @click="handleRemoveOk" class="button-default">Yes</button>
     </template>
   </ModalOverlay>
 
@@ -460,8 +460,17 @@ span {
 }
 
 .modal-footer button:focus {
-  border-color: #4a90d9; /* active border colour */
+  border-color: #4a90d9;
 }
+
+.modal-footer .button-default {
+  background-color: #3b413f
+}
+
+.modal-footer .button-default:hover {
+  background-color: #737775;
+}
+
 
 .modal-content input[type=text] {
   text-align: left;

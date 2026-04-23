@@ -137,7 +137,7 @@ export default {
 
     <template #footer class="modal-footer">
       <button @click="handleCancel" style="margin-right: 10px;">Cancel</button>
-      <button @click="handleOk" style="background-color: #3b413f">Ok</button>
+      <button @click="handleOk" class="button-default">Ok</button>
     </template>
   </ModalOverlay>
 
@@ -278,6 +278,15 @@ export default {
   background-color: #737775;
   cursor: pointer;
 }
+
+.modal-footer .button-default {
+  background-color: #3b413f
+}
+
+.modal-footer .button-default:hover {
+  background-color: #737775;
+}
+
 
 .modal-footer button:focus {
   border-color: #4a90d9; /* active border colour */
