@@ -1116,7 +1116,25 @@ impl Store {
             let mut out_count = 0;
 
             for (direction, ports) in &node.ports {
-                let count = ports.values().filter(|port| !port.is_monitor).count();
+                let non_monitor: Vec<_> = ports.values().filter(|p| !p.is_monitor).collect();
+                let count = if non_monitor.len() > 2 {
+                    // We should consider things like 5.1 devices valid, so long as there's a FL / FR
+                    let has_left = non_monitor
+                        .iter()
+                        .any(|p| p.channel == "FL" || p.channel == "AUX0");
+                    let has_right = non_monitor
+                        .iter()
+                        .any(|p| p.channel == "FR" || p.channel == "AUX1");
+
+                    // If we have them, force this count to 2, which will pass get_media_class
+                    if has_left && has_right {
+                        2
+                    } else {
+                        non_monitor.len()
+                    }
+                } else {
+                    non_monitor.len()
+                };
 
                 match direction {
                     Direction::In => in_count += count,
@@ -1124,7 +1142,6 @@ impl Store {
                 }
             }
 
-            // Return the Specific MediaClass based on Channel Count
             return self.get_media_class(in_count, out_count);
         }
         None
@@ -1629,8 +1646,8 @@ impl FromStr for PortLocation {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "FL" | "AUX_0" => Ok(Self::Left),
-            "FR" | "AUX_1" => Ok(Self::Right),
+            "FL" | "AUX0" => Ok(Self::Left),
+            "FR" | "AUX1" => Ok(Self::Right),
             _ => bail!("Unknown Channel"),
         }
     }
