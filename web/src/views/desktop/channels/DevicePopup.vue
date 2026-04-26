@@ -10,18 +10,24 @@ import {
   getSourcePhysicalDevices,
   getTargetPhysicalDevices,
   is_physical,
-  is_source
+  is_source, nameError
 } from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
+import ModalOverlay from "@/views/desktop/components/ModalOverlay.vue";
 
 export default {
   name: "DevicePopup",
   computed: {
     DeviceOrderType() {
       return DeviceOrderType
+    },
+
+    nameValidationError() {
+      if (this.textInputValue.length === 0) return null;
+      return nameError(this.textInputValue);
     }
   },
-  components: {PopupBox},
+  components: {ModalOverlay, PopupBox},
 
   props: {
     type: {type: String, required: true},
@@ -32,7 +38,14 @@ export default {
     filter_callback: {type: Function, required: true}
   },
 
+  data() {
+    return {
+      textInputValue: "",
+    }
+  },
+
   methods: {
+    nameError,
     show(e) {
       this.$refs.popup.showDialog(e, this.id)
     },
@@ -44,6 +57,14 @@ export default {
 
     getId: function () {
       return this.getDevice().description.id;
+    },
+
+    getName: function () {
+      return this.getDevice().description.name;
+    },
+
+    getType: function () {
+      return this.isPhysicalNode() ? "Physical" : "Virtual";
     },
 
     isPhysicalNode: function () {
@@ -166,29 +187,57 @@ export default {
       websocket.send_command(command);
     },
 
-    onRenameClick(e) {
-      let name = prompt("New Device Name:");
+    onRenameClick: function () {
+      this.$refs.popup.hideDialog();
+      this.$refs.modal.openModal(this.$refs.textInput, undefined);
+    },
 
+    handleRenameOk: function () {
+      if (nameError(this.textInputValue)) return;
+
+      this.doRename(this.textInputValue);
+      this.$refs.modal.closeModal();
+    },
+
+    handleRenameCancel: function () {
+      this.$refs.modal.closeModal();
+    },
+
+    handleRenameClose: function () {
+      this.textInputValue = "";
+    },
+
+    doRename(name) {
       if (name !== null) {
-        // CreateNode(NodeType, String),
         let command = {
           "RenameNode": [this.getId(), name]
         }
-        websocket.send_command(command)
+        websocket.send_command(command).catch(err => {
+          alert("Error: " + err);
+        });
         this.$refs.popup.hideDialog();
       }
     },
 
-    onRemoveClicked(e) {
-      let result = confirm("Are you sure you want to remove this channel?");
-      if (result) {
-        // CreateNode(NodeType, String),
-        let command = {
-          "RemoveNode": this.getId()
-        }
-        websocket.send_command(command)
-        this.$refs.popup.hideDialog();
+    onRemoveClick: function () {
+      this.$refs.popup.hideDialog();
+      this.$refs.remove_modal.openModal(this.$refs.okButton, undefined);
+    },
+
+    handleRemoveOk: function () {
+      this.doRemove(this.textInputValue);
+      this.$refs.remove_modal.closeModal();
+    },
+
+    handleRemoveCancel: function () {
+      this.$refs.remove_modal.closeModal();
+    },
+
+    doRemove() {
+      let command = {
+        "RemoveNode": this.getId()
       }
+      websocket.send_command(command);
     },
 
     onPinClicked(toggle, e) {
@@ -217,16 +266,52 @@ export default {
       this.filter_callback(e);
       this.$refs.popup.hideDialog();
     }
-  }
+  },
 }
 </script>
 
 <template>
+  <ModalOverlay ref="modal" id="rename" @modal-close="handleRenameClose"
+                @backdrop-click="handleRenameCancel">
+    <template #title>Rename {{ getName() }}</template>
+
+    <div class="modal-content">
+      <div style="margin-bottom: 6px;">New Name:</div>
+      <input ref="textInput" v-model="textInputValue" maxlength="20" type="text"
+             @keyup.enter="handleRenameOk"/>
+      <div v-if="nameValidationError" class="input-error">{{ nameValidationError }}</div>
+    </div>
+
+    <template #footer class="modal-footer">
+      <button @click="handleRenameCancel" style="margin-right: 10px;">Cancel</button>
+      <button @click="handleRenameOk" class="default" :disabled="!!nameError(textInputValue)">
+        Ok
+      </button>
+    </template>
+  </ModalOverlay>
+
+  <ModalOverlay ref="remove_modal" id="remove" @backdrop-click="handleRemoveCancel">
+    <template #title>Remove {{ getName() }}</template>
+
+    <div class="modal-content">
+      <div>Are you sure you want to remove this device?</div>
+    </div>
+
+    <template #footer class="modal-footer">
+      <button @click="handleRemoveCancel" style="margin-right: 10px;">No</button>
+      <button ref="okButton" @click="handleRemoveOk" class="button-default">Yes</button>
+    </template>
+  </ModalOverlay>
+
   <button @click="menuClick">
     <font-awesome-icon :icon="['fas', 'bars']"/>
   </button>
 
   <PopupBox ref="popup" @closed="">
+    <div class="popup-title">
+      <span>{{ getName() }} - ({{ getType() }})</span>
+    </div>
+    <div class="title-separator"/>
     <div class="entry" @click="onColourClicked">
       <span class="color_icon"></span>
       <span>Change Colour</span>
@@ -248,6 +333,9 @@ export default {
       <span>Hide Channel</span>
     </div>
     <div v-if="isPhysicalNode() || isTargetNode()" class="separator"/>
+    <div v-if="!isPhysicalNode() && isTargetNode()" class="entry-base">
+      Duplicate Output To:
+    </div>
     <div v-for="device of getDevices()" v-if="isPhysicalNode() || isTargetNode()"
          :class="{error: !isDevicePresent(device)}"
          class="entry"
@@ -270,7 +358,7 @@ export default {
       <span class="selected"></span>
       <span>Rename Channel</span>
     </div>
-    <div class="entry" @click="onRemoveClicked">
+    <div class="entry" @click="onRemoveClick">
       <span class="selected"></span>
       <span>Remove Channel</span>
     </div>
@@ -289,6 +377,12 @@ button:hover {
 .separator {
   height: 5px;
   background-color: #3b413f;
+}
+
+.title-separator {
+  height: 2px;
+  background-color: v-bind('getDevice().description.colour ? `rgb(${getDevice().description.colour.red}, ${getDevice().description.colour.green}, ${getDevice().description.colour.blue})` : "#000000"');
+  border-bottom: 3px solid #3b413f;
 }
 
 .selected {
@@ -321,6 +415,23 @@ button:hover {
   white-space: nowrap;
 }
 
+.popup-title {
+  white-space: nowrap;
+  padding: 6px 60px;
+  font-weight: bold;
+}
+
+.entry-base {
+  font-weight: normal;
+  font-style: italic;
+  white-space: nowrap;
+  padding: 6px 6px 6px 10px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #3b413f;
+}
+
 .entry {
   white-space: nowrap;
   padding: 6px 25px 6px 6px;
@@ -346,4 +457,69 @@ button:hover {
 span {
   text-align: left;
 }
+
+.modal-content {
+  text-align: left;
+  font-weight: normal;
+}
+
+.modal-footer {
+  background-color: #2d3230;
+  text-align: right;
+  padding-right: 10px;
+  padding-bottom: 10px;
+}
+
+.modal-footer button {
+  background-color: #353937;
+  color: #fff;
+  padding: 8px 30px;
+  border: 1px solid #2a2e2d;
+}
+
+.modal-footer button:hover {
+  background-color: #737775;
+  cursor: pointer;
+}
+
+.modal-footer button:focus {
+  border-color: #4a90d9;
+}
+
+.modal-footer .default {
+  background-color: #3b413f
+}
+
+.modal-footer .default:hover {
+  background-color: #737775;
+}
+
+.modal-footer button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.modal-content input[type=text] {
+  text-align: left;
+
+  padding: 5px;
+  color: #fff;
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #666;
+  outline: none;
+
+  background-color: #2d3230;
+}
+
+.modal-content input[type=text]:focus {
+  border-color: #4a90d9; /* active border colour */
+}
+
+.input-error {
+  color: #e06c75;
+  font-size: 0.8em;
+  margin-top: 4px;
+}
+
 </style>

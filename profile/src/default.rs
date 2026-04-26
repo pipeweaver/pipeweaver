@@ -42,6 +42,7 @@ impl Profile {
                         },
                         filters: vec![],
                         attached_devices: vec![],
+                        attached_port_maps: vec![],
                     }],
                     virtual_devices: vec![
                         VirtualSourceDevice {
@@ -112,6 +113,7 @@ impl Profile {
                         mix: Mix::A,
                         filters: vec![],
                         attached_devices: vec![],
+                        attached_port_maps: vec![],
                     }],
                     virtual_devices: vec![VirtualTargetDevice {
                         description: DeviceDescription {
@@ -129,6 +131,7 @@ impl Profile {
 
                         filters: vec![],
                         attached_devices: Default::default(),
+                        attached_port_maps: vec![],
                     }],
 
                     device_order: enum_map! {
@@ -140,6 +143,7 @@ impl Profile {
                         OrderGroup::Pinned => vec![mic_id],
                     },
                 },
+                physical_device_port_maps: Default::default(),
             },
             routes: vec![
                 (mic_id, [chat_mic_id].into_iter().collect()),
@@ -149,7 +153,7 @@ impl Profile {
             .into_iter()
             .collect(),
 
-            audio_quantum: Quantum::Quantum512,
+            audio_quantum: Quantum::Quantum2048,
             application_mapping: enum_map! {
                 DeviceType::Source => {
                     HashMap::from([

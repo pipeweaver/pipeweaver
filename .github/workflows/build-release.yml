@@ -11,7 +11,7 @@ jobs:
     needs: [ get_version ]
     steps:
       - name: "Check out Repository"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: "Install Rust"
         uses: dtolnay/rust-toolchain@stable
@@ -19,7 +19,7 @@ jobs:
       - name: "Install Required Libraries"
         run: |
           sudo apt-get update
-          sudo apt-get install pkg-config libpipewire-0.3-dev
+          sudo apt-get install pkg-config libpipewire-0.3-dev qt6-webengine-dev
 
       - name: Install cargo-deb and cargo-generate-rpm
         run: cargo install --force cargo-deb cargo-generate-rpm
@@ -29,13 +29,19 @@ jobs:
         shell: bash
 
       - name: "Upload DEB Artifact"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: debian-artifact
           path: ./target/debian/*.deb
 
       - name: "Upload RPM Artifact"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: rpm-artifact
           path: ./target/generate-rpm/*.rpm
+
+      - name: "Upload Basic Binary Artifact"
+        uses: actions/upload-artifact@v5
+        with:
+          name: binary-artifact
+          path: ./pipeweaver.zip

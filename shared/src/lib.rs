@@ -1,11 +1,16 @@
+use clap::ValueEnum;
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::str::FromStr;
 use strum_macros::{Display, EnumIter};
 use ulid::Ulid;
 
-#[derive(Debug, Display, Copy, Clone, PartialEq, Enum, EnumIter, Serialize, Deserialize)]
+#[derive(
+    Debug, Display, Copy, Clone, PartialEq, Enum, EnumIter, Serialize, Deserialize, ValueEnum,
+)]
 pub enum NodeType {
     PhysicalSource,
     PhysicalTarget,
@@ -13,21 +18,36 @@ pub enum NodeType {
     VirtualTarget,
 }
 
-#[derive(Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq)]
+#[derive(
+    Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq, ValueEnum,
+)]
 pub enum Mix {
     #[default]
     A,
     B,
 }
 
-#[derive(Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq)]
+#[derive(
+    Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq, ValueEnum,
+)]
 pub enum DeviceType {
     #[default]
     Source,
     Target,
 }
 
-#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Enum, EnumIter)]
+#[derive(
+    Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq, ValueEnum,
+)]
+pub enum PortDirection {
+    #[default]
+    In,
+    Out,
+}
+
+#[derive(
+    Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq, ValueEnum,
+)]
 pub enum MuteState {
     #[default]
     Unmuted,
@@ -35,7 +55,18 @@ pub enum MuteState {
 }
 
 #[derive(
-    Default, Debug, Copy, Clone, Hash, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq,
+    Default,
+    Debug,
+    Copy,
+    Clone,
+    Hash,
+    Enum,
+    EnumIter,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+    ValueEnum,
 )]
 pub enum MuteTarget {
     #[default]
@@ -44,7 +75,18 @@ pub enum MuteTarget {
 }
 
 #[derive(
-    Default, Debug, Copy, Clone, Hash, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq,
+    Default,
+    Debug,
+    Copy,
+    Clone,
+    Hash,
+    Enum,
+    EnumIter,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+    ValueEnum,
 )]
 pub enum OrderGroup {
     #[default]
@@ -53,7 +95,7 @@ pub enum OrderGroup {
     Hidden,
 }
 
-#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq, ValueEnum)]
 pub enum Quantum {
     Quantum8,
     Quantum16,
@@ -64,6 +106,7 @@ pub enum Quantum {
     #[default]
     Quantum512,
     Quantum1024,
+    Quantum2048,
 }
 
 impl From<Quantum> for u32 {
@@ -77,6 +120,7 @@ impl From<Quantum> for u32 {
             Quantum::Quantum256 => 256,
             Quantum::Quantum512 => 512,
             Quantum::Quantum1024 => 1024,
+            Quantum::Quantum2048 => 2048,
         }
     }
 }
@@ -125,6 +169,61 @@ impl Default for Colour {
             blue: 0,
         }
     }
+}
+
+#[derive(Debug)]
+pub struct InvalidColour;
+
+impl fmt::Display for InvalidColour {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "invalid colour (expected #RGB or #RRGGBB)")
+    }
+}
+
+impl std::error::Error for InvalidColour {}
+
+impl FromStr for Colour {
+    type Err = InvalidColour;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let hex = s.strip_prefix('#').unwrap_or(s);
+
+        match hex.len() {
+            6 => {
+                // Full form: RRGGBB
+                Ok(Colour {
+                    red: parse_byte(&hex[0..2])?,
+                    green: parse_byte(&hex[2..4])?,
+                    blue: parse_byte(&hex[4..6])?,
+                })
+            }
+            3 => {
+                // Shorthand: RGB → duplicate each nibble
+                Ok(Colour {
+                    red: parse_nibble(hex.as_bytes()[0])?,
+                    green: parse_nibble(hex.as_bytes()[1])?,
+                    blue: parse_nibble(hex.as_bytes()[2])?,
+                })
+            }
+            _ => Err(InvalidColour),
+        }
+    }
+}
+
+fn parse_byte(s: &str) -> Result<u8, InvalidColour> {
+    u8::from_str_radix(s, 16).map_err(|_| InvalidColour)
+}
+
+fn parse_nibble(b: u8) -> Result<u8, InvalidColour> {
+    let value = match b {
+        b'0'..=b'9' => b - b'0',
+        b'a'..=b'f' => b - b'a' + 10,
+        b'A'..=b'F' => b - b'A' + 10,
+        _ => return Err(InvalidColour),
+    };
+
+    // Expand nibble: e.g. A → AA
+    Ok((value << 4) | value)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

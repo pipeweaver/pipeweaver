@@ -1,20 +1,21 @@
 use crate::default_device::{DefaultDefinition, DefaultDevice};
 use crate::manager::FilterData;
 use crate::registry::{
-    Direction, MetadataStore, RegistryClient, RegistryClientNode, RegistryDevice,
-    RegistryDeviceNode, RegistryFactory, RegistryLink,
+    MetadataStore, RegistryClient, RegistryClientNode, RegistryDevice, RegistryDeviceNode,
+    RegistryFactory, RegistryLink, RegistryPort,
 };
 use crate::{
-    ApplicationNode, DeviceNode, FilterProperty, FilterValue, LinkType, MediaClass, NodeTarget,
-    PipewireReceiver,
+    ApplicationNode, DeviceNode, Direction, FilterProperty, FilterValue, LinkType, MediaClass,
+    NodePort, NodeTarget, PipewireReceiver,
 };
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use enum_map::{Enum, EnumMap};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use oneshot::Sender;
 use parking_lot::RwLock;
 use pipewire::filter::{Filter, FilterListener, FilterPort};
+use pipewire::keys::MEDIA_CLASS;
 use pipewire::link::{Link, LinkListener};
 use pipewire::node::{Node, NodeListener, NodeState};
 use pipewire::properties::Properties;
@@ -60,7 +61,7 @@ pub struct Store {
 
     // These are devices and device nodes not created by us
     unmanaged_devices: HashMap<u32, RegistryDevice>,
-    unmanaged_device_nodes: HashMap<u32, RegistryDeviceNode>,
+    pub(crate) unmanaged_device_nodes: HashMap<u32, RegistryDeviceNode>,
 
     // These are clients and client nodes not created by us
     unmanaged_clients: HashMap<u32, RegistryClient>,
@@ -71,6 +72,11 @@ pub struct Store {
 
     // Usable Nodes are unmanaged device / client nodes with a stereo setup
     usable_client_nodes: Vec<u32>,
+
+    // Pending Stuff
+    pub(crate) pending_link_syncs: Vec<PendingLinkSync>,
+    pub(crate) pending_device_syncs: HashMap<i32, u32>,
+    pub(crate) pending_filter_syncs: HashMap<i32, Ulid>,
 
     callback_tx: mpsc::Sender<PipewireReceiver>,
 }
@@ -97,6 +103,10 @@ impl Store {
             unmanaged_client_nodes: HashMap::new(),
 
             unmanaged_links: HashMap::new(),
+
+            pending_link_syncs: vec![],
+            pending_device_syncs: HashMap::new(),
+            pending_filter_syncs: HashMap::new(),
 
             usable_client_nodes: vec![],
 
@@ -241,6 +251,80 @@ impl Store {
         None
     }
 
+    pub fn set_default_sink_node(&self, target: NodeTarget) -> Result<()> {
+        if !self.is_valid_target(target, MediaClass::Sink) {
+            bail!("Target {:?} is not a valid sink", target);
+        }
+
+        let name = self
+            .find_node_name_by_target(target)
+            .ok_or_else(|| anyhow!("Node not found for target {:?}", target))?;
+        let session = self
+            .session_proxy
+            .as_ref()
+            .ok_or_else(|| anyhow!("No session proxy available"))?;
+
+        session.metadata.set_property(
+            0,
+            "default.configured.audio.sink",
+            Some("Spa:String:JSON"),
+            Some(&format!(r#"{{"name":"{}"}}"#, name)),
+        );
+        Ok(())
+    }
+
+    pub fn set_default_source_node(&self, target: NodeTarget) -> Result<()> {
+        if !self.is_valid_target(target, MediaClass::Source) {
+            bail!("Target {:?} is not a valid source", target);
+        }
+
+        let name = self
+            .find_node_name_by_target(target)
+            .ok_or_else(|| anyhow!("Node not found for target {:?}", target))?;
+        let session = self
+            .session_proxy
+            .as_ref()
+            .ok_or_else(|| anyhow!("No session proxy available"))?;
+
+        session.metadata.set_property(
+            0,
+            "default.configured.audio.source",
+            Some("Spa:String:JSON"),
+            Some(&format!(r#"{{"name":"{}"}}"#, name)),
+        );
+        Ok(())
+    }
+
+    pub fn is_valid_target(&self, target: NodeTarget, class: MediaClass) -> bool {
+        let media_class = match target {
+            NodeTarget::Node(ulid) => self
+                .managed_nodes
+                .get(&ulid)
+                .and_then(|n| n.props.get(*MEDIA_CLASS))
+                .map(|s| s.to_string()),
+            NodeTarget::UnmanagedNode(id) => self
+                .unmanaged_device_nodes
+                .get(&id)
+                .and_then(|n| n.media_class.clone()),
+        };
+
+        media_class.is_some_and(|c| match class {
+            MediaClass::Sink => c.contains("Sink") || c.contains("Duplex"),
+            MediaClass::Source => c.contains("Source") || c.contains("Duplex"),
+            MediaClass::Duplex => c.contains("Duplex"),
+        })
+    }
+
+    fn find_node_name_by_target(&self, target: NodeTarget) -> Option<String> {
+        match target {
+            NodeTarget::Node(ulid) => {
+                let node = self.managed_nodes.get(&ulid)?;
+                node.props.get("node.name").map(|s| s.to_string())
+            }
+            NodeTarget::UnmanagedNode(id) => self.unmanaged_device_nodes.get(&id)?.name.clone(),
+        }
+    }
+
     // ----- MANAGED NODES -----
     pub fn is_managed_node(&self, id: u32) -> bool {
         // Before we add this, is this a managed node?
@@ -305,6 +389,18 @@ impl Store {
         }
     }
 
+    pub fn managed_node_state_changed(&mut self, id: Ulid, state: NodeStoreState) {
+        let node = self.managed_nodes.get_mut(&id).expect("Broke");
+        debug!("Node State Changed to: {:?}", state);
+
+        if let NodeStoreState::Error(error) = &state {
+            error!("Node {} entered error state: {}", id, error);
+        }
+
+        node.node_state = state;
+        self.managed_node_check_ready(id);
+    }
+
     pub fn managed_node_request_ports(&self, id: Ulid) {
         let node = self.managed_nodes.get(&id).expect("Broke");
         node.proxy
@@ -339,6 +435,10 @@ impl Store {
 
         if node.ports_ready
             && node.pw_id.is_some()
+            && !matches!(
+                node.node_state,
+                NodeStoreState::Creating | NodeStoreState::Error(_)
+            )
             && let Some(sender) = node.ready_sender.take()
         {
             debug!("[{}] Device Ready, sending callback", &id);
@@ -453,6 +553,17 @@ impl Store {
     }
 
     // ----- MANAGED FILTERS -----
+    pub fn add_pending_filter(&mut self, seq: i32, id: Ulid) {
+        self.pending_filter_syncs.insert(seq, id);
+    }
+
+    pub fn resolve_pending_filter_sync(&mut self, id: Ulid) {
+        let filter = self.managed_filters.get_mut(&id).expect("Broke");
+        if let Some(Some(sender)) = filter.ready_sender.take() {
+            let _ = sender.send(());
+        }
+    }
+
     pub fn managed_filter_add(&mut self, filter: FilterStore) {
         debug!("[{}] Filter Added to Store", &filter.id);
         self.managed_filters.insert(filter.id, filter);
@@ -470,10 +581,6 @@ impl Store {
     pub fn managed_filter_set_pw_id(&mut self, id: Ulid, pw_id: u32) {
         let filter = self.managed_filters.get_mut(&id).expect("Broke");
         filter.pw_id = Some(pw_id);
-
-        if let Some(Some(sender)) = filter.ready_sender.take() {
-            let _ = sender.send(());
-        }
     }
 
     pub fn managed_filter_set_parameter(
@@ -522,9 +629,92 @@ impl Store {
         self.managed_links.insert(id, group);
     }
 
-    pub fn managed_link_remove(&mut self, source: LinkType, destination: LinkType) {
+    pub fn add_pending_link(&mut self, parent_id: Ulid, group: LinkStore) {
+        self.pending_link_syncs.push(PendingLinkSync {
+            parent_id,
+            group,
+            bound_ids: HashMap::new(),
+        });
+    }
+
+    pub fn get_next_pending_link(&mut self, seq: i32) -> Option<&mut LinkStoreMap> {
+        let idx = self.get_pending_link_index_by_seq(seq)?;
+
+        // Scope to limit the mutable borrow
+        let port = {
+            let pending = &self.pending_link_syncs[idx];
+
+            PortLocation::iter().find(|&port| {
+                pending.group.links[port]
+                    .as_ref()
+                    .is_some_and(|link| link.pending_seq_id.is_none())
+            })
+        };
+
+        if let Some(port) = port {
+            return self.pending_link_syncs[idx].group.links[port].as_mut();
+        }
+
+        // No ports left, take ownership and finish up.
+        let pending = self.pending_link_syncs.remove(idx);
+        let mut group = pending.group;
+
+        for port in PortLocation::iter() {
+            if let Some(link) = &mut group.links[port]
+                && let Some(pw_id) = pending.bound_ids.get(&link.internal_id)
+            {
+                link.pw_id = Some(*pw_id);
+            }
+        }
+
+        debug!("Link Created {:?} to {:?}", group.source, group.destination);
+        self.managed_link_add(pending.parent_id, group);
+        self.managed_link_ready_check(pending.parent_id);
+
+        None
+    }
+
+    fn get_pending_link_index_by_seq(&self, seq: i32) -> Option<usize> {
+        self.pending_link_syncs.iter().position(|pending| {
+            PortLocation::iter().any(|port| {
+                pending.group.links[port]
+                    .as_ref()
+                    .is_some_and(|info| info.pending_seq_id == Some(seq))
+            })
+        })
+    }
+
+    pub fn get_pending_link_parent_id_by_seq(&self, seq: i32) -> Option<Ulid> {
+        // We need to iterate over all the pending link syncs, and see if a port has our seq
+        // id, if so return that parent.
+        self.pending_link_syncs.iter().find_map(|pending| {
+            PortLocation::iter().find_map(|port| {
+                pending.group.links[port].as_ref().and_then(|info| {
+                    (info.pending_seq_id == Some(seq)).then_some(pending.parent_id)
+                })
+            })
+        })
+    }
+
+    pub fn set_pending_link_done(&mut self, parent_id: Ulid, link_id: Ulid, seq_id: i32) {
+        for pending in &mut self.pending_link_syncs {
+            if pending.parent_id != parent_id {
+                continue;
+            }
+            for port in PortLocation::iter() {
+                if let Some(info) = pending.group.links[port].as_mut()
+                    && info.internal_id == link_id
+                {
+                    info.pending_seq_id = Some(seq_id);
+                    return; // stop as soon as it's found
+                }
+            }
+        }
+    }
+
+    pub fn managed_link_remove(&mut self, source: &LinkType, destination: &LinkType) {
         self.managed_links
-            .retain(|_, link| link.source != source || link.destination != destination)
+            .retain(|_, link| link.source != *source || link.destination != *destination)
     }
 
     pub fn managed_link_remove_for_type(&mut self, id: LinkType) {
@@ -532,22 +722,59 @@ impl Store {
             .retain(|_, link| link.source != id && link.destination != id);
     }
 
-    pub fn managed_link_ready(&mut self, id: Ulid, link_id: Ulid, pw_id: u32) {
+    pub fn managed_link_bound(&mut self, id: Ulid, link_id: Ulid, pw_id: u32) {
+        // Check pending syncs first
+        if let Some(pending) = self
+            .pending_link_syncs
+            .iter_mut()
+            .find(|p| p.parent_id == id)
+        {
+            pending.bound_ids.insert(link_id, pw_id);
+            return;
+        }
+
+        // Sync already completed, group is in managed_links
         if let Some(link) = self.managed_links.get_mut(&id) {
             for port in PortLocation::iter() {
                 if let Some(port) = &mut link.links[port]
                     && port.internal_id == link_id
                 {
                     port.pw_id = Some(pw_id);
-
-                    // This will be unmanaged before the link callback, so take ownership
                     self.unmanaged_links.remove(&pw_id);
+                    break;
+                }
+            }
+            self.managed_link_ready_check(id);
+        }
+    }
+
+    /// Called when a link creation error occurs (e.g., "link already exists")
+    /// This notifies the sender so the caller doesn't hang waiting for a response
+    pub fn managed_link_error(&mut self, parent_id: Ulid, link_id: Ulid) {
+        if let Some(link) = self.managed_links.get_mut(&parent_id) {
+            for port in PortLocation::iter() {
+                if let Some(port) = &link.links[port]
+                    && port.internal_id == link_id
+                {
+                    debug!("Removing failed link {} from parent {}", link_id, parent_id);
+                }
+            }
+
+            if let Some(sender) = link.ready_sender.take() {
+                warn!("Link creation failed for parent {}", parent_id);
+                let _ = sender.send(());
+            } else {
+                // Immediately flag this as removed, rather than having pipewire need to trigger
+                // from the registry change. This shouldn't break / fix anything, but is cleaner.
+                warn!("Link creation failed for parent {}", parent_id);
+                if let Some(link) = self.managed_links.remove(&parent_id) {
+                    let _ = self.callback_tx.send(PipewireReceiver::ManagedLinkDropped(
+                        link.source,
+                        link.destination,
+                    ));
                 }
             }
         }
-
-        // Regardless of what's happened here, perform a ready check on the parent
-        self.managed_link_ready_check(id);
     }
 
     pub fn managed_link_ready_check(&mut self, id: Ulid) {
@@ -609,9 +836,6 @@ impl Store {
         }
 
         self.unmanaged_device_nodes.insert(id, node);
-        self.unmanaged_node_add(id);
-
-        //self.unmanaged_node_update(id);
     }
 
     pub fn unmanaged_device_node_get(&mut self, id: u32) -> Option<&mut RegistryDeviceNode> {
@@ -638,53 +862,247 @@ impl Store {
         }
     }
 
-    /// When an unmanaged node comes in, we need to send it off across to the manager to be
-    /// listed. I should probably move this into `unmanaged_device_node_add` :D
-    pub fn unmanaged_node_add(&mut self, id: u32) {
-        if let Some(node) = self.unmanaged_device_nodes.get(&id) {
-            debug!("Node Arrived: {:?}", node);
-            // We need a media class, otherwise we can't use this node
-            if let Some(media_class) = &node.media_class {
-                // Map the media class to our internal enum
-                let media_class = match media_class {
-                    s if s.starts_with("Audio/Sink") => Some(MediaClass::Sink),
-                    s if s.starts_with("Audio/Source") => Some(MediaClass::Source),
-                    s if s.starts_with("Audio/Duplex") => Some(MediaClass::Duplex),
-                    _ => {
-                        warn!("Unrecognized Media Class: {}", media_class);
-                        None
-                    }
-                };
+    pub fn add_pending_device_sync(&mut self, seq: i32, id: u32) {
+        self.pending_device_syncs.insert(seq, id);
+    }
 
-                if let Some(media_class) = media_class {
-                    // Create the virtual node and send it upstream
-                    let node = DeviceNode {
-                        node_id: id,
-                        node_class: media_class,
-                        is_usable: false,
-                        name: node.name.clone(),
-                        nickname: node.nickname.clone(),
-                        description: node.description.clone(),
-                    };
+    // pub fn resolve_pending_device_sync(&mut self, seq: i32) {
+    //     if let Some(id) = self.pending_device_syncs.remove(&seq)
+    //         && let Some(node) = self.unmanaged_device_nodes.get_mut(&id)
+    //     {
+    //         debug!("Device Synced, Checking.. {}", id);
+    //         node.is_synced = true;
+    //         self.unmanaged_node_port_check(id);
+    //     }
+    // }
 
-                    let _ = self.callback_tx.send(PipewireReceiver::DeviceAdded(node));
+    pub fn unmanaged_node_port_count_update(&mut self, id: u32, in_count: u32, out_count: u32) {
+        let node = match self.unmanaged_device_nodes.get_mut(&id) {
+            Some(node) => node,
+            None => return,
+        };
+
+        let current_in = node.port_count[Direction::In];
+        let current_out = node.port_count[Direction::Out];
+        if current_in == Some(in_count) && current_out == Some(out_count) {
+            // Nothing has changed, nothing to do.
+            return;
+        }
+        debug!(
+            "Node {} port count updated (In: {:?} -> {}, Out: {:?} -> {})",
+            id, current_in, in_count, current_out, out_count
+        );
+
+        node.port_count[Direction::In] = Some(in_count);
+        node.port_count[Direction::Out] = Some(out_count);
+
+        self.unmanaged_node_reconcile(id);
+    }
+
+    pub fn unmanaged_node_port_removed(&mut self, node_id: u32, dir: Direction, port: u32) {
+        if let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id) {
+            node.ports[dir].remove(&port);
+        }
+
+        self.unmanaged_node_reconcile(node_id);
+    }
+
+    pub fn unmanaged_node_port_add(&mut self, node_id: u32, dir: Direction, port: RegistryPort) {
+        if let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id) {
+            node.add_port(dir, port);
+        }
+
+        self.unmanaged_node_reconcile(node_id);
+    }
+
+    fn unmanaged_node_reconcile(&mut self, id: u32) {
+        let (is_desynced, was_sent_upstream) = match self.unmanaged_device_nodes.get(&id) {
+            Some(node) => (self.unmanaged_node_is_desynced(id), node.sent_upstream),
+            None => return,
+        };
+
+        if is_desynced {
+            if was_sent_upstream {
+                let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
+
+                if let Some(node) = self.unmanaged_device_nodes.get_mut(&id) {
+                    node.sent_upstream = false;
                 }
             }
+
+            return;
+        }
+
+        // If we're synced, try progressing state
+        self.unmanaged_node_port_check(id);
+    }
+
+    pub fn unmanaged_node_is_desynced(&self, node_id: u32) -> bool {
+        if let Some(node) = self.unmanaged_device_nodes.get(&node_id) {
+            for direction in Direction::iter() {
+                if node.port_count[direction].is_none() {
+                    return true;
+                }
+
+                if Some(node.ports[direction].len() as u32) != node.port_count[direction] {
+                    return true;
+                }
+            }
+        } else {
+            return true;
+        }
+
+        false
+    }
+
+    pub fn unmanaged_node_set_clock_ready(&mut self, id: u32) -> bool {
+        if let Some(node) = self.unmanaged_device_nodes.get_mut(&id)
+            && !node.clock_ready
+        {
+            node.clock_ready = true;
+            debug!("Node {} clock is now ready", id);
+            self.unmanaged_node_port_check(id);
+            return true;
+        }
+        false
+    }
+
+    pub fn unmanaged_node_port_check(&mut self, id: u32) {
+        // Check if a node is ready to be sent upstream or needs an update.
+        // Called when:
+        // - A port is added
+        // - A port is removed
+        // - Port count info is updated (via unmanaged_node_port_count_update)
+
+        let node = if let Some(node) = self.unmanaged_device_nodes.get(&id) {
+            node
+        } else {
+            return;
+        };
+
+        if !node.clock_ready {
+            return;
+        }
+
+        if !node.is_synced {
+            return;
+        }
+
+        // Check if we have port count expectations for both directions
+        let has_port_count_info =
+            node.port_count[Direction::In].is_some() && node.port_count[Direction::Out].is_some();
+
+        if !has_port_count_info {
+            debug!("Node {} missing port count info, waiting...", id);
+            return;
+        }
+
+        // Check if received port count matches expected count
+        let mut is_complete = true;
+        for direction in Direction::iter() {
+            let count = node.ports[direction].len();
+            if node.port_count[direction] != Some(count as u32) {
+                is_complete = false;
+                break;
+            }
+        }
+
+        if !is_complete {
+            debug!(
+                "Node {} ports incomplete (In: {} of {:?}, Out: {} of {:?}), waiting...",
+                id,
+                node.ports[Direction::In].len(),
+                node.port_count[Direction::In],
+                node.ports[Direction::Out].len(),
+                node.port_count[Direction::Out]
+            );
+            return;
+        }
+
+        // Ports are complete - either send initial or update
+        if node.sent_upstream {
+            // Already sent, check if usability changed
+            let new_usability = self.is_usable_unmanaged_device_node(id).is_some();
+            debug!(
+                "Node {} port configuration complete, updating usability: {}",
+                id, new_usability
+            );
+            let _ = self
+                .callback_tx
+                .send(PipewireReceiver::DeviceUsable(id, new_usability));
+        } else {
+            // Not sent yet, send it now
+            debug!("Port Count Matches for Node: {}, Sending Device..", id);
+            self.unmanaged_node_send(id);
         }
     }
 
-    /// This is called whenever the port status changes, we need to check whether this is a
-    /// regular stereo node or not, so we can report it as usable.
-    pub fn unmanaged_node_update(&mut self, id: u32) {
+    pub fn unmanaged_node_send(&mut self, id: u32) {
+        // Check if the node exists and hasn't been sent yet
+        let node = if let Some(node) = self.unmanaged_device_nodes.get(&id) {
+            if node.sent_upstream {
+                return;
+            }
+            node
+        } else {
+            return;
+        };
+
+        // We need a media class, otherwise we can't use this node
+        let Some(media_class_str) = &node.media_class else {
+            return;
+        };
+
+        // Map the media class to our internal enum
+        let media_class = match media_class_str.as_str() {
+            s if s.starts_with("Audio/Sink") => Some(MediaClass::Sink),
+            s if s.starts_with("Audio/Source") => Some(MediaClass::Source),
+            s if s.starts_with("Audio/Duplex") => Some(MediaClass::Duplex),
+            _ => {
+                warn!("Unrecognized Media Class: {}", media_class_str);
+                None
+            }
+        };
+
+        let Some(media_class) = media_class else {
+            return;
+        };
+
         let is_usable = self.is_usable_unmanaged_device_node(id).is_some();
 
-        if let Some(node) = self.unmanaged_device_nodes.get_mut(&id)
-            && node.is_usable != is_usable
-        {
-            node.is_usable = is_usable;
-            let message = PipewireReceiver::DeviceUsable(id, is_usable);
-            let _ = self.callback_tx.send(message);
+        let mut ports: EnumMap<Direction, Vec<NodePort>> = Default::default();
+        for direction in Direction::iter() {
+            for (_, port) in node.ports[direction].iter() {
+                // Don't send Monitor ports
+                if !port.is_monitor {
+                    ports[direction].push(NodePort {
+                        name: port.name.clone(),
+                        channel: port.channel.clone(),
+                    });
+                }
+            }
         }
+
+        // Create the virtual node and send it upstream
+        let device_node = DeviceNode {
+            node_id: id,
+            node_class: media_class,
+            is_usable,
+            name: node.name.clone(),
+            nickname: node.nickname.clone(),
+            description: node.description.clone(),
+
+            ports,
+        };
+
+        // Mark as sent BEFORE sending to prevent race conditions
+        if let Some(node) = self.unmanaged_device_nodes.get_mut(&id) {
+            node.sent_upstream = true;
+        }
+
+        let _ = self
+            .callback_tx
+            .send(PipewireReceiver::DeviceAdded(device_node));
     }
 
     pub fn is_usable_unmanaged_device_node(&self, id: u32) -> Option<MediaClass> {
@@ -698,7 +1116,25 @@ impl Store {
             let mut out_count = 0;
 
             for (direction, ports) in &node.ports {
-                let count = ports.values().filter(|port| !port.is_monitor).count();
+                let non_monitor: Vec<_> = ports.values().filter(|p| !p.is_monitor).collect();
+                let count = if non_monitor.len() > 2 {
+                    // We should consider things like 5.1 devices valid, so long as there's a FL / FR
+                    let has_left = non_monitor
+                        .iter()
+                        .any(|p| p.channel == "FL" || p.channel == "AUX0");
+                    let has_right = non_monitor
+                        .iter()
+                        .any(|p| p.channel == "FR" || p.channel == "AUX1");
+
+                    // If we have them, force this count to 2, which will pass get_media_class
+                    if has_left && has_right {
+                        2
+                    } else {
+                        non_monitor.len()
+                    }
+                } else {
+                    non_monitor.len()
+                };
 
                 match direction {
                     Direction::In => in_count += count,
@@ -706,7 +1142,6 @@ impl Store {
                 }
             }
 
-            // Return the Specific MediaClass based on Channel Count
             return self.get_media_class(in_count, out_count);
         }
         None
@@ -794,7 +1229,6 @@ impl Store {
     pub fn unmanaged_client_node_set_target(&mut self, id: u32, target: TargetType) {
         // So we need to locate the target, which might be tricky as the target is passed as an
         // object serial, and not a node id, meaning we need to do some digging.
-
         let mut result: Option<NodeTarget> = None;
 
         match target {
@@ -989,8 +1423,13 @@ impl Store {
 
     // ----- UNMANAGED LINKS -----
     pub fn unmanaged_link_add(&mut self, id: u32, link: RegistryLink) {
+        let in_pending = self
+            .pending_link_syncs
+            .iter()
+            .any(|p| p.bound_ids.values().any(|&pw_id| pw_id == id));
+
         // Check our Managed Links to see if this is actually unmanaged
-        if self.is_managed_link(id).is_none() {
+        if self.is_managed_link(id).is_none() && !in_pending {
             self.unmanaged_links.insert(id, link);
         }
     }
@@ -1008,27 +1447,43 @@ impl Store {
     // to go through our stored data, find the corresponding item, and handle it.
     pub fn remove_by_id(&mut self, id: u32) {
         if self.unmanaged_devices.contains_key(&id) {
+            trace!("Removing Unmanaged Device: {}", id);
             return self.unmanaged_device_remove(id);
         }
 
         if self.unmanaged_device_nodes.contains_key(&id) {
+            trace!("Removing Unmanaged Nodes: {}", id);
             return self.unmanaged_device_node_remove(id);
         }
 
         if self.unmanaged_clients.contains_key(&id) {
+            trace!("Removing Unmanaged Client: {}", id);
             return self.unmanaged_client_remove(id);
         }
 
         if self.unmanaged_client_nodes.contains_key(&id) {
+            trace!("Removing Unmanaged Client Node: {}", id);
             return self.unmanaged_client_node_remove(id);
         }
 
         if self.unmanaged_links.contains_key(&id) {
+            trace!("Removing Unmanaged Links: {}", id);
             return self.unmanaged_link_remove(id);
         }
 
         // Something may be trying to mess with a managed link, if so, completely drop our links
         // and report back to whatever is calling us that it's happened, so they can action it.
+        if let Some(id) = self.is_managed_link(id) {
+            debug!("Removing Managed Link: {}", id);
+            if let Some(link) = self.managed_links.remove(&id) {
+                debug!("Removed Links: {:?} -> {:?}", link.source, link.destination);
+                let _ = self.callback_tx.send(PipewireReceiver::ManagedLinkDropped(
+                    link.source,
+                    link.destination,
+                ));
+            }
+        }
+
         if let Some(id) = self.is_managed_link(id)
             && let Some(link) = self.managed_links.remove(&id)
         {
@@ -1036,6 +1491,28 @@ impl Store {
                 link.source,
                 link.destination,
             ));
+        }
+
+        // This might be a port removal from an unmanaged node
+        struct NodePort {
+            node_id: u32,
+            direction: Direction,
+            port_id: u32,
+        }
+        let mut nodes_to_check = Vec::new();
+        for (node_id, node) in self.unmanaged_device_nodes.iter_mut() {
+            for direction in Direction::iter() {
+                if node.ports[direction].contains_key(&id) {
+                    nodes_to_check.push(NodePort {
+                        node_id: *node_id,
+                        direction,
+                        port_id: id,
+                    });
+                }
+            }
+        }
+        for node in nodes_to_check {
+            self.unmanaged_node_port_removed(node.node_id, node.direction, node.port_id);
         }
     }
 
@@ -1070,8 +1547,30 @@ pub(crate) struct NodeStore {
     // don't need to track each side, we just need the ID and Location
     pub(crate) port_map: EnumMap<PortLocation, Option<u32>>,
     pub(crate) ports_ready: bool,
+    pub(crate) node_state: NodeStoreState,
 
     pub(crate) ready_sender: Option<Option<Sender<()>>>,
+}
+
+#[derive(Debug, Clone)]
+pub enum NodeStoreState {
+    Error(String),
+    Creating,
+    Suspending,
+    Idle,
+    Running,
+}
+
+impl From<NodeState<'_>> for NodeStoreState {
+    fn from(state: NodeState) -> Self {
+        match state {
+            NodeState::Error(e) => NodeStoreState::Error(e.to_owned()),
+            NodeState::Creating => NodeStoreState::Creating,
+            NodeState::Suspended => NodeStoreState::Suspending,
+            NodeState::Idle => NodeStoreState::Idle,
+            NodeState::Running => NodeStoreState::Running,
+        }
+    }
 }
 
 pub struct FilterStore {
@@ -1117,12 +1616,14 @@ pub struct LinkStoreMap {
     pub(crate) internal_id: Ulid,
 
     /// Variables needed to keep this link alive
-    pub(crate) _link: Link,
-    pub(crate) _listener: LinkListener,
+    pub(crate) pending_seq_id: Option<i32>,
+    pub(crate) _link: Option<Link>,
+    pub(crate) _proxy_listener: Option<ProxyListener>,
+    pub(crate) _info_listener: Option<LinkListener>,
 
     /// Internal Port Index Mapping
-    pub(crate) _source_port_id: u32,
-    pub(crate) _destination_port_id: u32,
+    pub(crate) source_port: (u32, u32),
+    pub(crate) destination_port: (u32, u32),
 }
 
 #[derive(Debug, Enum, EnumIter, Copy, Clone, PartialEq)]
@@ -1145,8 +1646,8 @@ impl FromStr for PortLocation {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "FL" | "AUX_0" => Ok(Self::Left),
-            "FR" | "AUX_1" => Ok(Self::Right),
+            "FL" | "AUX0" => Ok(Self::Left),
+            "FR" | "AUX1" => Ok(Self::Right),
             _ => bail!("Unknown Channel"),
         }
     }
@@ -1156,4 +1657,10 @@ impl Drop for Store {
     fn drop(&mut self) {
         debug!("Dropping Pipewire Store");
     }
+}
+
+pub struct PendingLinkSync {
+    pub parent_id: Ulid,
+    pub group: LinkStore,
+    pub bound_ids: HashMap<Ulid, u32>, // link_id -> pw_id collected during sync wait
 }

@@ -1,23 +1,25 @@
 use crate::registry::PipewireRegistry;
-use crate::store::{FilterStore, LinkStore, LinkStoreMap, NodeStore, PortLocation, Store};
+use crate::store::{
+    FilterStore, LinkStore, LinkStoreMap, NodeStore, NodeStoreState, PortLocation, Store,
+};
 use crate::{
-    FilterHandler, FilterProperties, FilterProperty, FilterValue, LinkType, NodeProperties,
-    PipewireInternalMessage, PipewireReceiver, registry,
+    Direction, FilterHandler, FilterProperties, FilterProperty, FilterValue, LinkType,
+    NodeProperties, NodeTarget, PipewireInternalMessage, PipewireReceiver,
 };
 use crate::{MediaClass, PWReceiver};
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use log::{debug, error, info};
-use pipewire::core::Core;
+use pipewire::core::{Core, Listener};
 use pipewire::filter::{Filter, FilterFlags, FilterState, PortFlags};
 use pipewire::keys::{
     APP_ICON_NAME, APP_ID, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME,
     FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT,
-    MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_DESCRIPTION,
-    NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_LATENCY, NODE_MAX_LATENCY, NODE_NAME,
+    MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_ALWAYS_PROCESS,
+    NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_GROUP, NODE_NAME,
     NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME,
 };
-use pipewire::link::{Link, LinkListener, LinkState};
+use pipewire::link::{Link, LinkChangeMask, LinkState};
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
 use pipewire::proxy::ProxyT;
@@ -31,7 +33,6 @@ use pipewire::spa::sys::{
     SPA_PROP_mute, SPA_TYPE_OBJECT_ParamProcessLatency, spa_process_latency_build,
     spa_process_latency_info,
 };
-use pipewire::spa::utils::Direction;
 
 use enum_map::{EnumMap, enum_map};
 use oneshot::Sender;
@@ -40,12 +41,14 @@ use pipewire::spa::param::ParamType;
 use pipewire::spa::pod::serialize::PodSerializer;
 use pipewire::spa::utils;
 
+use pipewire::main_loop::MainLoop;
 use pipewire::{context, main_loop};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::io::Cursor;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::mpsc;
+use std::time::Duration;
 use strum::IntoEnumIterator;
 use ulid::Ulid;
 
@@ -58,22 +61,112 @@ struct PipewireManager {
     registry: PipewireRegistry,
 
     store: Rc<RefCell<Store>>,
+    mainloop: Rc<MainLoop>,
+
+    _core_listener: Option<Listener>,
 }
 
 impl PipewireManager {
     pub fn new(
         core: Core,
+        mainloop: Rc<MainLoop>,
         registry: Registry,
         callback_tx: mpsc::Sender<PipewireReceiver>,
     ) -> Self {
         let store = Rc::new(RefCell::new(Store::new(callback_tx.clone())));
-        let registry = PipewireRegistry::new(registry, store.clone());
+        let registry = PipewireRegistry::new(registry, store.clone(), Rc::new(core.clone()));
 
         Self {
             core,
             registry,
             store,
+
+            mainloop,
+            _core_listener: None,
         }
+    }
+
+    pub fn create_core_listener(this: &Rc<RefCell<Self>>) {
+        let weak_self = Rc::downgrade(this);
+
+        let (core, store, mainloop) = {
+            let this_ref = this.borrow();
+            (
+                this_ref.core.clone(),
+                this_ref.store.clone(),
+                this_ref.mainloop.clone(),
+            )
+        };
+
+        let done_store = Rc::downgrade(&store);
+        let done_mainloop = Rc::downgrade(&mainloop);
+
+        let core_listener = core
+            .add_listener_local()
+            .done(move |_id, seq| {
+                let Some(this_rc) = weak_self.upgrade() else {
+                    return;
+                };
+                let Some(store_rc) = done_store.upgrade() else {
+                    return;
+                };
+
+                let mut store_ref = store_rc.borrow_mut();
+
+                // Pending Links
+                if let Some(parent) = store_ref.get_pending_link_parent_id_by_seq(seq.raw())
+                    && let Some(link_id) = store_ref.get_next_pending_link(seq.raw())
+                {
+                    let this = this_rc.borrow_mut();
+                    debug!("Attempting to Create next Link: {}", parent);
+                    let _ = this.create_port_link(parent, link_id);
+                    return;
+                }
+
+                // Pending Filters
+                if let Some(id) = store_ref.pending_filter_syncs.remove(&seq.raw()) {
+                    if let Some(mainloop) = done_mainloop.upgrade() {
+                        let timer_store = Rc::downgrade(&store_rc);
+                        let timer = mainloop.loop_().add_timer(move |_| {
+                            if let Some(store) = timer_store.upgrade() {
+                                let mut store = store.borrow_mut();
+                                store.resolve_pending_filter_sync(id);
+                            }
+                        });
+
+                        timer.update_timer(Some(Duration::from_millis(50)), None);
+                        std::mem::forget(timer);
+                    }
+
+                    return;
+                }
+
+                // --- Device sync ---
+                if let Some(node_id) = store_ref.pending_device_syncs.remove(&seq.raw()) {
+                    drop(store_ref);
+
+                    if let Some(mainloop) = done_mainloop.upgrade() {
+                        let timer_store = Rc::downgrade(&store_rc);
+                        let timer = mainloop.loop_().add_timer(move |_| {
+                            if let Some(store) = timer_store.upgrade() {
+                                let mut store = store.borrow_mut();
+
+                                if let Some(node) = store.unmanaged_device_nodes.get_mut(&node_id) {
+                                    node.is_synced = true;
+                                }
+
+                                store.unmanaged_node_port_check(node_id);
+                            }
+                        });
+
+                        timer.update_timer(Some(Duration::from_secs(1)), None);
+                        std::mem::forget(timer);
+                    }
+                }
+            })
+            .register();
+
+        this.borrow_mut()._core_listener = Some(core_listener);
     }
 
     pub fn create_node(&mut self, properties: NodeProperties) -> Result<()> {
@@ -83,12 +176,15 @@ impl PipewireManager {
             *NODE_NICK => properties.node_nick,
             *NODE_DESCRIPTION => properties.node_description,
 
+            *NODE_ALWAYS_PROCESS => "true",
             *NODE_VIRTUAL => "true",
             *PORT_MONITOR => "false",
 
             *APP_ICON_NAME => &*properties.app_id,
             *MEDIA_ICON_NAME => &*properties.app_id,
             *DEVICE_ICON_NAME => &*properties.app_id,
+
+            *NODE_GROUP => "pipeweaver-nodes",
 
             //*APP_NAME => properties.app_name,
             *OBJECT_LINGER => match properties.linger {
@@ -102,8 +198,6 @@ impl PipewireManager {
             },
 
             *AUDIO_CHANNELS => "2",
-            *NODE_LATENCY => format!("{}/{}", properties.buffer, properties.rate),
-            *NODE_MAX_LATENCY => format!("{}/{}", properties.buffer, properties.rate),
 
             // Force the QUANTUM and the RATE to ensure that we're not internally adjusted when
             // latency occurs following a link
@@ -130,9 +224,6 @@ impl PipewireManager {
                 true => "false",
                 false => "true"
             },
-
-            // Keep the monitor as close to 'real-time' as possible
-            //"monitor.passthrough" => "true",
         };
 
         debug!(
@@ -199,6 +290,16 @@ impl PipewireManager {
                         if let Some(store) = listener_info_store.upgrade() {
                             store.borrow().managed_node_request_ports(listener_id);
                         }
+                    }
+                }
+
+                if info.change_mask().contains(NodeChangeMask::STATE) {
+                    let new_state = NodeStoreState::from(info.state());
+
+                    if let Some(store) = listener_info_store.upgrade() {
+                        store
+                            .borrow_mut()
+                            .managed_node_state_changed(listener_id, new_state);
                     }
                 }
             })
@@ -312,6 +413,7 @@ impl PipewireManager {
             port_map: Default::default(),
             ports_ready: false,
 
+            node_state: NodeStoreState::Creating,
             ready_sender: Some(properties.ready_sender),
         };
 
@@ -333,6 +435,9 @@ impl PipewireManager {
             *NODE_NAME => &*props.filter_name,
             *NODE_NICK => &*props.filter_nick,
             *NODE_DESCRIPTION => &*props.filter_description,
+            *NODE_ALWAYS_PROCESS => "true",
+
+            *NODE_GROUP => "pipeweaver-nodes",
 
             *MEDIA_TYPE => "Audio",
             *MEDIA_CATEGORY => "Filter",
@@ -362,7 +467,7 @@ impl PipewireManager {
                 input_ports.borrow_mut().push(
                     filter
                         .add_port(
-                            Direction::Input,
+                            utils::Direction::Input,
                             PortFlags::MAP_BUFFERS,
                             properties! {
                                 *FORMAT_DSP => "32 bit float mono audio",
@@ -386,7 +491,7 @@ impl PipewireManager {
                 output_ports.borrow_mut().push(
                     filter
                         .add_port(
-                            Direction::Output,
+                            utils::Direction::Output,
                             PortFlags::MAP_BUFFERS,
                             properties! {
                                 *FORMAT_DSP => "32 bit float mono audio",
@@ -413,6 +518,7 @@ impl PipewireManager {
         let listener_input_ports = input_ports.clone();
         let listener_output_ports = output_ports.clone();
         let listener_state_store = Rc::downgrade(&self.store);
+        let listener_core = self.core.clone();
         let listener_id = props.filter_id;
         let listener = filter
             .add_local_listener_with_user_data(data_inner)
@@ -420,9 +526,11 @@ impl PipewireManager {
                 if old == FilterState::Connecting {
                     debug!("[{}] Filter Connected", listener_id);
                     if let Some(listener_state_store) = listener_state_store.upgrade() {
-                        listener_state_store
-                            .borrow_mut()
-                            .managed_filter_set_pw_id(listener_id, filter.node_id());
+                        let mut store = listener_state_store.borrow_mut();
+                        store.managed_filter_set_pw_id(listener_id, filter.node_id());
+
+                        let seq = listener_core.sync(0).expect("core sync failed");
+                        store.add_pending_filter(seq.raw(), listener_id)
                     }
                 }
             })
@@ -432,6 +540,7 @@ impl PipewireManager {
 
                 let mut input_list = vec![];
                 let mut output_list = vec![];
+
                 for input in listener_input_ports.borrow().iter() {
                     let in_buffer = filter.get_dsp_buffer::<f32>(input, samples);
                     input_list.push(in_buffer.unwrap());
@@ -440,6 +549,18 @@ impl PipewireManager {
                 for output in listener_output_ports.borrow().iter() {
                     let out_buffer = filter.get_dsp_buffer::<f32>(output, samples);
                     output_list.push(out_buffer.unwrap());
+                }
+
+                // Check for inputs, output only filters don't need this
+                if !input_list.is_empty() {
+                    // Iterate over all the output lists
+                    for (i, out_buf) in output_list.iter_mut().enumerate() {
+                        // Fetch the matching input, if it's empty and the output ISN'T..
+                        if !out_buf.is_empty() && input_list.get(i).is_none_or(|b| b.is_empty()) {
+                            // Clear the output buffer
+                            out_buf.fill(0.0);
+                        }
+                    }
                 }
 
                 data.write()
@@ -480,8 +601,8 @@ impl PipewireManager {
             _filter: filter,
 
             port_map: enum_map! {
-                registry::Direction::In => input_port_map,
-                registry::Direction::Out=> output_port_map,
+                Direction::In => input_port_map,
+                Direction::Out=> output_port_map,
             },
 
             _input_ports: input_ports,
@@ -517,30 +638,91 @@ impl PipewireManager {
         dest: LinkType,
         sender: Sender<()>,
     ) -> Result<()> {
+        // Fetch the details of the links that need creating
+        let mut group = self.prepare_links(source, dest, sender)?;
+
+        // Create a Parent ID for this link set
         let parent_id = Ulid::new();
+
+        // Find the first portmap and begin creation
+        for port in PortLocation::iter() {
+            let entry = &mut group.links[port];
+
+            if let Some(m) = entry.as_mut() {
+                // Ok, we have a LinkStoreMap, trigger the first creation.
+                self.create_port_link(parent_id, m)?;
+                break;
+            }
+        }
+        self.store.borrow_mut().add_pending_link(parent_id, group);
+        Ok(())
+    }
+
+    pub fn prepare_links(
+        &mut self,
+        source: LinkType,
+        dest: LinkType,
+        sender: Sender<()>,
+    ) -> Result<LinkStore> {
+        // First, check if a managed link already exists and remove it
+        self.store.borrow_mut().managed_link_remove(&source, &dest);
         let mut port_map: EnumMap<PortLocation, Option<LinkStoreMap>> = Default::default();
 
-        // Rewrite, lets go!
+        // Collect all the port pairs we're going to link
+        let mut port_pairs = Vec::new();
+        for port in PortLocation::iter() {
+            let (_, src_index) = self.get_port(&source, Direction::Out, port)?;
+            let (_, tgt_index) = self.get_port(&dest, Direction::In, port)?;
+            port_pairs.push((src_index, tgt_index));
+        }
+
+        // Find and destroy any unmanaged links between these exact ports
+        let links_to_destroy: Vec<u32> = self
+            .store
+            .borrow()
+            .get_unmanaged_links()
+            .iter()
+            .filter_map(|(id, link)| {
+                let should_remove = port_pairs.iter().any(|(out_port, in_port)| {
+                    link.output_port == *out_port && link.input_port == *in_port
+                });
+                if should_remove { Some(*id) } else { None }
+            })
+            .collect();
+
+        if !links_to_destroy.is_empty() {
+            debug!(
+                "Destroying {} orphaned unmanaged links in PipeWire: {:?}",
+                links_to_destroy.len(),
+                links_to_destroy
+            );
+            for link_id in links_to_destroy {
+                self.registry.destroy_global(link_id);
+                self.store.borrow_mut().unmanaged_link_remove(link_id);
+            }
+        }
+
+        // Now create the links
         for port in PortLocation::iter() {
             // Firstly, create an id for this list
             let link_id = Ulid::new();
 
             // Next, obtain the source and destination port indexes
-            let (src_id, src_index) = self.get_port(source, registry::Direction::Out, port)?;
-            let (tgt_id, tgt_index) = self.get_port(dest, registry::Direction::In, port)?;
-
-            // Now we simply create the link
-            let (link, lis) =
-                self.create_port_link(link_id, parent_id, src_id, src_index, tgt_id, tgt_index)?;
+            let (src_id, src_index) = self.get_port(&source, Direction::Out, port)?;
+            let (tgt_id, tgt_index) = self.get_port(&dest, Direction::In, port)?;
 
             // Create the LinkStore Mapping for this link
             let store = LinkStoreMap {
                 pw_id: None,
                 internal_id: link_id,
-                _link: link,
-                _listener: lis,
-                _source_port_id: src_index,
-                _destination_port_id: tgt_index,
+
+                pending_seq_id: None,
+                _link: None,
+                _proxy_listener: None,
+                _info_listener: None,
+
+                source_port: (src_id, src_index),
+                destination_port: (tgt_id, tgt_index),
             };
 
             port_map[port] = Some(store);
@@ -548,20 +730,19 @@ impl PipewireManager {
 
         // Ok, we're done here, create the main store object
         let group = LinkStore {
-            source,
-            destination: dest,
+            source: source.clone(),
+            destination: dest.clone(),
             links: port_map,
             ready_sender: Some(sender),
         };
 
-        self.store.borrow_mut().managed_link_add(parent_id, group);
-        Ok(())
+        Ok(group)
     }
 
     pub fn remove_link(&mut self, source: LinkType, destination: LinkType) -> Result<()> {
         self.store
             .borrow_mut()
-            .managed_link_remove(source, destination);
+            .managed_link_remove(&source, &destination);
         Ok(())
     }
 
@@ -577,15 +758,15 @@ impl PipewireManager {
 
     fn get_port(
         &mut self,
-        link: LinkType,
-        direction: registry::Direction,
+        link: &LinkType,
+        direction: crate::Direction,
         location: PortLocation,
     ) -> Result<(u32, u32)> {
         // Ok, simple enough, pull out the relevant type, and get the port at location
         let mut store = self.store.borrow_mut();
         match link {
             LinkType::Node(id) => {
-                let node = store.managed_node_get(id).unwrap();
+                let node = store.managed_node_get(*id).unwrap();
 
                 let id = node.pw_id.unwrap();
                 let port = node.port_map[location].unwrap();
@@ -593,25 +774,41 @@ impl PipewireManager {
                 Ok((id, port))
             }
             LinkType::Filter(id) => {
-                let filter = store.managed_filter_get(id).unwrap();
+                let filter = store.managed_filter_get(*id).unwrap();
 
                 let id = filter.pw_id.unwrap();
                 let port = filter.port_map[direction][location];
 
                 Ok((id, port))
             }
-            LinkType::UnmanagedNode(id) => {
+            LinkType::UnmanagedNode(id, port_map) => {
                 let node = store
-                    .unmanaged_device_node_get(id)
+                    .unmanaged_device_node_get(*id)
                     .ok_or_else(|| anyhow!("Unmanaged Device Node not Found"))?;
 
                 let ports = &node.ports[direction];
+
+                // Check whether the caller has explicitly told us which port to use
+                if let Some(link_ports) = port_map {
+                    let find = match location {
+                        PortLocation::Left => &link_ports.left,
+                        PortLocation::Right => &link_ports.right,
+                    };
+
+                    for (index, port) in ports.iter() {
+                        if port.channel == *find {
+                            return Ok((*id, *index));
+                        }
+                    }
+
+                    bail!("Unable to find channel");
+                }
 
                 // Check whether this is a mono device
                 if ports.iter().count() == 1
                     && let Some(index) = ports.keys().next()
                 {
-                    return Ok((id, *index));
+                    return Ok((*id, *index));
                 }
 
                 // Iterate over the ports, try and find the location
@@ -619,7 +816,7 @@ impl PipewireManager {
                     if let Ok(port_location) = PortLocation::from_str(&port.channel)
                         && port_location == location
                     {
-                        return Ok((id, *index));
+                        return Ok((*id, *index));
                     }
                 }
 
@@ -629,15 +826,11 @@ impl PipewireManager {
         }
     }
 
-    fn create_port_link(
-        &self,
-        id: Ulid,
-        parent_id: Ulid,
-        src_node: u32,
-        src_port: u32,
-        dest_node: u32,
-        dest_port: u32,
-    ) -> Result<(Link, LinkListener)> {
+    fn create_port_link(&self, parent_id: Ulid, map: &mut LinkStoreMap) -> Result<()> {
+        let id = map.internal_id;
+        let (src_node, src_port) = map.source_port;
+        let (dest_node, dest_port) = map.destination_port;
+
         let listener_info_store = Rc::downgrade(&self.store);
         let link = self
             .core
@@ -649,35 +842,68 @@ impl PipewireManager {
                     *LINK_INPUT_NODE => dest_node.to_string(),
                     *LINK_INPUT_PORT => dest_port.to_string(),
                     *OBJECT_LINGER => "false",
-
-                    // No passivity here. While our links may, in some cases, be attached to
-                    // physical sources / sinks, in other cases they're attached to audio_filters which
-                    // don't have the opportunity to go idle, and implying as such can create a
-                    // disconnect between internal and external behaviours.
-                    //
-                    // TODO: send a parameter indicating the node types
                     *NODE_PASSIVE => "false",
                 },
             )
             .map_err(|e| anyhow!("Failed to create link: {}", e))?;
 
-        let link_listener = link
+        let listener_bound_store = listener_info_store.clone();
+        let listener_error_store = listener_info_store.clone();
+        let proxy_listener = link
+            .upcast_ref()
             .add_listener_local()
-            .info(move |link| {
-                if let LinkState::Active = link.state() {
-                    // We're alive, let the store know
-                    if let Some(listener_info_store) = listener_info_store.upgrade() {
-                        listener_info_store.borrow_mut().managed_link_ready(
-                            parent_id,
-                            id,
-                            link.id(),
-                        );
-                    }
+            .bound(move |pw_id| {
+                // The link is now bound and has an ID, notify the store
+                if let Some(store) = listener_bound_store.upgrade() {
+                    store.borrow_mut().managed_link_bound(parent_id, id, pw_id);
+                }
+            })
+            .error(move |seq, res, message| {
+                log::error!(
+                    "[Link {}:{}] Link proxy error! seq={}, res={}, message={}",
+                    parent_id,
+                    id,
+                    seq,
+                    res,
+                    message
+                );
+                // Notify the store about the error so the sender doesn't hang
+                if let Some(store) = listener_error_store.upgrade() {
+                    store.borrow_mut().managed_link_error(parent_id, id);
                 }
             })
             .register();
 
-        Ok((link, link_listener))
+        let listener_done_store = listener_info_store.clone();
+        let listener_done_core = self.core.clone();
+        let state_done = Cell::new(false);
+        let link_listener = link
+            .add_listener_local()
+            .info(move |info| {
+                if info.change_mask().contains(LinkChangeMask::STATE) {
+                    if state_done.get() {
+                        return;
+                    }
+                    if matches!(info.state(), LinkState::Active | LinkState::Paused) {
+                        state_done.set(true);
+
+                        if let Some(store) = listener_done_store.upgrade() {
+                            let seq = listener_done_core.sync(0).expect("core sync failed");
+                            store
+                                .borrow_mut()
+                                .set_pending_link_done(parent_id, id, seq.raw());
+                        }
+                    }
+                }
+                //if matches!(info.state(), LinkState::Error(e) | LinkState::Unlinked) {}
+            })
+            .register();
+
+        map._link = Some(link);
+        map._proxy_listener = Some(proxy_listener);
+        map._info_listener = Some(link_listener);
+
+        Ok(())
     }
 
     fn set_application_target(&mut self, app_id: u32, target: Ulid) -> Result<()> {
@@ -740,6 +966,15 @@ impl PipewireManager {
 
     fn set_application_muted(&mut self, id: u32, state: bool) -> Result<()> {
         self.store.borrow_mut().set_application_muted(id, state)
+    }
+
+    fn set_default_device(&mut self, class: MediaClass, node: NodeTarget) -> Result<()> {
+        match class {
+            MediaClass::Source => self.store.borrow_mut().set_default_source_node(node)?,
+            MediaClass::Sink => self.store.borrow_mut().set_default_sink_node(node)?,
+            MediaClass::Duplex => bail!("Can't set defaults on Duplex!"),
+        }
+        Ok(())
     }
 
     fn set_node_mute(&mut self, id: Ulid, mute: bool) -> Result<()> {
@@ -813,9 +1048,11 @@ pub fn run_pw_main_loop(
 
     let manager = Rc::new(RefCell::new(PipewireManager::new(
         core,
+        mainloop.clone(),
         registry,
         callback_tx,
     )));
+    PipewireManager::create_core_listener(&manager);
 
     let receiver_clone = mainloop.clone();
     let _receiver = pw_rx.attach(mainloop.loop_(), {
@@ -879,6 +1116,10 @@ pub fn run_pw_main_loop(
             PipewireInternalMessage::SetApplicationMute(id, state, result) => {
                 let _ = result.send(manager.borrow_mut().set_application_muted(id, state));
             }
+            PipewireInternalMessage::SetDefaultDevice(class, node, result) => {
+                let _ = result.send(manager.borrow_mut().set_default_device(class, node));
+            }
+
             PipewireInternalMessage::ClearApplicationTarget(id, result) => {
                 let _ = result.send(manager.borrow_mut().clear_application_target(id));
             }

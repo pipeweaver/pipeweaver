@@ -1,12 +1,12 @@
 <template>
   <div v-show=is_visible class="modal-mask">
-    <div class="modal-wrapper">
-      <div ref="dialog" class="modal-container" role="dialog" aria-modal="true"
-           :aria-labelledby="`${id}_label`"
-           :aria-describedby="`${id}_body`" @keyup.esc.prevent="closeModalEsc">
+    <div class="modal-wrapper" @click.self="$emit('backdrop-click')">
+      <div ref="dialog" class="modal-container" role="dialog" @keyup.esc.prevent="closeModalEsc">
         <div class="modal-header" tabindex="0">
-          <div :id="`${id}_label`" role="heading" aria-level="2">
-            <slot name="title" ref="title"></slot>
+          <div :id="`${id}_label`" role="heading">
+            <b>
+              <slot name="title" ref="title"></slot>
+            </b>
           </div>
           <button v-show=show_close ref="close" @click="closeModal()">
             <font-awesome-icon title="Close" icon="fa-solid fa-xmark"/>
@@ -18,7 +18,7 @@
         <div v-if="show_footer" class="modal-footer">
           <slot name="footer">
             <button ref="ok" class="modal-default-button" @click="closeModal()">
-              {{ $t('message.modalButtons.ok') }}
+              Ok
             </button>
           </slot>
         </div>
@@ -32,7 +32,7 @@ import * as focusTrap from "focus-trap";
 
 export default {
   name: "ModalOverlay",
-  emits: ["modal-close"],
+  emits: ["modal-close", "backdrop-click"],
 
   props: {
     id: {type: String, required: true},
@@ -69,7 +69,9 @@ export default {
         }
 
         // Create the focus trap, to prevent moving out..
-        this.trap = focusTrap.createFocusTrap(this.$refs.dialog);
+        this.trap = focusTrap.createFocusTrap(this.$refs.dialog, {
+          allowOutsideClick: true,
+        });
         this.trap.activate();
       })
     },
@@ -114,7 +116,7 @@ export default {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: rgba(0, 0, 0, 0.6);
   display: table;
   transition: opacity 0.3s ease;
 }
@@ -132,10 +134,11 @@ export default {
   min-width: v-bind(width);
   max-width: min-content;
   margin: 0 auto;
-  background-color: #fff;
-  border-radius: 2px;
+  border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.33);
   transition: all 0.3s ease;
+
+  overflow: hidden;
 }
 
 /* Header Styling.. */

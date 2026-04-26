@@ -8,8 +8,9 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+clap = { workspace = true }
+
 serde = { workspace = true }
-serde_json = { workspace = true }
 
 ulid = { workspace = true }
 enum-map = { workspace = true }

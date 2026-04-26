@@ -28,13 +28,7 @@ export const store = reactive({
   },
 
   socketDisconnected() {
-    this.status = {
-      config: {},
-      audio: {
-        profile: {},
-      },
-    }
-
+    this.status = {}
     this.is_connected = false
   },
 
@@ -113,6 +107,11 @@ export const store = reactive({
 
   // eslint-disable-next-line no-unused-vars
   patchData(json) {
+    if (!this.is_connected) {
+      // Don't patch if we haven't received an initial status!
+      return;
+    }
+
     for (let patch of json.Patch) {
       if (this.pausedPaths.includes(patch.path)) {
         continue

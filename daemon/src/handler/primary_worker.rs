@@ -4,27 +4,31 @@ use crate::handler::primary_worker::ManagerMessage::{
     Execute, GetAudioConfiguration, SetAudioQuantum, SetMetering,
 };
 use crate::servers::http_server::{MeterEvent, PatchEvent};
+use crate::settings::save_settings;
 use crate::stop::Stop;
 use crate::{APP_DAEMON_NAME, APP_ID};
 use crate::{APP_NAME_ID, BACKGROUND_PARAM};
-use anyhow::Result;
 use anyhow::{Context, bail};
+use anyhow::{Result, anyhow};
 use ashpd::desktop::background::Background;
 use ini::Ini;
 use json_patch::diff;
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{
-    APICommand, APICommandResponse, AudioConfiguration, DaemonCommand, DaemonResponse, DaemonStatus,
+    APICommand, AudioConfiguration, DaemonCommand, DaemonResponse, DaemonStatus, GlobalSettings,
+    PWCommandResponse,
 };
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::Quantum;
+use std::collections::HashSet;
 use std::fs::{File, create_dir_all};
 use std::io::ErrorKind;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{env, fs};
 use tokio::sync::broadcast::Sender;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{RwLock, mpsc, oneshot};
 use tokio::time::sleep;
 use tokio::{select, task, time};
 use which::which;
@@ -38,16 +42,23 @@ pub struct PrimaryWorker {
     meter_broadcast: Sender<MeterEvent>,
 
     shutdown: Stop,
+    settings: Arc<RwLock<GlobalSettings>>,
 }
 
 impl PrimaryWorker {
-    fn new(shutdown: Stop, patch: Sender<PatchEvent>, meter: Sender<MeterEvent>) -> Self {
+    fn new(
+        shutdown: Stop,
+        patch: Sender<PatchEvent>,
+        meter: Sender<MeterEvent>,
+        settings: Arc<RwLock<GlobalSettings>>,
+    ) -> Self {
         Self {
             last_status: DaemonStatus::default(),
             patch_broadcast: patch,
             meter_broadcast: meter,
 
             shutdown,
+            settings,
         }
     }
 
@@ -77,7 +88,10 @@ impl PrimaryWorker {
 
             // Used to pass messages into the Pipewire Manager
             let (command_sender, command_receiver) = mpsc::channel(32);
-            let (worker_sender, mut worker_receiver) = mpsc::channel(32);
+
+            // We need to keep this one a little high, during load there may be a LOT of changes coming in (either transient or otherwise)
+            // as pipewire sends in data, and we run the risk of blocking the command sender.
+            let (worker_sender, mut worker_receiver) = mpsc::channel(256);
             let (stop_sender, stop_receiver) = oneshot::channel();
             let (ready_sender, ready_receiver) = oneshot::channel();
             let mut profile_tick = time::interval(Duration::from_secs(5));
@@ -97,6 +111,8 @@ impl PrimaryWorker {
             // Wait until the manager reports itself as ready
             let _ = ready_receiver.await;
 
+            // Load the initial status
+            self.update_status(&command_sender, true).await;
             let mut profile_changed = false;
 
             loop {
@@ -104,12 +120,16 @@ impl PrimaryWorker {
                     Some(message) = message_receiver.recv() => {
                         match self.handle_message(&command_sender, message).await {
                             MessageResult::UpdateState => {
-                                self.update_status(&command_sender).await;
+                                self.update_status(&command_sender, false).await;
                                 profile_changed = true;
                             }
                             MessageResult::Reset => {
                                 // Restart the Pipewire Manager, so continue on the main loop
                                 info!("[PrimaryWorker] Restarting Pipewire Manager, Saving Profile");
+
+                                // We should fetch the 'latest' profile from the Pipeweaver runner
+                                self.update_status(&command_sender, false).await;
+
                                 let _ = self.save_profile(&profile_path, &self.last_status.audio.profile);
                                 let _ = command_sender.send(ManagerMessage::Quit).await;
                                 continue 'main;
@@ -123,11 +143,11 @@ impl PrimaryWorker {
                             WorkerMessage::TransientChange => {
                                 // A physical device has changed, we need to update the main
                                 // status to include it.
-                                self.update_status(&command_sender).await;
+                                self.update_status(&command_sender, false).await;
                             }
                             WorkerMessage::ProfileChanged => {
                                 // Something's been changed in the Profile
-                                self.update_status(&command_sender).await;
+                                self.update_status(&command_sender, false).await;
                                 profile_changed = true;
                             }
                         }
@@ -170,6 +190,10 @@ impl PrimaryWorker {
                     DaemonCommand::SetMetering(enabled) => {
                         let _ = pw_tx.send(SetMetering(enabled)).await;
                     }
+                    DaemonCommand::SetUseBrowser(enabled) => {
+                        self.settings.write().await.use_browser = enabled;
+                        let _ = save_settings(*self.settings.read().await);
+                    }
                     DaemonCommand::SetAudioQuantum(value) => {
                         let (tx, rx) = oneshot::channel();
                         let _ = pw_tx.send(SetAudioQuantum(value, tx)).await;
@@ -178,7 +202,11 @@ impl PrimaryWorker {
                         reset = true;
                     }
                     DaemonCommand::OpenInterface => {
-                        if let Some(app_path) = get_ui_app_path() {
+                        let force_browser = self.settings.read().await.use_browser;
+
+                        if let Some(app_path) = get_ui_app_path()
+                            && !force_browser
+                        {
                             use std::process::{Command, Stdio};
                             let tmp_dir = env::temp_dir();
 
@@ -223,7 +251,7 @@ impl PrimaryWorker {
             DaemonMessage::RunPipewire(command, response) => {
                 let (tx, rx) = oneshot::channel();
                 if let Err(e) = pw_tx.send(Execute(command, tx)).await {
-                    let _ = response.send(APICommandResponse::Err(e.to_string()));
+                    let _ = response.send(PWCommandResponse::Err(e.to_string()));
                     return MessageResult::None;
                 }
                 match rx.await {
@@ -232,7 +260,7 @@ impl PrimaryWorker {
                         update = true;
                     }
                     Err(e) => {
-                        let _ = response.send(APICommandResponse::Err(e.to_string()));
+                        let _ = response.send(PWCommandResponse::Err(e.to_string()));
                     }
                 }
             }
@@ -246,7 +274,7 @@ impl PrimaryWorker {
         MessageResult::None
     }
 
-    async fn update_status(&mut self, pw_tx: &Manage) {
+    async fn update_status(&mut self, pw_tx: &Manage, initial: bool) {
         let mut status = DaemonStatus::default();
 
         let (cmd_tx, cmd_rx) = oneshot::channel();
@@ -268,14 +296,17 @@ impl PrimaryWorker {
             warn!("Unable to obtain autostart status: {}", e);
             false
         });
+        status.config.global_settings = *self.settings.read().await;
 
-        let previous = serde_json::to_value(&self.last_status).unwrap();
-        let new = serde_json::to_value(&status).unwrap();
+        if self.patch_broadcast.receiver_count() > 0 && !initial {
+            let previous = serde_json::to_value(&self.last_status).unwrap();
+            let new = serde_json::to_value(&status).unwrap();
 
-        let patch = diff(&previous, &new);
-        if !patch.0.is_empty() {
-            // Something has changed in our config, broadcast it to listeners
-            let _ = self.patch_broadcast.send(PatchEvent { data: patch });
+            let patch = diff(&previous, &new);
+            if !patch.is_empty() {
+                // Something has changed in our config, broadcast it to listeners
+                let _ = self.patch_broadcast.send(PatchEvent { data: patch });
+            }
         }
 
         self.last_status = status;
@@ -283,7 +314,7 @@ impl PrimaryWorker {
 
     fn load_profile(&self, path: &PathBuf) -> Profile {
         info!("[Profile] Loading");
-        match File::open(path) {
+        let mut profile = match File::open(path) {
             Ok(reader) => {
                 let settings = serde_json::from_reader(reader);
                 settings.unwrap_or_else(|e| {
@@ -298,7 +329,27 @@ impl PrimaryWorker {
                 warn!("[Profile] Not Found, sending default");
                 Profile::base_settings()
             }
+        };
+
+        // This section primarily fixes historical issues with the profile.
+
+        // 1: Attached Physical Devices can be duplicated, clear duplicates.
+        for dev in &mut profile.devices.sources.physical_devices {
+            let mut seen = HashSet::new();
+            dev.attached_devices.retain(|i| seen.insert(i.clone()));
         }
+
+        for dev in &mut profile.devices.targets.physical_devices {
+            let mut seen = HashSet::new();
+            dev.attached_devices.retain(|i| seen.insert(i.clone()));
+        }
+
+        for dev in &mut profile.devices.targets.virtual_devices {
+            let mut seen = HashSet::new();
+            dev.attached_devices.retain(|i| seen.insert(i.clone()));
+        }
+
+        profile
     }
 
     fn save_profile(&self, path: &PathBuf, profile: &Profile) -> Result<()> {
@@ -391,15 +442,20 @@ async fn set_autostart(enabled: bool) -> Result<()> {
                     fs::remove_file(path.clone())?;
                 }
                 if enabled {
+                    let parent_err = anyhow!("Failed to get Parent Directory");
+
                     let exe = env::current_exe()?;
+                    let exe_path = exe.parent().ok_or(parent_err)?;
 
                     let mut conf = Ini::new();
                     let exe = exe.to_string_lossy().to_string();
+                    let exe_path = exe_path.to_string_lossy().to_string();
 
                     conf.with_section(Some("Desktop Entry"))
                         .set("Type", "Application")
                         .set("Name", "Pipeweaver")
                         .set("Comment", "Audio Control and Routing")
+                        .set("Path", exe_path)
                         .set("Exec", format!("{exe:?} {BACKGROUND_PARAM}"))
                         .set("Terminal", "false");
 
@@ -434,9 +490,30 @@ pub fn get_autostart_file() -> Result<PathBuf> {
         create_dir_all(format!("{config_dir}/autostart"))?;
     }
 
-    Ok(PathBuf::from(format!(
-        "{config_dir}/autostart/{APP_ID}.{APP_NAME_ID}.desktop"
-    )))
+    let filename = format!("{APP_ID}.desktop");
+    let file_path = PathBuf::from(&config_dir).join("autostart").join(filename);
+
+    // If we're in the sandbox environment, we're already good.
+    if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
+        return Ok(file_path);
+    }
+
+    // This fixes an issue where the non-flatpak version was placing the autostart into a different
+    // location to the flatpak version, and the 'autostart checker' was expecting it to be there.
+    //
+    // We'll instead defer to where flatpack (via the XDG background portal) places the file,
+    // and move any files in the previously wrong place.
+    let bad_file = format!("{APP_ID}.{APP_NAME_ID}.desktop");
+    let bad_path = PathBuf::from(&config_dir).join("autostart").join(bad_file);
+    if bad_path.exists() {
+        // If the place we're going already exists, remove it and replace it with ours.
+        if file_path.exists() {
+            fs::remove_file(&file_path)?;
+        }
+        fs::rename(bad_path, &file_path)?;
+    }
+
+    Ok(file_path)
 }
 
 pub enum MessageResult {
@@ -447,7 +524,7 @@ pub enum MessageResult {
 
 #[derive(Debug)]
 pub enum ManagerMessage {
-    Execute(APICommand, oneshot::Sender<APICommandResponse>),
+    Execute(APICommand, oneshot::Sender<PWCommandResponse>),
     GetAudioConfiguration(oneshot::Sender<AudioConfiguration>),
     SetMetering(bool),
     SetAudioQuantum(Quantum, oneshot::Sender<()>),
@@ -465,7 +542,8 @@ pub async fn start_primary_worker(
     broadcast_tx: Sender<PatchEvent>,
     meter_tx: Sender<MeterEvent>,
     config_path: PathBuf,
+    settings: Arc<RwLock<GlobalSettings>>,
 ) {
-    let mut manager = PrimaryWorker::new(shutdown, broadcast_tx, meter_tx);
+    let mut manager = PrimaryWorker::new(shutdown, broadcast_tx, meter_tx, settings);
     manager.run(message_receiver, config_path).await;
 }

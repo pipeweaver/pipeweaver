@@ -34,6 +34,10 @@ pub struct Devices {
 
     /// Target devices (Devices that audio is routed into)
     pub targets: TargetDevices,
+
+    /// Port Mapping for physical devices to stereo ports
+    #[serde(default)]
+    pub physical_device_port_maps: EnumMap<DeviceType, Vec<PortMap>>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -84,7 +88,7 @@ pub struct MuteStates {
     pub mute_targets: EnumMap<MuteTarget, HashSet<Ulid>>,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub struct PhysicalDeviceDescriptor {
     pub name: Option<String>,
     pub description: Option<String>,
@@ -100,6 +104,9 @@ pub struct PhysicalSourceDevice {
     pub filters: Vec<Filter>,
 
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
+
+    #[serde(default)]
+    pub attached_port_maps: Vec<Ulid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +121,9 @@ pub struct VirtualTargetDevice {
     pub filters: Vec<Filter>,
 
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
+
+    #[serde(default)]
+    pub attached_port_maps: Vec<Ulid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,14 +138,16 @@ pub struct PhysicalTargetDevice {
     pub filters: Vec<Filter>,
 
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
+
+    #[serde(default)]
+    pub attached_port_maps: Vec<Ulid>,
 }
 
 impl Default for PhysicalTargetDevice {
     fn default() -> Self {
         Self {
-            volume: 100,
-
             description: Default::default(),
+            volume: 100,
 
             mute_state: Default::default(),
             mix: Default::default(),
@@ -143,6 +155,7 @@ impl Default for PhysicalTargetDevice {
             filters: Default::default(),
 
             attached_devices: Default::default(),
+            attached_port_maps: Default::default(),
         }
     }
 }
@@ -159,6 +172,7 @@ impl Default for VirtualTargetDevice {
             filters: Default::default(),
 
             attached_devices: Default::default(),
+            attached_port_maps: Default::default(),
         }
     }
 }
@@ -179,6 +193,36 @@ impl Default for Volumes {
             volumes_linked: Some(1.),
         }
     }
+}
+
+/// This aids in allowing port mapping to occur for devices which aren't stereo to allow us
+/// to connect them to the tree based on some user configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortMap {
+    /// The physical device we're mapping
+    pub device: PhysicalDeviceDescriptor,
+
+    /// The configuration options for this device
+    pub configuration: Vec<PortConfiguration>,
+}
+
+/// A Device Port Configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortConfiguration {
+    /// The number of expected ports on this device to be usable
+    pub num_ports: u32,
+
+    /// A list of port assignments from the device, there can be many!
+    pub assignments: Vec<PortAssignment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortAssignment {
+    pub id: Ulid,
+    pub name: String,
+
+    pub left: String,
+    pub right: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

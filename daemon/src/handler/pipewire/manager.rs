@@ -1,6 +1,7 @@
 use crate::handler::pipewire::components::application::{
     ApplicationManagement, get_application_type,
 };
+use crate::handler::pipewire::components::defaults::DefaultHandlers;
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
@@ -12,14 +13,14 @@ use crate::servers::http_server::MeterEvent;
 use enum_map::{EnumMap, enum_map};
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{
-    APICommandResponse, Application, AudioConfiguration, PhysicalDevice,
+    Application, AudioConfiguration, PWCommandResponse, PhysicalDevice, PhysicalDevicePort,
 };
 use pipeweaver_pipewire::{
-    ApplicationNode, DeviceNode, MediaClass, NodeTarget, PipewireMessage, PipewireReceiver,
-    PipewireRunner,
+    ApplicationNode, DeviceNode, Direction, MediaClass, NodeTarget, PipewireMessage,
+    PipewireReceiver, PipewireRunner,
 };
 use pipeweaver_profile::Profile;
-use pipeweaver_shared::{AppTarget, DeviceType, FilterConfig, Mix};
+use pipeweaver_shared::{AppTarget, DeviceType, FilterConfig, Mix, PortDirection};
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
@@ -134,6 +135,23 @@ impl PipewireManager {
                     }
                 },
             },
+            defaults_id: enum_map! {
+                DeviceType::Source => match &self.default_source {
+                    None => None,
+                    Some(target) => match target {
+                        NodeTarget::Node(id) => Some(*id),
+                        NodeTarget::UnmanagedNode(id) => self.find_ulid_for_pw_id(*id),
+                    }
+                },
+                DeviceType::Target => match &self.default_target {
+                    None => None,
+                    Some(target) => match target {
+                        NodeTarget::Node(id) => Some(*id),
+                        NodeTarget::UnmanagedNode(id) => self.find_ulid_for_pw_id(*id),
+                    }
+                },
+            },
+
             applications: {
                 let mut sources: HashMap<String, HashMap<String, Vec<Application>>> =
                     HashMap::new();
@@ -161,6 +179,14 @@ impl PipewireManager {
                             Some(Some(target)) => match target {
                                 NodeTarget::Node(id) => Some(AppTarget::Managed(id)),
                                 NodeTarget::UnmanagedNode(id) => Some(AppTarget::Unmanaged(id)),
+                            },
+                        },
+                        target_id: match application.media_target {
+                            None => None,
+                            Some(None) => None,
+                            Some(Some(target)) => match target {
+                                NodeTarget::Node(id) => Some(id),
+                                NodeTarget::UnmanagedNode(id) => self.find_ulid_for_pw_id(id),
                             },
                         },
                     };
@@ -211,33 +237,14 @@ impl PipewireManager {
         let mut initial_ready = false;
         let mut initial_ready_timer = Box::pin(sleep(Duration::from_secs(1)));
 
-        // So these are small timers which are set up when a new device is sent to us. Rather than
-        // immediately processing, we wait half a second to make sure the device doesn't disappear
-        // again as it's layout is being calculated, if this timer completes we should be safe to
-        // assume the device configuration has stabilised.
-        let mut device_timers: HashMap<u32, JoinHandle<()>> = HashMap::new();
-        let (device_ready_tx, mut device_ready_rx) = mpsc::channel(256);
-
-        // We do the same for Application nodes, the problem with ApplicationsList is that they will
-        // never arrive with their default route as that's sent 'later' by pipewire, but we also
-        // can't handle this on the pipewire side because there's a chance the route is *NEVER* sent
-        // if it's set to a default. So the goal is to just wait for 200ms after an application node
-        // arrives to see if a default route comes in. If the timeout expires assume it's a default
-        // otherwise handle the arrival when we get the default route.
+        // This is a simple timer for applications. Because they won't appear with their default
+        // routes, it's best to give them half a second for pipewire to read the data and propagate
+        // it. The Pipeweaver frontend will briefly wait before presenting it.
         let mut application_timers: HashMap<u32, JoinHandle<()>> = HashMap::new();
         let (application_ready_tx, mut application_ready_rx) = mpsc::channel(256);
 
-        // A simple list of nodes which have been discovered, but not flagged 'Ready'
-        let mut discovered_devices: HashMap<u32, DeviceNode> = HashMap::new();
+        // A simple list of applications which have been discovered, but not flagged 'Ready'
         let mut discovered_applications: HashMap<u32, ApplicationNode> = HashMap::new();
-
-        // Let the primary worker know we're ready
-        let _ = self
-            .ready_sender
-            .take()
-            .expect("Ready Sender Missing")
-            .send(());
-
         let mut requeue: Vec<PipewireReceiver> = vec![];
 
         // Pull out the Meter Receiver
@@ -246,6 +253,7 @@ impl PipewireManager {
 
         loop {
             select!(
+                biased;
                 Some(command) = self.command_receiver.recv() => {
                     match command {
                         ManagerMessage::Execute(command, tx) => {
@@ -254,7 +262,7 @@ impl PipewireManager {
                             // Map the result to a PW Response and send it
                             let _ = tx.send(match result {
                                 Ok(response) => response,
-                                Err(e) => APICommandResponse::Err(e.to_string())
+                                Err(e) => PWCommandResponse::Err(e.to_string())
                             });
                         }
                         ManagerMessage::GetAudioConfiguration(tx) => {
@@ -299,6 +307,14 @@ impl PipewireManager {
                                 error!("Error Loading Profile: {}", e);
                             }
                             loaded_profile = true;
+
+                            // Let the primary worker know we're ready
+                            let _ = self
+                                .ready_sender
+                                .take()
+                                .expect("Ready Sender Missing")
+                                .send(());
+
                             continue;
                         }
                     } else if !loaded_profile {
@@ -328,58 +344,189 @@ impl PipewireManager {
                         }
 
                         PipewireReceiver::DeviceAdded(node) => {
-                            // Only do this if we don't already have a timer
-                            if device_timers.contains_key(&node.node_id) {
-                                continue;
+                            debug!("Device Found: {:?}, Type: {:?}", node.description, node.node_class);
+
+                            // Create the 'Status' object
+                            let physical_node = PhysicalDevice {
+                                id: Ulid::new(),
+
+                                node_id: node.node_id,
+                                name: node.name.clone(),
+                                description: node.description.clone(),
+                                is_usable: node.is_usable,
+                                ports: enum_map!{
+                                    PortDirection::In => node.ports[Direction::In].iter().map(|port| PhysicalDevicePort {
+                                        name: port.name.clone(),
+                                        channel: port.channel.clone(),
+                                    }).collect(),
+                                    PortDirection::Out => node.ports[Direction::Out].iter().map(|port| PhysicalDevicePort {
+                                        name: port.name.clone(),
+                                        channel: port.channel.clone(),
+                                    }).collect(),
+                                }
+                            };
+
+                            let (is_source, is_target) = match node.node_class {
+                                MediaClass::Source => (true, false),
+                                MediaClass::Sink => (false, true),
+                                MediaClass::Duplex => (true, true),
+                            };
+
+                            if is_source {
+                                self.node_list[DeviceType::Source].push(physical_node.clone());
+                                if node.is_usable {
+                                    let sender = self.worker_sender.clone();
+                                    let _ = self.source_device_added(physical_node.clone(), sender.clone()).await;
+                                }
+                            }
+                            if is_target {
+                                self.node_list[DeviceType::Target].push(physical_node.clone());
+                                if node.is_usable {
+                                    let sender = self.worker_sender.clone();
+                                    let _ = self.target_device_added(physical_node, sender).await;
+                                }
                             }
 
-                            // While device information is being populated, a device can rapidly
-                            // switch between 'usable' and 'not usable'. To prevent incorrectly
-                            // attempting to use a device, we'll put it on a 500ms timer before
-                            // we actually process it, so it can first settle.
-
-                            let done = device_ready_tx.clone();
-
-                            // Spawn up a simple task that simply waits 500ms
-                            let handle = tokio::spawn(async move {
-                                sleep(Duration::from_millis(500)).await;
-                                let _ = done.send(node.node_id).await;
-                            });
-                            device_timers.insert(node.node_id, handle);
-                            discovered_devices.insert(node.node_id, node);
-                        }
-                        PipewireReceiver::DeviceUsable(id, usable) => {
-                            // Simply update the usable state if we're waiting for this device.
-                            if let Some(dev) = discovered_devices.get_mut(&id) {
-                                dev.is_usable = usable;
+                            // Add node to our definitive list
+                            self.device_nodes.insert(node.node_id, node);
+                            if self.worker_sender.capacity() > 0 {
+                                let _ = self.worker_sender.send(TransientChange).await;
                             }
                         }
                         PipewireReceiver::DeviceRemoved(id) => {
-                            if let Some(handle) = device_timers.remove(&id) {
-                                debug!("Device Disappeared During Grace Period: {}", id);
-                                discovered_devices.remove(&id);
-                                handle.abort();
-                            } else {
-                                debug!("Natural Device Removal: {}", id);
-                                if let Some(node) = self.device_nodes.remove(&id) {
-                                    match node.node_class {
-                                        MediaClass::Source => {
-                                            let _ = self.source_device_removed(id).await;
-                                        }
-                                        MediaClass::Sink => {
-                                            let _ = self.target_device_removed(id).await;
-                                        }
-                                        MediaClass::Duplex => {
-                                            let _ = self.source_device_removed(id).await;
-                                            let _ = self.target_device_removed(id).await;
+                            debug!("Device Removed: {}", id);
+                            if let Some(node) = self.device_nodes.remove(&id) {
+                                match node.node_class {
+                                    MediaClass::Source => {
+                                        let _ = self.source_device_removed(id).await;
+                                    }
+                                    MediaClass::Sink => {
+                                        let _ = self.target_device_removed(id).await;
+                                    }
+                                    MediaClass::Duplex => {
+                                        let _ = self.source_device_removed(id).await;
+                                        let _ = self.target_device_removed(id).await;
+                                    }
+                                }
+                                let _ = self.worker_sender.send(TransientChange).await;
+                            }
+                        }
+                        PipewireReceiver::DeviceUsable(id, usable) => {
+                            // TODO: I shouldn't need to call this anymore
+                            // The usability of a device is known as soon as it arrives, and isn't
+                            // updated during runtime anymore (I think?)
+
+                            if let Some(dev) = self.device_nodes.get_mut(&id) {
+                                if dev.is_usable == usable {
+                                    continue;
+                                }
+
+                                debug!("Usability Changed for Node {}: {} -> {}", id, dev.is_usable, usable);
+                                dev.is_usable = usable;
+
+                                let node_class = dev.node_class;
+
+                                // Create physical node for attachment
+                                let physical_node = PhysicalDevice {
+                                    id: Ulid::new(),
+
+                                    node_id: id,
+                                    name: dev.name.clone(),
+                                    description: dev.description.clone(),
+                                    is_usable: usable,
+
+                                    ports: enum_map!{
+                                        PortDirection::In => dev.ports[Direction::In].iter().map(|port| PhysicalDevicePort {
+                                            name: port.name.clone(),
+                                            channel: port.channel.clone(),
+                                        }).collect(),
+                                        PortDirection::Out => dev.ports[Direction::Out].iter().map(|port| PhysicalDevicePort {
+                                            name: port.name.clone(),
+                                            channel: port.channel.clone(),
+                                        }).collect(),
+                                    }
+                                };
+
+                                // Update node_list
+                                match node_class {
+                                    MediaClass::Source => {
+                                        if let Some(node) = self.node_list[DeviceType::Source]
+                                            .iter_mut()
+                                            .find(|n| n.node_id == id)
+                                        {
+                                            node.is_usable = usable;
                                         }
                                     }
-                                    let _ = self.worker_sender.send(TransientChange).await;
+                                    MediaClass::Sink => {
+                                        if let Some(node) = self.node_list[DeviceType::Target]
+                                            .iter_mut()
+                                            .find(|n| n.node_id == id)
+                                        {
+                                            node.is_usable = usable;
+                                        }
+                                    }
+                                    MediaClass::Duplex => {
+                                        if let Some(node) = self.node_list[DeviceType::Source]
+                                            .iter_mut()
+                                            .find(|n| n.node_id == id)
+                                        {
+                                            node.is_usable = usable;
+                                        }
+                                        if let Some(node) = self.node_list[DeviceType::Target]
+                                            .iter_mut()
+                                            .find(|n| n.node_id == id)
+                                        {
+                                            node.is_usable = usable;
+                                        }
+                                    }
+                                }
+
+                                // Handle connection/disconnection based on usability
+                                if usable {
+                                    // Device became usable, connect it
+                                    match node_class {
+                                        MediaClass::Source => {
+                                            let sender = self.worker_sender.clone();
+                                            let _ = self.source_device_added(physical_node, sender).await;
+                                        }
+                                        MediaClass::Sink => {
+                                            let sender = self.worker_sender.clone();
+                                            let _ = self.target_device_added(physical_node, sender).await;
+                                        }
+                                        MediaClass::Duplex => {
+                                            let sender = self.worker_sender.clone();
+                                            let _ = self.source_device_added(physical_node.clone(), sender.clone()).await;
+                                            let _ = self.target_device_added(physical_node, sender).await;
+                                        }
+                                    }
+                                } else {
+                                    // Device became unusable, disconnect it
+                                    match node_class {
+                                        MediaClass::Source => {
+                                            let _ = self.source_device_disconnect(id).await;
+                                        }
+                                        MediaClass::Sink => {
+                                            let _ = self.target_device_disconnect(id).await;
+                                        }
+                                        MediaClass::Duplex => {
+                                            let _ = self.source_device_disconnect(id).await;
+                                            let _ = self.target_device_disconnect(id).await;
+                                        }
+                                    }
                                 }
                             }
+                            let _ = self.worker_sender.send(TransientChange).await;
                         }
                         PipewireReceiver::ManagedLinkDropped(source, target) => {
                             warn!("Managed Link Removed: {:?} {:?}, reestablishing", source, target);
+
+                            // This can happen and be flagged if pipewire has failed to create a link,
+                            // often this is caused due to it being unable to create a buffer due to
+                            // a huge volume of links being sent at once. Before sending the new
+                            // request, we need to wait for a moment for pipewire to catch up,
+                            // otherwise we may end up with dodgy links or other problems.
+                            sleep(Duration::from_millis(100)).await;
+
                             if let Err(e) = self.link_create_type_to_type(source, target).await {
                                 warn!("Unable to reestablish link: {}", e);
                             }
@@ -502,50 +649,6 @@ impl PipewireManager {
                     self.sync_all_pipewire_volumes().await;
                     self.sync_all_pipewire_mutes().await;
                     initial_ready = true;
-                }
-                Some(node_id) = device_ready_rx.recv() => {
-                    // A device has been sat here for 500ms, lets do the processing.
-                    if let Some(device) = discovered_devices.remove(&node_id) {
-                        debug!("Device Found: {:?}, Type: {:?}", device.description, device.node_class);
-                        device_timers.remove(&node_id);
-
-                        // Create the 'Status' object
-                        let node = PhysicalDevice {
-                            node_id: device.node_id,
-                            name: device.name.clone(),
-                            description: device.description.clone(),
-                            is_usable: device.is_usable,
-                        };
-
-                        let (is_source, is_target) = match device.node_class {
-                            MediaClass::Source => (true, false),
-                            MediaClass::Sink => (false, true),
-                            MediaClass::Duplex => (true, true),
-                        };
-
-                        if is_source {
-                            self.node_list[DeviceType::Source].push(node.clone());
-                            if node.is_usable {
-                                let sender = self.worker_sender.clone();
-                                let _ = self.source_device_added(node.clone(), sender.clone()).await;
-                            }
-                        }
-                        if is_target {
-                            self.node_list[DeviceType::Target].push(node.clone());
-                            if node.is_usable {
-                                let sender = self.worker_sender.clone();
-                                let _ = self.target_device_added(node, sender).await;
-                            }
-                        }
-
-                        // Add node to our definitive list
-                        self.device_nodes.insert(device.node_id, device);
-                        if self.worker_sender.capacity() > 0 {
-                            let _ = self.worker_sender.send(TransientChange).await;
-                        }
-                    } else {
-                        panic!("Got a Timer Ready for non-existent Node");
-                    }
                 }
                 Some(node_id) = application_ready_rx.recv() => {
                     // An Application has been hanging around for 200ms without receiving a route,

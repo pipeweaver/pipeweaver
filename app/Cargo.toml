@@ -1,0 +1,36 @@
+[package]
+name = "pipeweaver-app"
+description = "A UI Wrapper app for Pipeweaver"
+
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+build = "build.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+log = { workspace = true }
+env_logger = "0.11.10"
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+directories = { workspace = true }
+
+qmetaobject = { version = "0.2.10", features = ["webengine"] }
+qttypes = "0.2.12"
+open = "5.3.3"
+
+tungstenite = "0.29.0"
+cpp = "0.5.11"
+libc = "0.2.184"
+zbus = "5.14.0"
+
+[build-dependencies]
+semver = "1"
+cpp_build = "0.5"
+pkg-config = "0.3.32"

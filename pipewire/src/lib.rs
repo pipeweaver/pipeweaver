@@ -6,6 +6,7 @@ mod store;
 
 use crate::manager::run_pw_main_loop;
 use anyhow::{Result, anyhow, bail};
+use enum_map::{Enum, EnumMap};
 use log::{info, trace, warn};
 use oneshot::TryRecvError;
 use pipeweaver_shared::{FilterProperty, FilterValue};
@@ -14,6 +15,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::thread::{JoinHandle, sleep};
 use std::time::{Duration, Instant};
+use strum_macros::EnumIter;
 use ulid::Ulid;
 
 type PWSender = pipewire::channel::Sender<PipewireInternalMessage>;
@@ -42,6 +44,8 @@ pub enum PipewireMessage {
     SetApplicationVolume(u32, u8),
     SetApplicationMute(u32, bool),
     ClearApplicationTarget(u32),
+
+    SetDefaultDevice(MediaClass, NodeTarget),
 
     DestroyUnmanagedLinks(u32),
 
@@ -73,6 +77,8 @@ pub enum PipewireInternalMessage {
     SetApplicationTarget(u32, Ulid, oneshot::Sender<Result<()>>),
     ClearApplicationTarget(u32, oneshot::Sender<Result<()>>),
 
+    SetDefaultDevice(MediaClass, NodeTarget, oneshot::Sender<Result<()>>),
+
     DestroyUnmanagedLinks(u32, oneshot::Sender<Result<()>>),
     Quit(oneshot::Sender<Result<()>>),
 }
@@ -86,8 +92,8 @@ pub enum PipewireReceiver {
     DefaultChanged(MediaClass, NodeTarget),
 
     DeviceAdded(DeviceNode),
-    DeviceUsable(u32, bool),
     DeviceRemoved(u32),
+    DeviceUsable(u32, bool),
 
     ApplicationAdded(ApplicationNode),
     ApplicationTargetChanged(u32, Option<NodeTarget>),
@@ -208,6 +214,9 @@ impl PipewireRunner {
             }
             PipewireMessage::SetApplicationMute(id, state) => {
                 PipewireInternalMessage::SetApplicationMute(id, state, tx)
+            }
+            PipewireMessage::SetDefaultDevice(class, target) => {
+                PipewireInternalMessage::SetDefaultDevice(class, target, tx)
             }
             PipewireMessage::ClearApplicationTarget(id) => {
                 PipewireInternalMessage::ClearApplicationTarget(id, tx)
@@ -352,11 +361,23 @@ pub enum MediaClass {
     Duplex,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, Enum, EnumIter)]
+pub enum Direction {
+    In,
+    Out,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum LinkType {
     Node(Ulid),
     Filter(Ulid),
-    UnmanagedNode(u32),
+    UnmanagedNode(u32, Option<LinkPorts>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinkPorts {
+    left: String,
+    right: String,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -384,6 +405,14 @@ pub struct DeviceNode {
     pub name: Option<String>,
     pub nickname: Option<String>,
     pub description: Option<String>,
+
+    pub ports: EnumMap<Direction, Vec<NodePort>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodePort {
+    pub name: String,
+    pub channel: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]

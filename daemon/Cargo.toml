@@ -32,11 +32,12 @@ pipeweaver-pipewire = { path = "../pipewire" }
 pipeweaver-shared = { path = "../shared" }
 
 ### Portal / Autostart Handling
-ashpd = "0.12.0"
+ashpd = { version = "0.13.9", features = ["background"] }
 rust-ini = "0.21.3"
 
 ### Logging
 file-rotate = "0.8.0"
+log-panics = "2.1.0"
 
 ### Enum Handling
 enum-map = { workspace = true }
@@ -49,11 +50,14 @@ directories = "6.0.0"
 simplelog = "0.12.2"
 
 ### Async Runtime ###
-tokio = { version = "1.41.1", features = ["rt-multi-thread", "sync", "macros"] }
+tokio = { workspace = true }
+
+### CLI
+clap = { workspace = true }
 
 ### HTTP Server ###
-actix-web = { version = "4.12.1", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "ws"] }
-actix-ws = "0.3.0"
+actix-web = { version = "4.13.0", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "ws"] }
+actix-ws = "0.4.0"
 actix-cors = "0.7.1"
 futures-lite = "2.6.1"
 mime_guess = "2.0.5"
@@ -64,27 +68,28 @@ include_dir = "0.7.4"
 # fork fixes that, and allows cleaner fallthrough, allowing it to retry when the service appears.
 ksni = "0.3.3"
 
-image = "0.25.9"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 open = "5.3.3"
-which = "8.0.0"
-
-### LV2 Support?
-lilv-sys = { version = "0.2.1", optional = true }
+which = "8.0.2"
 
 ## Ok, Build Stuff Time :D
 [package.metadata.deb]
 name = "pipeweaver"
 assets = [
     ["../target/release/pipeweaver-daemon", "usr/bin/", "755"],
+    ["../target/release/pipeweaver-client", "usr/bin/", "755"],
+    ["../target/release/pipeweaver-app", "usr/bin/", "755"],
     ["../daemon/resources/icons/pipeweaver.png", "usr/share/icons/hicolor/48x48/apps/", "644"],
     ["../daemon/resources/icons/pipeweaver-large.png", "usr/share/pixmaps/pipeweaver.png", "644"],
     ["../daemon/resources/icons/pipeweaver.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["../daemon/resources/desktop/pipeweaver.desktop", "usr/share/applications/", "644"],
+    ["../app/resources/pipeweaver-app.desktop", "usr/share/applications/", "644"],
 ]
 
 section = "sound"
 priority = "optional"
-depends = "$auto"
+depends = "pipewire (>=1.0.5), libqt6webenginewidgets6 (>= 6.2.0), qml6-module-qtwebengine (>= 6.2.0), qml6-module-qtquick-controls (>= 6.2.0), qml6-module-qtquick (>= 6.2.0), qml6-module-qtqml-workerscript (>= 6.2.0), qml6-module-qtquick-window (>= 6.2.0), qml6-module-qtquick-templates (>= 6.2.0)"
+conflicts = "pipeweaver-app"
 extended-description = """\
 A tool for audio control and routing via Pipewire
 """
@@ -94,10 +99,13 @@ revision = "1"
 name = "pipeweaver"
 assets = [
     { source = "../target/release/pipeweaver-daemon", dest = "/usr/bin/pipeweaver-daemon", mode = "0755" },
+    { source = "../target/release/pipeweaver-client", dest = "/usr/bin/pipeweaver-client", mode = "0755" },
+    { source = "../target/release/pipeweaver-app", dest = "/usr/bin/pipeweaver-app", mode = "0755" },
     { source = "../daemon/resources/icons/pipeweaver.png", dest = "/usr/share/icons/hicolor/48x48/apps/pipeweaver.png", mode = "0644" },
     { source = "../daemon/resources/icons/pipeweaver-large.png", dest = "/usr/share/pixmaps/pipeweaver.png", mode = "0644" },
     { source = "../daemon/resources/icons/pipeweaver.svg", dest = "/usr/share/icons/hicolor/scalable/apps/pipeweaver.svg", mode = "0644" },
     { source = "../daemon/resources/desktop/pipeweaver.desktop", dest = "/usr/share/applications/pipeweaver.desktop", mode = "0644" },
+    { source = "../app/resources/pipeweaver-app.desktop", dest = "/usr/share/applications/pipeweaver-app.desktop", mode = "0644" },
 ]
 
 # Because we build under Ubuntu in CI, generate-rpm is unable to calculate the dependencies required (no access
@@ -105,4 +113,8 @@ assets = [
 auto-req = "no"
 
 [package.metadata.generate-rpm.requires]
+qt6-qtwebengine = ">= 6.2.0"
 pipewire = ">= 1.0.5"   # Should be Fedora 40+
+
+[package.metadata.generate-rpm.conflicts]
+pipeweaver-app = "*"

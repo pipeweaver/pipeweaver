@@ -8,6 +8,18 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-clap = { version = "4.5.53", features = ["derive"] }
+anyhow = { workspace = true }
+clap = { workspace = true }
+
+tokio = { workspace = true }
+serde_json = { workspace = true }
+
+### Project Paths
+directories = { workspace = true }
+
+interprocess = { workspace = true }
+
+pipeweaver-shared = { path = "../shared" }
+pipeweaver-ipc = { path = "../ipc" }
 
 [build-dependencies]

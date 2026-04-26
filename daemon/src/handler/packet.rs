@@ -1,9 +1,10 @@
 use anyhow::{Context, Result, anyhow};
+use log::error;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 
 use crate::handler::messaging::DaemonMessage;
-use pipeweaver_ipc::commands::{DaemonRequest, DaemonResponse};
+use pipeweaver_ipc::commands::{DaemonRequest, DaemonResponse, PWCommandResponse};
 
 pub type Messenger = Sender<DaemonMessage>;
 type Response = Result<DaemonResponse>;
@@ -11,7 +12,7 @@ type Response = Result<DaemonResponse>;
 /// This is pretty similar to the GoXLR Utility, as very little really needs to change here.
 pub async fn handle_packet(request: DaemonRequest, sender: &Messenger) -> Response {
     // Ok, we just match the request, and send it off where it needs to go..
-    match request {
+    let response = match request {
         DaemonRequest::Ping => Ok(DaemonResponse::Ok),
         DaemonRequest::GetStatus => {
             let (tx, rx) = oneshot::channel();
@@ -47,5 +48,17 @@ pub async fn handle_packet(request: DaemonRequest, sender: &Messenger) -> Respon
             let result = rx.await.context("Error from Device Manager")?;
             Ok(DaemonResponse::Pipewire(result))
         }
+    };
+
+    match &response {
+        Ok(DaemonResponse::Pipewire(PWCommandResponse::Err(e))) => {
+            error!("Pipewire Command Failed: {}", e);
+        }
+        Err(e) => {
+            error!("IPC Command Failed: {}", e);
+        }
+        _ => {}
     }
+
+    response
 }
