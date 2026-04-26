@@ -72,6 +72,9 @@ image = { version = "0.25.10", default-features = false, features = ["png"] }
 open = "5.3.3"
 which = "8.0.2"
 
+### LV2 Support?
+lilv-sys = { version = "0.2.1", optional = true }
+
 ## Ok, Build Stuff Time :D
 [package.metadata.deb]
 name = "pipeweaver"

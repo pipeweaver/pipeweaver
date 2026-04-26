@@ -1,7 +1,7 @@
 use crate::handler::pipewire::components::application::ApplicationManagement;
 use crate::handler::pipewire::components::defaults::DefaultHandlers;
-use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::filters::FilterManagement;
+use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::mute::MuteManager;
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
@@ -9,7 +9,6 @@ use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{Error, bail};
-use log::debug;
 use pipeweaver_ipc::commands::{APICommand, PWCommandResponse};
 use pipeweaver_shared::MuteState::{Muted, Unmuted};
 use pipeweaver_shared::{Mix, NodeType};
