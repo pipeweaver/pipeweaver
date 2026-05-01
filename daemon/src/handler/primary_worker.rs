@@ -409,8 +409,8 @@ pub fn get_ui_app_path() -> Option<PathBuf> {
 }
 
 async fn set_autostart(enabled: bool) -> Result<()> {
-    if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
-        println!("Running inside Flatpak, using Background Portal");
+    if ashpd::is_sandboxed() {
+        println!("Running inside Sandbox, using Background Portal");
 
         let reason = "Run Pipeweaver on Startup";
         let request = Background::request()
@@ -435,7 +435,7 @@ async fn set_autostart(enabled: bool) -> Result<()> {
         };
         Ok(())
     } else {
-        debug!("Running Outside Flatpak, manually handling");
+        debug!("Running Outside Sandbox, manually handling");
         match get_autostart_file() {
             Ok(path) => {
                 if path.exists() {
@@ -494,7 +494,7 @@ pub fn get_autostart_file() -> Result<PathBuf> {
     let file_path = PathBuf::from(&config_dir).join("autostart").join(filename);
 
     // If we're in the sandbox environment, we're already good.
-    if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
+    if ashpd::is_sandboxed() {
         return Ok(file_path);
     }
 
