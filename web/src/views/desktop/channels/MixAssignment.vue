@@ -1,6 +1,13 @@
 <script>
+import {Theme} from "@/app/theme.js";
+
 export default {
   name: "MixAssignment",
+  computed: {
+    Theme() {
+      return Theme
+    }
+  },
 
   props: {
     isMixA: {type: Boolean, required: true}
@@ -19,7 +26,7 @@ export default {
     <!-- Sliding background -->
     <div
       :class="isMixA ? 'left' : 'right'"
-      :style="{ backgroundColor: isMixA ? '#59b1b6' : '#E07C24' }"
+      :style="{ backgroundColor: isMixA ? Theme.cyan : Theme.orange }"
       class="slider"
     ></div>
 
@@ -71,7 +78,8 @@ label {
   position: relative;
   user-select: none;
   transition: color 0.3s;
-  line-height: 26px;
+  line-height: 24px;
+  font-weight: bold;
 }
 
 label input {

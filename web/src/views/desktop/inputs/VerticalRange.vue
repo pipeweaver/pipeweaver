@@ -37,8 +37,8 @@ export default {
     id: {type: String, required: true},
 
     // Colours for the thumb and 'active' section, and the unselected colour
-    selectedColour: {type: String, required: false, default: '#82CFD0'},
-    deselectedColour: {type: String, required: false, default: '#000000'},
+    selectedColour: {type: String, required: false, default: '#FFFFFF'},
+    deselectedColour: {type: String, required: false, default: '#FFFFFF'},
 
     // The value to report to Screen Readers
     ariaValue: {type: String, required: true},
@@ -161,10 +161,6 @@ export default {
     currentValue: function (newValue) {
       this.localFieldValue = newValue
     },
-
-    selectedColour: function (newValue) {
-      this.meterColour = this.calcColour(50);
-    }
   },
 
   computed: {
@@ -186,7 +182,7 @@ export default {
   },
 
   mounted() {
-    this.meterColour = this.calcColour(50);
+    this.meterColour = this.calcColour(95);
 
     this.localFieldValue = this.currentValue
     this.meterContext = this.$refs.meter.getContext('2d', {

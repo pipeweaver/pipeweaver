@@ -1,14 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+
+:root {
+    --bg: #111418;
+    --panel: #0F151D;
+    --mix-background: linear-gradient(#1C242E, #131A22);
+    --mix-button-background: linear-gradient(#1C242E, #131A22);
+    --mix-button-muted: linear-gradient(rgba(255, 0, 0, 0.2), rgba(255, 0, 0, 0.1));
+    --border: 1px solid rgba(255, 255, 255, 0.20);
+    --text: #cacaca;
+    --cyan: #4fd7ff;
+    --orange: #FC9938;
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
 body {
-    background-color: #252927;
+    background-color: var(--bg);
+    font-family: var(--font-sans);
+    color: var(--text);
     margin: 0;
     padding: 0;
 }
 
 #app {
-    font-family: sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    color: #fff;
     font-size: 0.8em;
     user-select: none;
 }
