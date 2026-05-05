@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
 
 :root {
-    --bg: #111418;
+    --bg: #1b1e29;
     --panel: #0F151D;
     --mix-background: linear-gradient(#1C242E, #131A22);
     --mix-button-background: linear-gradient(#1C242E, #131A22);
