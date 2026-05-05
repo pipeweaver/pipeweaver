@@ -45,6 +45,7 @@ export default {
 
 <style scoped>
 .radio-container {
+  border-top: 1px solid #666666;
   border-bottom: 1px solid #666666;
   position: relative;
   display: flex;
@@ -78,7 +79,8 @@ label {
   position: relative;
   user-select: none;
   transition: color 0.3s;
-  line-height: 24px;
+  height: 23px;
+  align-content: center;
   font-weight: bold;
 }
 
