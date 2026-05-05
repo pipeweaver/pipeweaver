@@ -8,7 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-pipeweaver-shared = { path = "../shared" }
+pipeweaver-shared = { path = "../shared", features = ["serde", "enum-map"] }
 
 serde = { workspace = true }
 

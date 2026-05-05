@@ -1,15 +1,26 @@
+#[cfg(feature = "clap")]
 use clap::ValueEnum;
+
+#[cfg(feature = "enum-map")]
 use enum_map::Enum;
+
+#[cfg(feature = "strum")]
+use strum_macros::{Display, EnumIter};
+
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
 use std::fmt;
 use std::fmt::Debug;
 use std::str::FromStr;
-use strum_macros::{Display, EnumIter};
+
 use ulid::Ulid;
 
-#[derive(
-    Debug, Display, Copy, Clone, PartialEq, Enum, EnumIter, Serialize, Deserialize, ValueEnum,
-)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "strum", derive(Display, EnumIter))]
+#[cfg_attr(feature = "enum-map", derive(Enum))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "clap", derive(ValueEnum))]
 pub enum NodeType {
     PhysicalSource,
     PhysicalTarget,
@@ -17,76 +28,66 @@ pub enum NodeType {
     VirtualTarget,
 }
 
-#[derive(
-    Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq, ValueEnum,
-)]
+#[derive(Default, Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "strum", derive(Display, EnumIter))]
+#[cfg_attr(feature = "enum-map", derive(Enum))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "clap", derive(ValueEnum))]
 pub enum Mix {
     #[default]
     A,
     B,
 }
 
-#[derive(
-    Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq, ValueEnum,
-)]
+#[derive(Default, Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "strum", derive(Display, EnumIter))]
+#[cfg_attr(feature = "enum-map", derive(Enum))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "clap", derive(ValueEnum))]
 pub enum DeviceType {
     #[default]
     Source,
     Target,
 }
 
-#[derive(
-    Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, PartialEq, ValueEnum,
-)]
+#[derive(Default, Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "strum", derive(Display, EnumIter))]
+#[cfg_attr(feature = "enum-map", derive(Enum))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "clap", derive(ValueEnum))]
 pub enum PortDirection {
     #[default]
     In,
     Out,
 }
 
-#[derive(
-    Default, Debug, Copy, Clone, Enum, EnumIter, Serialize, Deserialize, Eq, PartialEq, ValueEnum,
-)]
+#[derive(Default, Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "strum", derive(Display, EnumIter))]
+#[cfg_attr(feature = "enum-map", derive(Enum))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "clap", derive(ValueEnum))]
 pub enum MuteState {
     #[default]
     Unmuted,
     Muted,
 }
 
-#[derive(
-    Default,
-    Debug,
-    Copy,
-    Clone,
-    Hash,
-    Enum,
-    EnumIter,
-    Serialize,
-    Deserialize,
-    Eq,
-    PartialEq,
-    ValueEnum,
-)]
+#[derive(Default, Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "strum", derive(Display, EnumIter))]
+#[cfg_attr(feature = "enum-map", derive(Enum))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "clap", derive(ValueEnum))]
 pub enum MuteTarget {
     #[default]
     TargetA,
     TargetB,
 }
 
-#[derive(
-    Default,
-    Debug,
-    Copy,
-    Clone,
-    Hash,
-    Enum,
-    EnumIter,
-    Serialize,
-    Deserialize,
-    Eq,
-    PartialEq,
-    ValueEnum,
-)]
+#[derive(Default, Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "strum", derive(Display, EnumIter))]
+#[cfg_attr(feature = "enum-map", derive(Enum))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "clap", derive(ValueEnum))]
 pub enum OrderGroup {
     #[default]
     Default,
@@ -94,7 +95,11 @@ pub enum OrderGroup {
     Hidden,
 }
 
-#[derive(Default, Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq, ValueEnum)]
+#[derive(Default, Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "strum", derive(Display, EnumIter))]
+#[cfg_attr(feature = "enum-map", derive(Enum))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "clap", derive(ValueEnum))]
 pub enum Quantum {
     Quantum8,
     Quantum16,
@@ -140,20 +145,25 @@ impl From<u32> for Quantum {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "strum", derive(Display, EnumIter))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum AppTarget {
     Managed(Ulid),
     Unmanaged(u32),
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct AppDefinition {
     pub device_type: DeviceType,
     pub process: String,
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "enum-map", derive(Enum))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Colour {
     pub red: u8,
     pub green: u8,
