@@ -47,6 +47,14 @@ export default {
       return "#59b1b6";
     },
 
+    getColour: function (target) {
+      let dev = get_device_by_id(target.id);
+      let colour = dev.description.colour;
+      let base = `rgba(${colour.red}, ${colour.green}, ${colour.blue}, 0.6)`
+
+      return base;
+    },
+
     handleClick: function (source, target) {
       // SetRoute(Ulid, Ulid, bool)
       let enabled = !this.isEnabled(source, target);
@@ -69,7 +77,12 @@ export default {
       </tr>
       <tr class="subHeader">
         <th class="hidden" colspan="2">&nbsp;</th>
-        <th v-for="source in getFullSourceList()" :key="source">{{ source.name }}</th>
+        <th v-for="source in getFullSourceList()" :key="source"
+            :style="{
+              background: `linear-gradient(to top, ${getColour(source)}, #131A22)`
+            }">
+          {{ source.name }}
+        </th>
       </tr>
       </thead>
       <tr v-for="(target, index) of getFullTargetList(true)" :key="target">
@@ -80,7 +93,11 @@ export default {
         </th>
 
         <!-- Output the Channel Name -->
-        <th>{{ target.name }}</th>
+        <th :style="{
+          background: `linear-gradient(to left, ${getColour(target)}, #131A22)`
+
+  }">{{ target.name }}
+        </th>
 
         <!-- Output the Source cells for this Target -->
         <RoutingCell v-for="source in getFullSourceList()" :key="source"
@@ -94,47 +111,74 @@ export default {
 
 <style scoped>
 .routing {
-  background-color: #212624;
   margin: auto;
   width: fit-content;
 
   padding: 15px;
   display: flex;
   flex-direction: row;
-  gap: 15px;
 }
 
 
 table {
-  color: #fff;
-  font-stretch: condensed;
-  border-spacing: 4px;
-  border-collapse: separate;
+  border-spacing: 0;
 }
 
 th {
   font-weight: normal;
-  padding: 6px;
+  padding: 10px;
 }
 
-thead th:not(.subHeader) {
-  background-color: #3b413f;
+thead tr:not(.subHeader) th {
+  text-transform: uppercase;
+  color: var(--cyan);
+  text-shadow: 0 0 4px var(--cyan);
+  letter-spacing: 0.20em;
+  background-color: transparent;
+  font-weight: bold;
+  border: none !important;
 }
 
 thead .subHeader th {
-  background-color: #353937;
   min-width: 75px;
+  font-weight: bold;
+}
+
+thead tr.subHeader th:nth-child(2) {
+  border-top-left-radius: 8px;
+}
+
+thead tr.subHeader th:last-child {
+  border-top-right-radius: 8px;
+}
+
+tr th:nth-child(2) {
+  border-top-left-radius: 8px;
+}
+
+tr:last-child th:nth-child(1) {
+  border-bottom-left-radius: 8px;
+}
+
+tr {
+  /* We set this so cells can be 100% height */
+  height: 1px;
 }
 
 tr th {
-  background-color: #353937;
+  border: var(--border);
+  font-weight: bold;
 }
 
-
 .rotated {
-  background-color: #3b413f;
-  text-align: center;
+  text-transform: uppercase;
+  color: var(--cyan);
+  text-shadow: 0 0 4px var(--cyan);
+  letter-spacing: 0.20em;
+  background-color: transparent;
+  font-weight: bold;
   width: 15px;
+  border: none !important;
 }
 
 .rotated span {
@@ -144,6 +188,7 @@ tr th {
 }
 
 .hidden {
-  background-color: transparent !important;
+  background: transparent none !important;
+  border: none !important;
 }
 </style>
