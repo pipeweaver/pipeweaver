@@ -114,7 +114,6 @@ async function switchTab(tab) {
   display: flex;
   gap: 2px;
   border-bottom: 2px solid #3b413f;
-  margin-bottom: 10px;
   flex-shrink: 0;
 }
 
