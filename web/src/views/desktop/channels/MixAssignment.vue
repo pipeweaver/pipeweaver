@@ -79,7 +79,8 @@ label {
   position: relative;
   user-select: none;
   transition: color 0.3s;
-  height: 23px;
+  padding-top: 5px;
+  padding-bottom: 5px;
   align-content: center;
   font-weight: bold;
 }

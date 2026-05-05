@@ -688,8 +688,7 @@ export default {
 
 .mute .buttons button span {
   display: inline-block;
-  margin-left: 4px;
-  margin-right: 5px;
+  margin: 6px 5px 6px 4px;
 }
 
 .mute .buttons button span img {
@@ -718,7 +717,8 @@ export default {
 
 .mute .buttons div:last-child,
 .mute .buttons button:last-child {
-  padding: 4px;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .mute :last-child > div,
