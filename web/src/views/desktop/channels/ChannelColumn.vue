@@ -484,7 +484,7 @@ export default {
   inset: 0;
 
   background: radial-gradient(circle at top, v-bind(colour), transparent 60%);
-  opacity: 0.04;
+  opacity: 0.045;
 
   pointer-events: none;
 }
