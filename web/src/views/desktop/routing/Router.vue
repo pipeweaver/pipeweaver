@@ -113,8 +113,8 @@ export default {
 .routing {
   margin: auto;
   width: fit-content;
+  padding-bottom: 10px;
 
-  padding: 15px;
   display: flex;
   flex-direction: row;
 }
