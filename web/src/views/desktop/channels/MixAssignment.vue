@@ -45,14 +45,13 @@ export default {
 
 <style scoped>
 .radio-container {
-  border-top: 1px solid #666666;
-  border-bottom: 1px solid #666666;
+  border-top: var(--border);
+  border-bottom: var(--border);
   position: relative;
   display: flex;
   width: 100%;
-  background-color: rgba(80, 80, 80, 0.6);
+  background-color: rgba(60, 60, 60, 1);
   overflow: hidden;
-  font-family: sans-serif;
 }
 
 .slider {
@@ -79,10 +78,10 @@ label {
   position: relative;
   user-select: none;
   transition: color 0.3s;
-  padding-top: 5px;
-  padding-bottom: 5px;
   align-content: center;
   font-weight: bold;
+  margin-top: 6px;
+  margin-bottom: 6px;
 }
 
 label input {
