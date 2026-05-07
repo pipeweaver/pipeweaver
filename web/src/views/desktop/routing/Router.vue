@@ -47,10 +47,10 @@ export default {
       return "#59b1b6";
     },
 
-    getColour: function (target) {
+    getColour: function (target, opacity = 0.1) {
       let dev = get_device_by_id(target.id);
       let colour = dev.description.colour;
-      let base = `rgba(${colour.red}, ${colour.green}, ${colour.blue}, 0.6)`
+      let base = `rgba(${colour.red}, ${colour.green}, ${colour.blue}, ${opacity})`
 
       return base;
     },
@@ -79,7 +79,8 @@ export default {
         <th class="hidden" colspan="2">&nbsp;</th>
         <th v-for="source in getFullSourceList()" :key="source"
             :style="{
-              background: `linear-gradient(to top, ${getColour(source)}, #131A22)`
+              background: `linear-gradient(to top, ${getColour(source)}, #1C242E)`,
+              boxShadow: `inset 0 -3px 0 ${getColour(source, 1)}`,
             }">
           {{ source.name }}
         </th>
@@ -94,9 +95,10 @@ export default {
 
         <!-- Output the Channel Name -->
         <th :style="{
-          background: `linear-gradient(to left, ${getColour(target)}, #131A22)`
-
-  }">{{ target.name }}
+          background: `linear-gradient(to left, ${getColour(target)}, #1C242E, #1C242E)`,
+          boxShadow: `inset -3px 0 0 ${getColour(target, 1)}`,
+        }">
+          {{ target.name }}
         </th>
 
         <!-- Output the Source cells for this Target -->
