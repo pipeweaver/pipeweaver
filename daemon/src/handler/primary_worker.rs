@@ -82,8 +82,6 @@ impl PrimaryWorker {
             }
 
             info!("[PrimaryWorker] Starting Primary Worker");
-            info!("[PrimaryWorker] Loading Profile");
-
             let profile = self.load_profile(&profile_path);
 
             // Used to pass messages into the Pipewire Manager
@@ -313,7 +311,7 @@ impl PrimaryWorker {
     }
 
     fn load_profile(&self, path: &PathBuf) -> Profile {
-        info!("[Profile] Loading");
+        info!("[Profile] Loading from {:?}", path);
         let mut profile = match File::open(path) {
             Ok(reader) => {
                 let settings = serde_json::from_reader(reader);
