@@ -11,6 +11,7 @@ import PhysicalDeviceSelector from "@/views/desktop/channels/DevicePopup.vue";
 import DevicePopup from "@/views/desktop/channels/DevicePopup.vue";
 import ColourPicker from "@/views/desktop/components/ColourPicker.vue";
 import FilterView from "@/views/desktop/filters/FilterView.vue";
+import {Theme} from "@/app/theme.js";
 
 export default {
   name: 'ChannelColumn',
@@ -194,9 +195,9 @@ export default {
     getMixAColour: function () {
       // If the channel doesn't have a Mix B, check it's assigned mix
       if (!this.hasMix() && this.isActiveMix("B")) {
-        return "#E07C24";
+        return Theme.orange;
       }
-      return "#59b1b6";
+      return Theme.cyan;
     },
 
     volume_changed: function (mix, force, e) {
@@ -346,6 +347,9 @@ export default {
     }
   },
   computed: {
+    Theme() {
+      return Theme
+    },
     colour: function () {
       let colour = this.getColour()
       return `rgb(${colour.red}, ${colour.green}, ${colour.blue})`
@@ -365,7 +369,7 @@ export default {
     },
 
     topHeight: function () {
-      return '7px'
+      return '4px'
     }
   },
 }
@@ -391,10 +395,9 @@ export default {
         <font-awesome-icon :icon="['fas', 'grip-vertical']"/>
       </div>
       <div class="name">{{ getChannelName() }}</div>
-      <div class="end" :class="needsDevice() ? 'glow-box' : ''">
-        <DevicePopup id="select_device" :filter_callback="filter_clicked"
-                     :colour_callback="colour_clicked" :device_id="id"
-                     :order_group='order_group'
+      <div class="end" :class="{ glowing: needsDevice() }">
+        <DevicePopup id="select_device" :colour_callback="colour_clicked" :device_id="id"
+                     :order_group='order_group' :filter_callback="filter_clicked"
                      :type='type'/>
       </div>
     </div>
@@ -407,7 +410,7 @@ export default {
           :colour1="getMixAColour()"
           :current-value="getVolume()"
           :height="this.slider_height"
-          colour2="#252927"
+          :colour2="Theme.meter_base"
           @change="event => volume_changed('A', false, event)"
           @input="event => volume_changed('A', true, event)"
         />
@@ -416,8 +419,8 @@ export default {
           :id="this.id"
           :current-value="getMixVolume()"
           :height="this.slider_height"
-          colour1="#E07C24"
-          colour2="#252927"
+          :colour1="Theme.orange"
+          :colour2="Theme.meter_base"
 
           @change="event => volume_changed('B', false, event)"
           @input="event => volume_changed('B', true, event)"
@@ -473,12 +476,25 @@ export default {
 .mix {
   height: 100%;
   min-width: 150px;
-  background-color: #353937;
-  border: 1px solid #666666;
+  background: var(--mix-background);
+  border: var(--border);
   border-radius: 3px 3px 0 0;
+
+  position: relative;
 
   display: flex;
   flex-direction: column;
+}
+
+.mix::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background: radial-gradient(circle at top, v-bind(colour), transparent 60%);
+  opacity: 0.045;
+
+  pointer-events: none;
 }
 
 .title {
@@ -503,35 +519,27 @@ export default {
 }
 
 .title .end {
-  width: 20px;
-}
-
-.glow-box {
-  width: 20px;
-  height: 18px;
   position: relative;
-  border-radius: 50%;
-  overflow: visible; /* important: we control containment manually */
-  cursor: pointer;
 
-  background: radial-gradient(
-    circle at center,
-    rgba(255, 200, 0, 1) 0%,
-    rgba(255, 140, 0, 0.8) 40%,
-    rgba(255, 80, 0, 0.2) 70%,
-    transparent 100%
-  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.glow-box::after {
+.title .end.glowing::before {
   content: "";
   position: absolute;
-  inset: 0;
+
+  width: 10px;
+  height: 10px;
+
   border-radius: 50%;
+  background: rgb(255, 180, 0);
 
+  box-shadow: 0 0 4px rgba(255, 180, 0, 0.9), 0 0 8px rgba(255, 140, 0, 0.5);
   border: 1px solid rgba(255, 180, 0, 0.9);
-  animation: pulse 1.6s ease-out infinite;
 
+  animation: pulse 1.6s ease-out infinite;
   pointer-events: none;
 }
 
@@ -544,15 +552,6 @@ export default {
     transform: scale(2);
     opacity: 0;
   }
-}
-
-.title .end button {
-  all: unset;
-  border: 0;
-  background-color: transparent;
-  color: #fff;
-  padding: 0;
-  margin: 0;
 }
 
 .title .end button:hover {
@@ -614,7 +613,7 @@ export default {
 
 .bottom {
   background-color: v-bind(colour);
-  height: 5px;
+  height: 2px;
 }
 
 .mute {
@@ -647,26 +646,57 @@ export default {
 
 .mute .buttons div,
 .mute .buttons button {
-  background-color: rgba(80, 80, 80, 0.6);
+  position: relative;
+  transition: all 0.4s ease;
+  background: var(--mix-button-background);
   overflow: hidden;
 
-  border: 1px solid #666;
+  border: var(--border);
   border-left: 0;
   border-right: 0;
 
   display: flex;
   align-items: center;
+
+  cursor: pointer;
 }
 
-.mute .active {
-  transition: all 0.4s ease;
-  background-color: rgba(255, 0, 0, 0.6);
+.mute .buttons div::after,
+.mute .buttons button::after {
+  will-change: opacity;
+  opacity: 0;
 }
+
+.mute .buttons.active div::after,
+.mute .buttons.active button::after {
+  opacity: 1;
+}
+
+.mute .buttons div::after,
+.mute .buttons button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--mix-button-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+  will-change: opacity;
+}
+
+.mute .buttons.active div::after,
+.mute .buttons.active button::after {
+  opacity: 1;
+}
+
+.mute .buttons svg {
+  opacity: 0.6;
+}
+
 
 .mute .buttons button span {
   display: inline-block;
-  margin-left: 4px;
-  margin-right: 5px;
+  margin: 6px 5px 6px 4px;
 }
 
 .mute .buttons button span img {
@@ -695,12 +725,8 @@ export default {
 
 .mute .buttons div:last-child,
 .mute .buttons button:last-child {
-  padding: 4px;
-}
-
-.mute :first-child > div,
-.mute :first-child > button {
-  border-top: 0;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .mute :last-child > div,

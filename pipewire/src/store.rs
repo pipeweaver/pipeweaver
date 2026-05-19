@@ -751,6 +751,18 @@ impl Store {
     /// Called when a link creation error occurs (e.g., "link already exists")
     /// This notifies the sender so the caller doesn't hang waiting for a response
     pub fn managed_link_error(&mut self, parent_id: Ulid, link_id: Ulid) {
+        // First, check if this is a pending link, if so, flag it.
+        let mut iter = self.pending_link_syncs.iter();
+        if let Some(idx) = iter.position(|p| p.parent_id == parent_id) {
+            let pending = self.pending_link_syncs.remove(idx);
+            warn!("Link creation failed while pending: {}", link_id);
+            if let Some(sender) = pending.group.ready_sender {
+                let _ = sender.send(());
+            }
+            return;
+        }
+
+        // Already promoted to managed_links (e.g. error on a subsequent port)
         if let Some(link) = self.managed_links.get_mut(&parent_id) {
             for port in PortLocation::iter() {
                 if let Some(port) = &link.links[port]
@@ -764,8 +776,6 @@ impl Store {
                 warn!("Link creation failed for parent {}", parent_id);
                 let _ = sender.send(());
             } else {
-                // Immediately flag this as removed, rather than having pipewire need to trigger
-                // from the registry change. This shouldn't break / fix anything, but is cleaner.
                 warn!("Link creation failed for parent {}", parent_id);
                 if let Some(link) = self.managed_links.remove(&parent_id) {
                     let _ = self.callback_tx.send(PipewireReceiver::ManagedLinkDropped(

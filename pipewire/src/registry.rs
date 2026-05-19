@@ -26,7 +26,7 @@ use pipewire::spa::utils::dict::DictRef;
 use pipewire::types::ObjectType;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
 pub(crate) struct PipewireRegistry {
@@ -720,6 +720,26 @@ pub(crate) struct RegistryClientNode {
     pub ports: EnumMap<Direction, HashMap<u32, RegistryPort>>,
 }
 
+impl Debug for RegistryClientNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RegistryClientNode")
+            .field("object_serial", &self.object_serial)
+            .field("parent_id", &self.parent_id)
+            .field("metadata", &self.metadata)
+            .field("application_name", &self.application_name)
+            .field("node_name", &self.node_name)
+            .field("volume", &self.volume)
+            .field("media_title", &self.media_title)
+            .field("n_input_ports", &self.n_input_ports)
+            .field("n_output_ports", &self.n_output_ports)
+            .field("is_running", &self.is_running)
+            .field("is_muted", &self.is_muted)
+            .field("media_target", &self.media_target)
+            .field("ports", &self.ports)
+            .finish()
+    }
+}
+
 impl TryFrom<&DictRef> for RegistryClientNode {
     type Error = anyhow::Error;
 
@@ -734,12 +754,20 @@ impl TryFrom<&DictRef> for RegistryClientNode {
             .ok_or_else(|| anyhow!("CLIENT_ID"))?;
         let application_name = value
             .get("application.name")
+            .or_else(|| value.get("media.name"))
+            .or_else(|| value.get(*NODE_NAME))
             .map(|s| s.to_string())
             .ok_or_else(|| anyhow!("APPLICATION_NAME"))?;
         let node_name = value
             .get(*NODE_NAME)
             .map(|s| s.to_string())
             .ok_or_else(|| anyhow!("NODE_NAME"))?;
+
+        // If we don't have a stream media class, we're not an audio stream.
+        value
+            .get(*MEDIA_CLASS)
+            .filter(|c| c.starts_with("Stream/"))
+            .ok_or_else(|| anyhow!("Not a stream node"))?;
 
         Ok(Self {
             object_serial,

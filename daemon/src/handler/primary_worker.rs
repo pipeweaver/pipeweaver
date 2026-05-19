@@ -4,7 +4,7 @@ use crate::handler::primary_worker::ManagerMessage::{
     Execute, GetAudioConfiguration, SetAudioQuantum, SetMetering,
 };
 use crate::servers::http_server::{MeterEvent, PatchEvent};
-use crate::settings::save_settings;
+use crate::settings::{check_settings_path, save_settings};
 use crate::stop::Stop;
 use crate::{APP_DAEMON_NAME, APP_ID};
 use crate::{APP_NAME_ID, BACKGROUND_PARAM};
@@ -70,8 +70,6 @@ impl PrimaryWorker {
         let profile_path = config_path.join(format!("{}-profile.json", APP_NAME_ID));
         let mut first_run = true;
 
-        //let local_stop = Stop::new();
-
         'main: loop {
             if !first_run {
                 // We need to wait a couple of seconds to make sure the teardown is complete
@@ -82,8 +80,6 @@ impl PrimaryWorker {
             }
 
             info!("[PrimaryWorker] Starting Primary Worker");
-            info!("[PrimaryWorker] Loading Profile");
-
             let profile = self.load_profile(&profile_path);
 
             // Used to pass messages into the Pipewire Manager
@@ -313,7 +309,7 @@ impl PrimaryWorker {
     }
 
     fn load_profile(&self, path: &PathBuf) -> Profile {
-        info!("[Profile] Loading");
+        info!("[Profile] Loading from {:?}", path);
         let mut profile = match File::open(path) {
             Ok(reader) => {
                 let settings = serde_json::from_reader(reader);
@@ -353,17 +349,9 @@ impl PrimaryWorker {
     }
 
     fn save_profile(&self, path: &PathBuf, profile: &Profile) -> Result<()> {
-        info!("[Profile] Saving");
+        info!("[Profile] Saving to {:?}", path);
 
-        if let Some(parent) = path.parent()
-            && let Err(e) = create_dir_all(parent)
-            && e.kind() != ErrorKind::AlreadyExists
-        {
-            return Err(e).context(format!(
-                "Could not create config directory at {}",
-                parent.to_string_lossy()
-            ))?;
-        }
+        check_settings_path(path)?;
 
         if path.exists() {
             fs::remove_file(path).context("Unable to remove old Profile")?;

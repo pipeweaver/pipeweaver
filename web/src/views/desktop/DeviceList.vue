@@ -177,7 +177,6 @@ export default {
 <style scoped>
 .mixer {
   flex: 1;
-  background-color: #2d3230;
   padding: 10px;
   display: flex;
   gap: 15px;

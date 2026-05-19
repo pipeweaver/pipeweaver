@@ -7,13 +7,17 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
-[dependencies]
-clap = { workspace = true }
+[features]
+default = ["serde"]
+strum = ["dep:strum", "dep:strum_macros"]
 
-serde = { workspace = true }
+[dependencies]
+clap = { workspace = true, optional = true }
+
+serde = { workspace = true, optional = true }
 
 ulid = { workspace = true }
-enum-map = { workspace = true }
+enum-map = { workspace = true, optional = true }
 
-strum = { workspace = true }
-strum_macros = { workspace = true }
+strum = { workspace = true, optional = true }
+strum_macros = { workspace = true, optional = true }

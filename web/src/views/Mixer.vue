@@ -178,14 +178,15 @@ export default {
 
   <div class="mix-list">
     <div class="title">
-      <div class="start"></div>
       <div class="text">{{ is_source ? "Sources" : "Targets" }}</div>
       <div class="end">
         <button v-if="has_hidden()" @click="show_hidden">
           <font-awesome-icon :icon="['fas', 'eye-slash']"/>
         </button>
         <span v-if="has_hidden" style="display: inline-block; padding-left: 5px"/>
-        <button @click="show_popup">+</button>
+        <button @click="show_popup">
+          <font-awesome-icon :icon="['fas', 'plus']"/>
+        </button>
       </div>
     </div>
     <div class="device-list">
@@ -201,9 +202,9 @@ export default {
 .mix-list {
   display: flex;
   flex-direction: column;
-  border: 1px solid #666;
+  border: var(--border);
   border-radius: 6px 6px 0 0;
-  background-color: #2d3230;
+  background-color: var(--panel);
 }
 
 .mix-list .title {
@@ -212,6 +213,7 @@ export default {
   padding-top: 10px;
 
   display: flex;
+  align-items: center;
   flex-direction: row;
 }
 
@@ -220,6 +222,14 @@ export default {
 }
 
 .mix-list .title .text {
+  text-align: left;
+  padding-left: 10px;
+
+  text-transform: uppercase;
+  color: var(--cyan);
+  text-shadow: 0 0 4px var(--cyan);
+
+  letter-spacing: 0.20em;
   flex: 1;
 }
 

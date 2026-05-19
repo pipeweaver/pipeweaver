@@ -19,9 +19,10 @@ import {
   faVolumeHigh,
   faVolumeXmark,
   faXmark,
+  faPlus,
 } from "@fortawesome/free-solid-svg-icons";
 
-library.add(faVolumeHigh, faVolumeXmark, faAngleDown, faCircleCheck, faXmark, faCheck, faBars, faGripVertical, faEyeSlash, faXmark, faGear);
+library.add(faVolumeHigh, faVolumeXmark, faAngleDown, faCircleCheck, faXmark, faCheck, faBars, faGripVertical, faEyeSlash, faXmark, faGear, faPlus);
 
 
 const app = createApp(App);

@@ -6,7 +6,7 @@ use pipeweaver_ipc::commands::GlobalSettings;
 use std::fs;
 use std::fs::{File, create_dir_all};
 use std::io::ErrorKind;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub fn load_settings() -> GlobalSettings {
     match File::open(get_settings_file()) {
@@ -31,15 +31,7 @@ pub fn save_settings(settings: GlobalSettings) -> Result<()> {
     info!("[Settings] Saving");
     let file_path = get_settings_file();
 
-    if let Some(parent) = file_path.parent()
-        && let Err(e) = create_dir_all(parent)
-        && e.kind() != ErrorKind::AlreadyExists
-    {
-        return Err(e).context(format!(
-            "Could not create config directory at {}",
-            parent.to_string_lossy()
-        ))?;
-    }
+    check_settings_path(&file_path)?;
 
     if file_path.exists() {
         fs::remove_file(&file_path).context("Unable to remove old Profile")?;
@@ -59,4 +51,17 @@ fn get_settings_file() -> PathBuf {
 
     let config_dir = dirs.config_dir().to_path_buf();
     config_dir.join(format!("{}-settings.json", APP_NAME_ID))
+}
+
+pub fn check_settings_path(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        create_dir_all(parent).with_context(|| {
+            format!(
+                "Could not create config directory at {}",
+                parent.to_string_lossy()
+            )
+        })?;
+    }
+
+    Ok(())
 }

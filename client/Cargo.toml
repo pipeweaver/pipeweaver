@@ -19,7 +19,7 @@ directories = { workspace = true }
 
 interprocess = { workspace = true }
 
-pipeweaver-shared = { path = "../shared" }
+pipeweaver-shared = { path = "../shared", features = ["clap", "strum"] }
 pipeweaver-ipc = { path = "../ipc" }
 
 [build-dependencies]

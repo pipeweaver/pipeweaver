@@ -1,6 +1,13 @@
 <script>
+import {Theme} from "@/app/theme.js";
+
 export default {
   name: "MixAssignment",
+  computed: {
+    Theme() {
+      return Theme
+    }
+  },
 
   props: {
     isMixA: {type: Boolean, required: true}
@@ -19,7 +26,7 @@ export default {
     <!-- Sliding background -->
     <div
       :class="isMixA ? 'left' : 'right'"
-      :style="{ backgroundColor: isMixA ? '#59b1b6' : '#E07C24' }"
+      :style="{ backgroundColor: isMixA ? Theme.cyan : Theme.orange }"
       class="slider"
     ></div>
 
@@ -38,13 +45,13 @@ export default {
 
 <style scoped>
 .radio-container {
-  border-bottom: 1px solid #666666;
+  border-top: var(--border);
+  border-bottom: var(--border);
   position: relative;
   display: flex;
   width: 100%;
-  background-color: rgba(80, 80, 80, 0.6);
+  background-color: rgba(60, 60, 60, 1);
   overflow: hidden;
-  font-family: sans-serif;
 }
 
 .slider {
@@ -71,7 +78,10 @@ label {
   position: relative;
   user-select: none;
   transition: color 0.3s;
-  line-height: 26px;
+  align-content: center;
+  font-weight: bold;
+  margin-top: 6px;
+  margin-bottom: 6px;
 }
 
 label input {

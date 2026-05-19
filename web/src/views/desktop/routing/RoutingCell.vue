@@ -1,8 +1,6 @@
 <template>
-  <td>
-    <div role="checkbox" tabindex="0" @click="clicked">
-      <font-awesome-icon v-if="enabled" icon="fa-solid fa-circle-check"/>
-    </div>
+  <td role="checkbox" tabindex="0" @click="clicked">
+    <font-awesome-icon v-if="enabled" icon="fa-solid fa-circle-check"/>
   </td>
 </template>
 
@@ -32,34 +30,22 @@ export default {
 <style scoped>
 td {
   padding: 0;
-}
+  border: var(--border);
+  height: 100%;
 
-div {
   text-align: center;
   font-size: 18px;
   color: v-bind(colour);
-  background-color: #3b413f;
+  background: var(--mix-button-background);
   margin: 0;
   position: relative;
-  height: 30px;
 }
 
-/* Force SVG to center of the Cell */
-div svg {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  left: 0;
-  right: 0;
-  margin: auto;
-  text-align: center;
-}
-
-div:has(>input[type=checkbox]:focus) {
+td:has(>input[type=checkbox]:focus) {
   background-color: #49514e;
 }
 
-div:hover {
-  background-color: #49514e;
+td:hover {
+  background: var(--mix-button-muted);
 }
 </style>
