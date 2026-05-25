@@ -1035,8 +1035,16 @@ pub fn run_pw_main_loop(
         })
         .error(move |id, _seq, res, msg| {
             if id == 0 {
-                error!("[PipeWire] Core connection lost (res={}): {}", res, msg);
-                mainloop_error.quit();
+                if res == -2 {
+                    // -ENOENT: stale proxy race condition, safe to ignore
+                    debug!("[PipeWire] Stale proxy: {}", msg);
+                } else {
+                    error!(
+                        "[PipeWire] Core error (res={}): {}, shutting down",
+                        res, msg
+                    );
+                    mainloop_error.quit();
+                }
             }
         })
         .register();
