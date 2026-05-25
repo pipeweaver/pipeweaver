@@ -358,7 +358,10 @@ impl PrimaryWorker {
         }
 
         let file = File::create(path)?;
-        serde_json::to_writer_pretty(file, profile)?;
+        serde_json::to_writer_pretty(&file, profile)?;
+
+        // Force a full sync to ensure we don't lose any data.
+        file.sync_all()?;
 
         info!("[Profile] Saved");
         Ok(())
