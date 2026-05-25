@@ -146,6 +146,11 @@ impl PrimaryWorker {
                                 self.update_status(&command_sender, false).await;
                                 profile_changed = true;
                             }
+                            WorkerMessage::ManagerStopped => {
+                                // Something's stopped the manager, we need to restart it.
+                                info!("[PrimaryWorker] Pipewire Manager stopped");
+                                continue 'main;
+                            }
                         }
                     }
 
@@ -548,6 +553,7 @@ pub enum ManagerMessage {
 pub enum WorkerMessage {
     TransientChange,
     ProfileChanged,
+    ManagerStopped,
 }
 
 pub async fn start_primary_worker(

@@ -7,7 +7,7 @@ use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::ipc::IPCHandler;
-use crate::handler::primary_worker::WorkerMessage::TransientChange;
+use crate::handler::primary_worker::WorkerMessage::{ManagerStopped, TransientChange};
 use crate::handler::primary_worker::{ManagerMessage, WorkerMessage};
 use crate::servers::http_server::MeterEvent;
 use enum_map::{EnumMap, enum_map};
@@ -687,6 +687,8 @@ impl PipewireManager {
         info!("[Manager] Stopping Message Wrapper");
         let _ = send_sync.send(PipewireReceiver::Quit);
         let _ = receiver.join();
+
+        let _ = self.worker_sender.send(ManagerStopped).await;
 
         info!("[Manager] Stopped");
     }
