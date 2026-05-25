@@ -76,7 +76,6 @@ export default {
 
     needsDevice: function () {
       if (this.is_physical()) {
-        console.log(this.getDevice());
         return this.getDevice().attached_devices.length === 0;
       }
       return false;
