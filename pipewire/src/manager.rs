@@ -1052,14 +1052,14 @@ pub fn run_pw_main_loop(
         core,
         mainloop.clone(),
         registry,
-        callback_tx,
+        callback_tx.clone(),
     )));
     PipewireManager::create_core_listener(&manager);
 
     let receiver_clone = mainloop.clone();
     let _receiver = pw_rx.attach(mainloop.loop_(), {
         move |message| match message {
-            PipewireInternalMessage::Quit(result) => {
+            PipewireInternalMessage::Quit(_, result) => {
                 debug!("[PipeWire] Triggering Main Loop Quit");
                 let _ = result.send(Ok(()));
                 receiver_clone.quit();
@@ -1131,6 +1131,8 @@ pub fn run_pw_main_loop(
     debug!("Pipewire Initialised, starting mainloop");
     start_tx.send(Ok(())).expect("OneShot Channel is broken!");
     mainloop.run();
+
+    let _ = callback_tx.send(PipewireReceiver::Exited);
 
     info!("[PIPEWIRE] Main Loop Terminated");
 }

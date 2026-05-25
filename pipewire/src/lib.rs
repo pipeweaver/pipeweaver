@@ -49,7 +49,7 @@ pub enum PipewireMessage {
 
     DestroyUnmanagedLinks(u32),
 
-    Quit,
+    Quit(bool),
 }
 
 pub enum PipewireInternalMessage {
@@ -80,12 +80,13 @@ pub enum PipewireInternalMessage {
     SetDefaultDevice(MediaClass, NodeTarget, oneshot::Sender<Result<()>>),
 
     DestroyUnmanagedLinks(u32, oneshot::Sender<Result<()>>),
-    Quit(oneshot::Sender<Result<()>>),
+    Quit(bool, oneshot::Sender<Result<()>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PipewireReceiver {
     Quit,
+    Exited,
 
     AnnouncedClock(Option<u32>),
 
@@ -221,7 +222,7 @@ impl PipewireRunner {
             PipewireMessage::ClearApplicationTarget(id) => {
                 PipewireInternalMessage::ClearApplicationTarget(id, tx)
             }
-            PipewireMessage::Quit => PipewireInternalMessage::Quit(tx),
+            PipewireMessage::Quit(send) => PipewireInternalMessage::Quit(send, tx),
         };
 
         self.message_sender
@@ -247,7 +248,7 @@ impl Drop for PipewireRunner {
     fn drop(&mut self) {
         info!("[PIPEWIRE] Stopping");
         // Send an exit message
-        let _ = self.send_message(PipewireMessage::Quit);
+        let _ = self.send_message(PipewireMessage::Quit(true));
 
         // Wait on the threads to exit..
         if let Some(pipewire_thread) = self.pipewire_thread.take()
@@ -273,11 +274,13 @@ impl Drop for PipewireRunner {
 fn run_message_loop(receiver: Receiver, sender: PWSender) {
     loop {
         match receiver.recv() {
-            Ok(PipewireInternalMessage::Quit(incoming_tx)) => {
-                let (tx, rx) = oneshot::channel();
-                let _ = sender.send(PipewireInternalMessage::Quit(tx));
-                let _ = rx.recv();
-                let _ = incoming_tx.send(Ok(()));
+            Ok(PipewireInternalMessage::Quit(send, incoming_tx)) => {
+                if send {
+                    let (tx, rx) = oneshot::channel();
+                    let _ = sender.send(PipewireInternalMessage::Quit(send, tx));
+                    let _ = rx.recv();
+                    let _ = incoming_tx.send(Ok(()));
+                }
                 break;
             }
             Ok(message) => {
@@ -285,7 +288,7 @@ fn run_message_loop(receiver: Receiver, sender: PWSender) {
             }
             Err(_) => {
                 let (tx, rx) = oneshot::channel();
-                let _ = sender.send(PipewireInternalMessage::Quit(tx));
+                let _ = sender.send(PipewireInternalMessage::Quit(true, tx));
                 let _ = rx.recv();
                 break;
             }

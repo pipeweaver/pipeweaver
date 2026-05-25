@@ -245,6 +245,8 @@ impl PipewireManager {
         let mut meter_receiver = self.meter_receiver.take().unwrap();
         let mut meter_buffer: Vec<(Ulid, u8)> = Vec::with_capacity(64);
 
+        let mut pipewire_exited = false;
+
         loop {
             select!(
                 biased;
@@ -318,6 +320,12 @@ impl PipewireManager {
                     }
 
                     match msg {
+                        PipewireReceiver::Exited => {
+                            // The pipewire connection has apparently gone, we need to stop
+                            pipewire_exited = true;
+                            break;
+                        }
+
                         PipewireReceiver::AnnouncedClock(_) => {
                             warn!("This shouldn't happen twice!");
                         }
@@ -670,7 +678,9 @@ impl PipewireManager {
             );
         }
         info!("[Manager] Stopping Pipewire");
-        let _ = self.pipewire().send_message(PipewireMessage::Quit);
+        let _ = self
+            .pipewire()
+            .send_message(PipewireMessage::Quit(!pipewire_exited));
         let runtime = self.pipewire.take();
         drop(runtime);
 
