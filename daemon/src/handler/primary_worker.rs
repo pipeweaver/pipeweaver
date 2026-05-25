@@ -36,7 +36,7 @@ use which::which;
 type Manage = mpsc::Sender<ManagerMessage>;
 
 pub struct PrimaryWorker {
-    last_status: DaemonStatus,
+    last_status: Option<DaemonStatus>,
 
     patch_broadcast: Sender<PatchEvent>,
     meter_broadcast: Sender<MeterEvent>,
@@ -53,7 +53,7 @@ impl PrimaryWorker {
         settings: Arc<RwLock<GlobalSettings>>,
     ) -> Self {
         Self {
-            last_status: DaemonStatus::default(),
+            last_status: None,
             patch_broadcast: patch,
             meter_broadcast: meter,
 
@@ -137,7 +137,9 @@ impl PrimaryWorker {
                                 // We should fetch the 'latest' profile from the Pipeweaver runner
                                 self.update_status(&command_sender, false).await;
 
-                                let _ = self.save_profile(&profile_path, &self.last_status.audio.profile);
+                                if let Some(status) = &self.last_status {
+                                    let _ = self.save_profile(&profile_path, &status.audio.profile);
+                                }
                                 let _ = command_sender.send(ManagerMessage::Quit).await;
                             }
                             MessageResult::None => {}
@@ -167,7 +169,9 @@ impl PrimaryWorker {
                     _ = profile_tick.tick() => {
                         if profile_changed {
                             profile_changed = false;
-                            let _ = self.save_profile(&profile_path, &self.last_status.audio.profile);
+                            if let Some(status) = &self.last_status {
+                                    let _ = self.save_profile(&profile_path, &status.audio.profile);
+                            }
                         }
                     },
 
@@ -184,7 +188,9 @@ impl PrimaryWorker {
             }
         }
 
-        let _ = self.save_profile(&profile_path, &self.last_status.audio.profile);
+        if let Some(status) = &self.last_status {
+            let _ = self.save_profile(&profile_path, &status.audio.profile);
+        }
         info!("[PrimaryWorker] Stopped");
     }
 
@@ -194,7 +200,11 @@ impl PrimaryWorker {
 
         match message {
             DaemonMessage::GetStatus(tx) => {
-                let _ = tx.send(self.last_status.clone());
+                if let Some(status) = &self.last_status {
+                    let _ = tx.send(status.clone());
+                } else {
+                    let _ = tx.send(DaemonStatus::default());
+                }
             }
             DaemonMessage::RunDaemon(command, tx) => {
                 match command {
@@ -320,7 +330,7 @@ impl PrimaryWorker {
             }
         }
 
-        self.last_status = status;
+        self.last_status = Some(status);
     }
 
     fn load_profile(&self, path: &PathBuf) -> Profile {
