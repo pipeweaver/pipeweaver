@@ -1020,6 +1020,8 @@ pub fn run_pw_main_loop(
             .expect("OneShot Channel is broken!");
         return;
     };
+
+    let mainloop_error = mainloop.clone();
     let _core_listener = core
         .add_listener_local()
         .info(|info| {
@@ -1031,11 +1033,11 @@ pub fn run_pw_main_loop(
                 info.host_name()
             );
         })
-        .error(|_id, _seq, _res, _msg| {
-            // error!(
-            //     "[PipeWire] Core Error Occurred: {} - {} - {} - {}",
-            //     id, seq, res, msg
-            // );
+        .error(move |id, _seq, res, msg| {
+            if id == 0 {
+                error!("[PipeWire] Core connection lost (res={}): {}", res, msg);
+                mainloop_error.quit();
+            }
         })
         .register();
 
