@@ -74,7 +74,13 @@ impl PrimaryWorker {
             if !first_run {
                 // We need to wait a couple of seconds to make sure the teardown is complete
                 info!("[PrimaryWorker] Restarting Pipewire Manager in 2 seconds");
-                sleep(Duration::from_secs(2)).await;
+                select! {
+                    _ = sleep(Duration::from_secs(2)) => {}
+                    _ = self.shutdown.recv() => {
+                        info!("[PrimaryWorker] Stopping");
+                        break 'main;
+                    }
+                }
             } else {
                 first_run = false;
             }
