@@ -54,6 +54,7 @@ export class Websocket {
       self.#connection_promise = []
 
       if (self.#disconnect_callback !== undefined) {
+        self.#disconnect_callback()
         self.#disconnect_callback = undefined
       }
 
@@ -212,8 +213,7 @@ export function runWebsocket() {
   websocket
     .connect()
     .then(() => {
-      // Register disconnect handler immediately, before any async work,
-      // so a fast-close can't slip through the gap
+      // Register immediately so a fast-close can't slip through
       websocket.on_disconnect(() => {
         websocket_meter.disconnect();
         store.socketDisconnected()
@@ -227,13 +227,11 @@ export function runWebsocket() {
             websocket_meter.connect();
           }
         })
-        .catch(() => {
-          // Socket closed before status came back — on_disconnect will
-          // handle the retry, but guard against it not firing
-          setTimeout(runWebsocket, 1000)
-        })
+      // No .catch() here — if get_status() rejects, it's because the socket
+      // closed, which already triggers on_disconnect above
     })
     .catch(() => {
+      // Only reached if connect() itself failed
       setTimeout(runWebsocket, 1000)
     })
 }
