@@ -25,7 +25,7 @@ use simplelog::{
 use std::env;
 use std::fs::create_dir_all;
 use std::sync::Arc;
-use tokio::sync::{RwLock, broadcast, mpsc, oneshot};
+use tokio::sync::{RwLock, broadcast, mpsc, oneshot, watch};
 use tokio::{join, task};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -109,6 +109,7 @@ async fn main() -> Result<()> {
 
     // Create the Global Manager Channels...
     let (manager_send, manager_recv) = mpsc::channel(32);
+    let (manager_alive_tx, manager_alive_rx) = watch::channel(false);
 
     // Prepare the IPC Socket
     let ipc_socket = bind_socket().await;
@@ -130,6 +131,7 @@ async fn main() -> Result<()> {
         ipc_socket,
         manager_send.clone(),
         broadcast_tx.clone(),
+        manager_alive_rx.clone(),
         shutdown.clone(),
     ));
 
@@ -151,6 +153,7 @@ async fn main() -> Result<()> {
         httpd_tx,
         broadcast_tx.clone(),
         meter_tx.clone(),
+        manager_alive_rx.clone(),
         http_settings,
     ));
     let http_server = httpd_rx.await?;
@@ -161,6 +164,7 @@ async fn main() -> Result<()> {
         shutdown.clone(),
         broadcast_tx.clone(),
         meter_tx.clone(),
+        manager_alive_tx,
         config_dir,
         global_settings.clone(),
     ));

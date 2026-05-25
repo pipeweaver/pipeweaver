@@ -28,7 +28,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{env, fs};
 use tokio::sync::broadcast::Sender;
-use tokio::sync::{RwLock, mpsc, oneshot};
+use tokio::sync::{RwLock, mpsc, oneshot, watch};
 use tokio::time::sleep;
 use tokio::{select, task, time};
 use which::which;
@@ -40,6 +40,7 @@ pub struct PrimaryWorker {
 
     patch_broadcast: Sender<PatchEvent>,
     meter_broadcast: Sender<MeterEvent>,
+    manager_alive: watch::Sender<bool>,
 
     shutdown: Stop,
     settings: Arc<RwLock<GlobalSettings>>,
@@ -50,12 +51,14 @@ impl PrimaryWorker {
         shutdown: Stop,
         patch: Sender<PatchEvent>,
         meter: Sender<MeterEvent>,
+        manager_alive: watch::Sender<bool>,
         settings: Arc<RwLock<GlobalSettings>>,
     ) -> Self {
         Self {
             last_status: None,
             patch_broadcast: patch,
             meter_broadcast: meter,
+            manager_alive,
 
             shutdown,
             settings,
@@ -71,6 +74,8 @@ impl PrimaryWorker {
         let mut first_run = true;
 
         'main: loop {
+            let _ = self.manager_alive.send(false);
+
             if !first_run {
                 // We need to wait a couple of seconds to make sure the teardown is complete
                 info!("[PrimaryWorker] Restarting Pipewire Manager in 2 seconds");
@@ -122,6 +127,9 @@ impl PrimaryWorker {
             self.update_status(&command_sender, true).await;
             let mut profile_changed = false;
 
+            // Set the manager as alive
+            let _ = self.manager_alive.send(true);
+
             loop {
                 select! {
                     Some(message) = message_receiver.recv() => {
@@ -161,6 +169,8 @@ impl PrimaryWorker {
                             WorkerMessage::ManagerStopped => {
                                 // Something's stopped the manager, we need to restart it.
                                 info!("[PrimaryWorker] Pipewire Manager stopped");
+                                let _ = self.manager_alive.send(false);
+
                                 continue 'main;
                             }
                         }
@@ -176,6 +186,9 @@ impl PrimaryWorker {
                     },
 
                     _ = self.shutdown.recv() => {
+                        // Stop the handlers
+                        let _ = self.manager_alive.send(false);
+
                         info!("[PrimaryWorker] Stopping");
                         info!("[PrimaryWorker] Stopping Pipewire Manager");
                         let _ = command_sender.send(ManagerMessage::Quit).await;
@@ -581,9 +594,11 @@ pub async fn start_primary_worker(
     shutdown: Stop,
     broadcast_tx: Sender<PatchEvent>,
     meter_tx: Sender<MeterEvent>,
+    manager_alive_tx: watch::Sender<bool>,
     config_path: PathBuf,
     settings: Arc<RwLock<GlobalSettings>>,
 ) {
-    let mut manager = PrimaryWorker::new(shutdown, broadcast_tx, meter_tx, settings);
+    let mut manager =
+        PrimaryWorker::new(shutdown, broadcast_tx, meter_tx, manager_alive_tx, settings);
     manager.run(message_receiver, config_path).await;
 }
