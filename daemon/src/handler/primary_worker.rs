@@ -353,15 +353,38 @@ impl PrimaryWorker {
 
         check_settings_path(path)?;
 
-        if path.exists() {
-            fs::remove_file(path).context("Unable to remove old Profile")?;
+        let mut tmp_file_name = path.to_path_buf();
+        tmp_file_name.set_extension("tmp");
+        if tmp_file_name.exists() {
+            debug!("Temporary file already exists? Removing.");
+            fs::remove_file(&tmp_file_name)?;
         }
 
-        let file = File::create(path)?;
-        serde_json::to_writer_pretty(&file, profile)?;
+        debug!(
+            "Creating Temporary Save File: {:?}",
+            &tmp_file_name
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("UNKNOWN")
+        );
+        let temp_file = File::create(&tmp_file_name)?;
+        serde_json::to_writer_pretty(&temp_file, profile)?;
 
-        // Force a full sync to ensure we don't lose any data.
-        file.sync_all()?;
+        // Make sure the file is fully written before proceeding
+        temp_file.sync_all()?;
+
+        debug!(
+            "Save Complete and synced, renaming to {:?}",
+            path.file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("UNKNOWN")
+        );
+        if path.exists() {
+            fs::remove_file(path).unwrap_or_else(|e| {
+                warn!("Error Removing File: {}", e);
+            });
+        }
+        fs::rename(tmp_file_name, path)?;
 
         info!("[Profile] Saved");
         Ok(())
