@@ -111,7 +111,12 @@ impl PrimaryWorker {
             task::spawn(run_pipewire_manager(config, stop_sender));
 
             // Wait until the manager reports itself as ready
-            let _ = ready_receiver.await;
+            if let Err(e) = ready_receiver.await {
+                error!("[PrimaryWorker] Pipewire Manager failed to start: {}", e);
+                continue 'main;
+            }
+
+            debug!("[PrimaryWorker] Pipewire Manager Ready, Loading Initial Status");
 
             // Load the initial status
             self.update_status(&command_sender, true).await;

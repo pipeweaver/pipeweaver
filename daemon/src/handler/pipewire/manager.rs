@@ -222,7 +222,19 @@ impl PipewireManager {
         let receiver = thread::spawn(|| run_receiver_wrapper(recv, send_async));
 
         // Run up the Pipewire Handler
-        self.pipewire = Some(PipewireRunner::new(send.clone()).unwrap());
+        let pipewire = PipewireRunner::new(send.clone());
+        self.pipewire = match pipewire {
+            Ok(pipewire) => Some(pipewire),
+            Err(e) => {
+                error!("Error Connecting to Pipewire: {}", e);
+
+                // Stop the receiver wrapper
+                let _ = send_sync.send(PipewireReceiver::Quit);
+                let _ = receiver.join();
+
+                return;
+            }
+        };
 
         // Hold until we receive a clock value
         let mut loaded_profile = false;
