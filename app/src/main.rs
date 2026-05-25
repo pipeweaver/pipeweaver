@@ -246,18 +246,12 @@ fn websocket_main_thread(res: mpsc::Sender<Result<()>>, tx: mpsc::Sender<WindowM
                         let _ = socket.send(Message::Pong(payload));
                     }
                     Message::Close(frame) => {
-                        if let Some(frame) = &frame {
-                            match frame.code {
-                                CloseCode::Restart | CloseCode::Again => {
-                                    info!(
-                                        "Server requested reconnect ({:?}), retrying...",
-                                        frame.code
-                                    );
-                                    sleep(Duration::from_secs(1));
-                                    continue 'top;
-                                }
-                                _ => {}
-                            }
+                        if let Some(frame) = &frame
+                            && frame.code == CloseCode::Restart
+                        {
+                            info!("Server requested reconnect ({:?}), retrying...", frame.code);
+                            sleep(Duration::from_secs(1));
+                            continue 'top;
                         }
                         // Any other close code is unrecoverable
                         error!("Server closed the connection: {:?}", frame);
