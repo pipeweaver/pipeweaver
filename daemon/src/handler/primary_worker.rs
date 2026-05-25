@@ -134,7 +134,6 @@ impl PrimaryWorker {
 
                                 let _ = self.save_profile(&profile_path, &self.last_status.audio.profile);
                                 let _ = command_sender.send(ManagerMessage::Quit).await;
-                                continue 'main;
                             }
                             MessageResult::None => {}
                         }
