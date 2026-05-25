@@ -18,15 +18,16 @@ export class Websocket {
       let message_id = json.id
       let message_data = json.data
 
-      console.log('message_id:', message_id, 'queue keys:', Object.keys(self.#message_queue))
-
       if (message_data['Status'] !== undefined) {
         self.#fulfill_promise(message_id, message_data, true)
       } else if (message_data['Patch'] !== undefined) {
         // Nothing ever requests patch data, so we can ignore this.
         store.patchData(message_data)
       } else if (message_data === 'Ok' || message_data['Pipewire'] !== undefined) {
-
+        if (message_data === 'Ok') {
+          self.#fulfill_promise(message_id, message_data, true);
+          return;
+        }
         if (message_data['Pipewire']['Err'] !== undefined) {
           console.log(`FAILED: ` + message_data['Pipewire']['Err'])
           self.#fulfill_promise(message_id, message_data['Pipewire']['Err'], false)
@@ -40,21 +41,19 @@ export class Websocket {
     })
 
     self.#websocket.addEventListener('open', function () {
-      console.log('OPEN')
       if (self.#connection_promise[0] !== undefined) {
         self.#connection_promise[0]()
       }
       self.#connection_promise = []
     })
 
-    self.#websocket.addEventListener('close', function () {
+    self.#websocket.addEventListener('close', function (e) {
       if (self.#connection_promise[1] !== undefined) {
         self.#connection_promise[1]()
       }
       self.#connection_promise = []
 
       if (self.#disconnect_callback !== undefined) {
-        self.#disconnect_callback()
         self.#disconnect_callback = undefined
       }
 
@@ -62,6 +61,7 @@ export class Websocket {
     })
 
     self.#websocket.addEventListener('error', function () {
+      console.log('ERROR');
       if (self.#connection_promise[1] !== undefined) {
         self.#connection_promise[1]()
       }
@@ -209,27 +209,31 @@ document.addEventListener("visibilitychange", () => {
 });
 
 export function runWebsocket() {
-  console.log('Connecting..')
-  // Let's attempt to connect the websocket...
   websocket
     .connect()
     .then(() => {
-      // We got a connection, try fetching the status...
-      websocket.get_status().then((data) => {
-        store.socketConnected(data)
-        if (window_visible) {
-          websocket_meter.connect();
-        }
+      // Register disconnect handler immediately, before any async work,
+      // so a fast-close can't slip through the gap
+      websocket.on_disconnect(() => {
+        websocket_meter.disconnect();
+        store.socketDisconnected()
+        setTimeout(runWebsocket, 1000)
+      })
 
-        websocket.on_disconnect(() => {
-          websocket_meter.disconnect();
-          store.socketDisconnected()
+      websocket.get_status()
+        .then((data) => {
+          store.socketConnected(data)
+          if (window_visible) {
+            websocket_meter.connect();
+          }
+        })
+        .catch(() => {
+          // Socket closed before status came back — on_disconnect will
+          // handle the retry, but guard against it not firing
           setTimeout(runWebsocket, 1000)
         })
-      })
     })
     .catch(() => {
-      // Wait 1 second, then try again..
       setTimeout(runWebsocket, 1000)
     })
 }
