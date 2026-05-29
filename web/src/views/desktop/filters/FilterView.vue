@@ -72,9 +72,11 @@ export default {
 
       let command = {
         "AddFilterToNode": [this.id, {
-          LV2: {
-            "plugin_uri": url,
-            "values": {}
+          "filter": {
+            LV2: {
+              "plugin_uri": url,
+              "values": {}
+            }
           }
         }]
       };
@@ -99,11 +101,11 @@ export default {
     },
 
     getFilterInfo(filter) {
-      if (filter['LV2']) {
+      if (filter.filter['LV2']) {
         return {
-          id: filter['LV2'].id,
+          id: filter.id,
           type: 'LV2',
-          identifier: filter['LV2'].plugin_uri,
+          identifier: filter.filter['LV2'].plugin_uri,
         };
       }
     },

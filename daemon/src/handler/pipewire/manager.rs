@@ -61,6 +61,11 @@ pub(crate) struct PipewireManager {
     // Custom filter configs
     pub(crate) filter_config: HashMap<Ulid, FilterConfig>,
 
+    // These two define which nodes should be considered the start / end points for
+    // a route, this is so we can keep filter management isolated.
+    pub(crate) source_filter_end: HashMap<Ulid, Ulid>,
+    pub(crate) target_filter_start: HashMap<Ulid, Ulid>,
+
     // A list of physical nodes
     pub(crate) node_list: EnumMap<DeviceType, Vec<PhysicalDevice>>,
     pub(crate) device_nodes: HashMap<u32, DeviceNode>,
@@ -98,6 +103,8 @@ impl PipewireManager {
             meter_broadcast: config.meter_sender,
 
             filter_config: Default::default(),
+            source_filter_end: Default::default(),
+            target_filter_start: Default::default(),
 
             node_list: Default::default(),
             device_nodes: Default::default(),

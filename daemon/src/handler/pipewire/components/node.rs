@@ -370,16 +370,28 @@ impl NodeManagementLocal for PipewireManager {
         // Create and attach a meter
         let filter_name = format!("{}-meter", desc.name);
         let meter = self.filter_meter_create(desc.id, filter_name).await?;
-        if self.meter_enabled {
-            self.link_create_filter_to_filter(desc.id, meter).await?;
-        }
         self.meter_map.insert(desc.id, meter);
 
         let (mix_a, mix_b) = self.node_create_a_b_volumes(desc).await?;
 
+        let source = if let Some(id) = self.source_filter_end.get(&desc.id) {
+            id
+        } else {
+            &desc.id
+        };
+
+        if self.meter_enabled {
+            self.link_create_filter_to_filter(*source, meter).await?;
+        }
+
         // Now we need to link our filter to the Mixes
-        self.link_create_filter_to_filter(desc.id, mix_a).await?;
-        self.link_create_filter_to_filter(desc.id, mix_b).await?;
+        self.link_create_filter_to_filter(*source, mix_a).await?;
+        self.link_create_filter_to_filter(*source, mix_b).await?;
+
+        if source != &desc.id {
+            // We need to attach this to our filter tree
+            self.source_link_to_filters(desc.id, false).await?;
+        }
 
         // Create a map for this ID to the mixes
         self.source_map
@@ -397,19 +409,32 @@ impl NodeManagementLocal for PipewireManager {
         // Create a Meter
         let filter_name = format!("{}-meter", desc.name);
         let meter = self.filter_meter_create(desc.id, filter_name).await?;
-
-        // Attach this to the original source
-        if self.meter_enabled {
-            self.link_create_node_to_filter(desc.id, meter).await?;
-        }
         self.meter_map.insert(desc.id, meter);
 
         // Generate the A/B Mixes
         let (mix_a, mix_b) = self.node_create_a_b_volumes(desc).await?;
 
-        // Now we need to link our node to the Mixes
-        self.link_create_node_to_filter(desc.id, mix_a).await?;
-        self.link_create_node_to_filter(desc.id, mix_b).await?;
+        if let Some(id) = self.source_filter_end.get(&desc.id) {
+            // If we have a filter end point, we're joining on filters and not on nodes
+            if self.meter_enabled {
+                self.link_create_filter_to_filter(*id, meter).await?;
+            }
+
+            // Now we need to link our node to the Mixes
+            self.link_create_filter_to_filter(*id, mix_a).await?;
+            self.link_create_filter_to_filter(*id, mix_b).await?;
+
+            // Ok, we need to attach ourselves to the main filter tree
+            self.source_link_to_filters(desc.id, true).await?;
+        } else {
+            if self.meter_enabled {
+                self.link_create_node_to_filter(desc.id, meter).await?;
+            }
+
+            // Now we need to link our node to the Mixes
+            self.link_create_node_to_filter(desc.id, mix_a).await?;
+            self.link_create_node_to_filter(desc.id, mix_b).await?;
+        };
 
         // Create a map for this ID to the mixes
         self.source_map

@@ -301,8 +301,19 @@ impl VolumeManager for PipewireManager {
                     bail!("Unable to obtain node type");
                 }
             };
+
             match node_type {
-                NodeType::PhysicalSource | NodeType::PhysicalTarget => {
+                NodeType::PhysicalSource => {
+                    let target_filter = self.source_filter_end.get(&node).cloned().unwrap_or(node);
+                    if enabled {
+                        self.link_create_filter_to_filter(target_filter, meter)
+                            .await?;
+                    } else {
+                        self.link_remove_filter_to_filter(target_filter, meter)
+                            .await?;
+                    }
+                }
+                NodeType::PhysicalTarget => {
                     if enabled {
                         self.link_create_filter_to_filter(node, meter).await?;
                     } else {
@@ -310,10 +321,18 @@ impl VolumeManager for PipewireManager {
                     }
                 }
                 NodeType::VirtualSource => {
-                    if enabled {
-                        self.link_create_node_to_filter(node, meter).await?;
+                    if let Some(filter) = self.source_filter_end.get(&node) {
+                        if enabled {
+                            self.link_create_filter_to_filter(*filter, meter).await?;
+                        } else {
+                            self.link_remove_filter_to_filter(*filter, meter).await?;
+                        }
                     } else {
-                        self.link_remove_node_to_filter(node, meter).await?;
+                        if enabled {
+                            self.link_create_node_to_filter(node, meter).await?;
+                        } else {
+                            self.link_remove_node_to_filter(node, meter).await?;
+                        }
                     }
                 }
                 NodeType::VirtualTarget => {

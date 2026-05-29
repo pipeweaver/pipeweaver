@@ -766,6 +766,7 @@ impl PipewireManager {
         let mut store = self.store.borrow_mut();
         match link {
             LinkType::Node(id) => {
+                debug!("Getting Port for Node: {}", id);
                 let node = store.managed_node_get(*id).unwrap();
 
                 let id = node.pw_id.unwrap();

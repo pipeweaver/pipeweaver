@@ -226,16 +226,20 @@ pub struct PortAssignment {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Filter {
+pub struct Filter {
+    #[serde(default = "generate_uid")]
+    pub id: Ulid,
+
+    pub filter: FilterType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FilterType {
     LV2(LV2Filter),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LV2Filter {
-    // We'll generate a ulid if one isn't provided
-    #[serde(default = "generate_uid")]
-    pub id: Ulid,
-
     pub plugin_uri: String,
     pub values: HashMap<String, FilterValue>,
 }
