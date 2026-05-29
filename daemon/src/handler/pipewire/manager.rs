@@ -64,6 +64,8 @@ pub(crate) struct PipewireManager {
     // These two define which nodes should be considered the start / end points for
     // a route, this is so we can keep filter management isolated.
     pub(crate) source_filter_end: HashMap<Ulid, Ulid>,
+
+    #[allow(unused)]
     pub(crate) target_filter_start: HashMap<Ulid, Ulid>,
 
     // A list of physical nodes

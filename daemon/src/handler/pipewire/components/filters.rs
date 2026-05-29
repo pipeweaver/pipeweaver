@@ -41,6 +41,7 @@ pub(crate) trait FilterManagement {
 
     async fn filter_custom_create(&mut self, target: Ulid, filter: Filter) -> Result<()>;
     async fn filter_custom_remove(&mut self, id: Ulid) -> Result<()>;
+    async fn filter_custom_move(&mut self, id: Ulid, new_index: usize) -> Result<()>;
 
     async fn filter_set_value(&mut self, filter: Ulid, id: u32, value: FilterValue) -> Result<()>;
 }
@@ -110,7 +111,7 @@ impl FilterManagement for PipewireManager {
     }
 
     async fn channel_load_filters(&mut self, id: Ulid) -> Result<()> {
-        if self.get_device_filters_mut(id)?.is_empty() {
+        if self.get_device_filters(id)?.is_empty() {
             return Ok(());
         }
 
@@ -129,7 +130,7 @@ impl FilterManagement for PipewireManager {
         }
 
         let mut previous_filter_id = None;
-        let device_filters = self.get_device_filters_mut(id)?.clone();
+        let device_filters = self.get_device_filters(id)?.clone();
         for (index, filter) in device_filters.into_iter().enumerate() {
             let filter_id = filter.id;
 
@@ -163,7 +164,7 @@ impl FilterManagement for PipewireManager {
 
     async fn source_link_to_filters(&mut self, id: Ulid, is_node: bool) -> Result<()> {
         let filter_ids: Vec<Ulid> = self
-            .get_device_filters_mut(id)?
+            .get_device_filters(id)?
             .iter()
             .map(|filter| filter.id)
             .collect();
@@ -211,7 +212,7 @@ impl FilterManagement for PipewireManager {
                 .filter_map(|(&fid, cfg)| (cfg.state == FilterState::Running).then_some(fid))
                 .collect();
 
-            let device_filters = self.get_device_filters_mut(target)?;
+            let device_filters = self.get_device_filters(target)?;
 
             device_filters
                 .iter()
@@ -294,15 +295,6 @@ impl FilterManagement for PipewireManager {
         self.add_filter_to_profile(target, filter)?;
         Ok(())
     }
-
-    // async fn filter_custom_create(&mut self, target: Ulid, filter: Filter) -> Result<()> {
-    //     let id = next_filter_id();
-    //     let defaults = HashMap::new();
-    //
-    //     self.filter_create_custom(target, filter.clone(), id, defaults)
-    //         .await?;
-    //     self.add_filter_to_profile(target, filter)
-    // }
 
     async fn filter_custom_remove(&mut self, id: Ulid) -> Result<()> {
         let err = anyhow!("Filter not found in config");
@@ -402,6 +394,162 @@ impl FilterManagement for PipewireManager {
         self.remove_filter_from_profile(id)?;
 
         // And we should be done :)
+        Ok(())
+    }
+
+    async fn filter_custom_move(&mut self, id: Ulid, new_index: usize) -> Result<()> {
+        // Only bother if the filter is running
+        let is_running = self
+            .filter_config
+            .get(&id)
+            .map(|cfg| cfg.state == FilterState::Running)
+            .ok_or_else(|| anyhow!("Filter {id} not found in config"))?;
+
+        let (device_id, node_type) = self.get_device_id_by_filter(id)?;
+
+        // Grab neighbours before the move
+        let (old_prev, old_next) = self.find_running_neighbours(id)?;
+
+        // Reorder the vec
+        {
+            let device_filters = self.get_device_filters_mut(device_id)?;
+            let old_index = device_filters
+                .iter()
+                .position(|f| f.id == id)
+                .ok_or_else(|| anyhow!("Filter {id} not found in device chain"))?;
+
+            let filter = device_filters.remove(old_index);
+            let clamped = new_index.min(device_filters.len());
+            device_filters.insert(clamped, filter);
+        }
+
+        if !is_running {
+            return Ok(());
+        }
+
+        // Grab neighbours after the move
+        let (new_prev, new_next) = self.find_running_neighbours(id)?;
+
+        // If nothing changed in terms of running neighbours, no relink needed
+        if old_prev == new_prev && old_next == new_next {
+            return Ok(());
+        }
+
+        let source_pass_filter = matches!(
+            node_type,
+            NodeType::PhysicalSource | NodeType::VirtualSource
+        )
+        .then(|| self.source_filter_end.get(&device_id).copied())
+        .flatten();
+
+        // Remove incoming link to filter
+        match (old_prev, node_type) {
+            (Some(prev_id), _) => self.link_remove_filter_to_filter(prev_id, id).await?,
+            (None, NodeType::PhysicalSource) => {
+                self.link_remove_filter_to_filter(device_id, id).await?
+            }
+            (None, NodeType::VirtualSource) => {
+                self.link_remove_node_to_filter(device_id, id).await?
+            }
+            (None, NodeType::PhysicalTarget | NodeType::VirtualTarget) => {}
+        }
+
+        // Remove outgoing link from filter
+        match (old_next, source_pass_filter) {
+            (Some(next_id), _) => self.link_remove_filter_to_filter(id, next_id).await?,
+            (None, Some(pass_id)) => self.link_remove_filter_to_filter(id, pass_id).await?,
+            (None, None) => {
+                bail!("Failed to remove old outgoing link (next and pass are None)");
+            }
+        }
+
+        // Bridge the old gap
+        match (old_prev, old_next, source_pass_filter) {
+            (Some(prev_id), Some(next_id), _) => {
+                self.link_create_filter_to_filter(prev_id, next_id).await?;
+            }
+            (Some(prev_id), None, Some(pass_id)) => {
+                self.link_create_filter_to_filter(prev_id, pass_id).await?;
+            }
+            (None, Some(next_id), _) => match node_type {
+                NodeType::PhysicalSource => {
+                    self.link_create_filter_to_filter(device_id, next_id)
+                        .await?
+                }
+                NodeType::VirtualSource => {
+                    self.link_create_node_to_filter(device_id, next_id).await?
+                }
+                NodeType::PhysicalTarget | NodeType::VirtualTarget => {}
+            },
+            (None, None, Some(pass_id)) => match node_type {
+                NodeType::PhysicalSource => {
+                    self.link_create_filter_to_filter(device_id, pass_id)
+                        .await?
+                }
+                NodeType::VirtualSource => {
+                    self.link_create_node_to_filter(device_id, pass_id).await?
+                }
+                NodeType::PhysicalTarget | NodeType::VirtualTarget => {}
+            },
+            _ => {
+                bail!("Failed to bridge old link (prev, next and pass are None)");
+            }
+        }
+
+        // Remove whatever link currently bridges the new gap
+        match (new_prev, new_next, source_pass_filter) {
+            (Some(prev_id), Some(next_id), _) => {
+                self.link_remove_filter_to_filter(prev_id, next_id).await?;
+            }
+            (Some(prev_id), None, Some(pass_id)) => {
+                self.link_remove_filter_to_filter(prev_id, pass_id).await?;
+            }
+            (None, Some(next_id), _) => match node_type {
+                NodeType::PhysicalSource => {
+                    self.link_remove_filter_to_filter(device_id, next_id)
+                        .await?
+                }
+                NodeType::VirtualSource => {
+                    self.link_remove_node_to_filter(device_id, next_id).await?
+                }
+                NodeType::PhysicalTarget | NodeType::VirtualTarget => {}
+            },
+            (None, None, Some(pass_id)) => match node_type {
+                NodeType::PhysicalSource => {
+                    self.link_remove_filter_to_filter(device_id, pass_id)
+                        .await?
+                }
+                NodeType::VirtualSource => {
+                    self.link_remove_node_to_filter(device_id, pass_id).await?
+                }
+                NodeType::PhysicalTarget | NodeType::VirtualTarget => {}
+            },
+            _ => {
+                bail!("Failed to remove outgoing link (prev, next and pass are None)");
+            }
+        }
+
+        // Create incoming link in new position
+        match (new_prev, node_type) {
+            (Some(prev_id), _) => self.link_create_filter_to_filter(prev_id, id).await?,
+            (None, NodeType::PhysicalSource) => {
+                self.link_create_filter_to_filter(device_id, id).await?
+            }
+            (None, NodeType::VirtualSource) => {
+                self.link_create_node_to_filter(device_id, id).await?
+            }
+            (None, NodeType::PhysicalTarget | NodeType::VirtualTarget) => {}
+        }
+
+        // Create outgoing link in new position
+        match (new_next, source_pass_filter) {
+            (Some(next_id), _) => self.link_create_filter_to_filter(id, next_id).await?,
+            (None, Some(pass_id)) => self.link_create_filter_to_filter(id, pass_id).await?,
+            (None, None) => {
+                bail!("Failed to create outgoing link");
+            }
+        }
+
         Ok(())
     }
 
