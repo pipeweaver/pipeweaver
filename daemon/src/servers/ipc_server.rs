@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 use tokio::select;
 use tokio::sync::broadcast::Sender;
+use tokio::sync::watch;
 
 #[derive(Debug)]
 pub enum ErrorState {
@@ -96,6 +97,7 @@ pub async fn spawn_ipc_server(
     listener: LocalSocketListener,
     usb_tx: Messenger,
     broadcast_tx: Sender<PatchEvent>,
+    manager_alive: watch::Receiver<bool>,
     mut shutdown_signal: Stop,
 ) {
     let socket_path = format!("/tmp/{}.socket", APP_NAME);
@@ -103,11 +105,20 @@ pub async fn spawn_ipc_server(
     loop {
         select! {
             Ok(connection) = listener.accept() => {
-                let socket = Socket::new(connection);
+                let mut socket = Socket::new(connection);
+                if !*manager_alive.borrow() {
+                    let _ = socket
+                        .send(DaemonResponse::Err("PipeWire manager is not running".to_string()))
+                        .await;
+                    continue;
+                }
+
+
                 let usb_tx = usb_tx.clone();
                 let broadcast_tx = broadcast_tx.clone();
+                let alive = manager_alive.clone();
                 tokio::spawn(async move {
-                    handle_connection(socket, broadcast_tx, usb_tx).await;
+                    handle_connection(socket, broadcast_tx, usb_tx, alive).await;
                 });
             }
             () = shutdown_signal.recv() => {
@@ -124,11 +135,21 @@ async fn handle_connection(
     mut socket: Socket<DaemonRequest, DaemonResponse>,
     broadcast_tx: Sender<PatchEvent>,
     usb_tx: Messenger,
+    mut manager_alive: watch::Receiver<bool>,
 ) {
     let mut subscriber = broadcast_tx.subscribe();
 
     loop {
         select! {
+            changed = manager_alive.changed() => {
+                if changed.is_ok() && !*manager_alive.borrow() {
+                    let _ = socket
+                        .send(DaemonResponse::Err("PipeWire manager stopped".to_string()))
+                        .await;
+                    return;
+                }
+            }
+
             Ok(event) = subscriber.recv() => {
                 let patch = DaemonResponse::Patch(event.data);
                 if let Err(e) = socket.send(patch).await {

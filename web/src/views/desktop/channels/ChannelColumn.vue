@@ -55,6 +55,7 @@ export default {
 
   methods: {
     onResize: function () {
+      if (!this.$refs.fader_container) return;
       this.calculateHeight();
     },
 
@@ -78,7 +79,6 @@ export default {
 
     needsDevice: function () {
       if (this.is_physical()) {
-        console.log(this.getDevice());
         return this.getDevice().attached_devices.length === 0;
       }
       return false;
@@ -90,14 +90,11 @@ export default {
     },
 
     calculateHeight: function () {
-      if (this.$refs.fader_container === undefined) {
-        console.log("This shouldn't get called..");
+      if (!this.$refs.fader_container) {  // catches both null and undefined
+        return;
       }
 
-      // Firstly, get the base height (including padding and borders)
       let base_height = this.$refs.fader_container.clientHeight;
-
-      // We have 15px of padding on this element, so remove from top and bottom
       this.slider_height = base_height - 30;
     },
 

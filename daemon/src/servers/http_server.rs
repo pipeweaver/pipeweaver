@@ -21,9 +21,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tokio::sync::RwLock;
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::oneshot::Sender;
+use tokio::sync::{RwLock, watch};
 use ulid::Ulid;
 
 const WEB_CONTENT: Dir = include_dir!("./daemon/web-content/");
@@ -48,6 +48,8 @@ struct AppData {
     broadcast_tx: BroadcastSender<PatchEvent>,
     meter_tx: BroadcastSender<MeterEvent>,
     client_counter: ClientCounter,
+
+    manager_alive: watch::Receiver<bool>,
 }
 
 pub async fn spawn_http_server(
@@ -55,6 +57,7 @@ pub async fn spawn_http_server(
     handle_tx: Sender<ServerHandle>,
     broadcast_tx: tokio::sync::broadcast::Sender<PatchEvent>,
     meter_tx: tokio::sync::broadcast::Sender<MeterEvent>,
+    manager_alive_rx: watch::Receiver<bool>,
     settings: HttpSettings,
 ) {
     let client_counter = Arc::new(AtomicUsize::new(0));
@@ -74,6 +77,7 @@ pub async fn spawn_http_server(
                 broadcast_tx: broadcast_tx.clone(),
                 meter_tx: meter_tx.clone(),
                 client_counter: client_counter.clone(),
+                manager_alive: manager_alive_rx.clone(),
             })))
             .service(execute_command)
             .service(get_devices)
@@ -114,13 +118,36 @@ async fn websocket(
     let (response, mut session, msg_stream) = actix_ws::handle(&req, body)?;
 
     let data = app_data.read().await;
+    if !*data.manager_alive.borrow() {
+        actix_web::rt::spawn(async move {
+            let _ = session
+                .close(Some(CloseReason {
+                    code: CloseCode::Restart,
+                    description: Some("PipeWire manager is not running".to_string()),
+                }))
+                .await;
+        });
+
+        return Ok(response);
+    }
+
     let usb_tx = data.messenger.clone();
     let mut broadcast_rx = data.broadcast_tx.subscribe();
+    let mut manager_alive = data.manager_alive.clone();
 
     actix_web::rt::spawn(async move {
         let mut msg_stream = msg_stream.aggregate_continuations();
         let close_reason = loop {
             tokio::select! {
+                changed = manager_alive.changed() => {
+                    if changed.is_ok() && !*manager_alive.borrow() {
+                        break Some(CloseReason {
+                            code: CloseCode::Restart,
+                            description: Some("PipeWire manager stopped".to_string()),
+                        });
+                    }
+                }
+
                 Ok(patch) = broadcast_rx.recv() => {
                     let message = WsResponse(WebsocketResponse {
                         id: u64::MAX,
@@ -267,9 +294,23 @@ async fn websocket_meter(
 ) -> Result<HttpResponse, actix_web::Error> {
     let (response, mut session, msg_stream) = actix_ws::handle(&req, body)?;
     let data = app_data.read().await;
+    if !*data.manager_alive.borrow() {
+        actix_web::rt::spawn(async move {
+            let _ = session
+                .close(Some(CloseReason {
+                    code: CloseCode::Restart,
+                    description: Some("PipeWire manager is not running".to_string()),
+                }))
+                .await;
+        });
+
+        return Ok(response);
+    }
+
     let messenger = data.messenger.clone();
     let client_counter = data.client_counter.clone();
     let mut meter_rx = data.meter_tx.subscribe();
+    let mut manager_alive = data.manager_alive.clone();
 
     actix_web::rt::spawn(async move {
         // Is this the first client?
@@ -282,6 +323,15 @@ async fn websocket_meter(
         let mut msg_stream = msg_stream.aggregate_continuations();
         let close_reason = loop {
             tokio::select! {
+                changed = manager_alive.changed() => {
+                    if changed.is_ok() && !*manager_alive.borrow() {
+                        break Some(CloseReason {
+                            code: CloseCode::Restart,
+                            description: Some("PipeWire manager stopped".to_string()),
+                        });
+                    }
+                }
+
                 Ok(event) = meter_rx.recv() => {
                     if let Err(e) = send_message(&event, &mut session).await {
                         break e;
@@ -347,6 +397,12 @@ async fn execute_command(
 ) -> HttpResponse {
     let data = app_data.read().await;
 
+    if !*data.manager_alive.borrow() {
+        return HttpResponse::ServiceUnavailable().json(DaemonResponse::Err(
+            "PipeWire manager is not running".to_string(),
+        ));
+    }
+
     // Errors propagate weirdly in the javascript world, so send all as OK, and handle there.
     match handle_packet(request.0, &data.messenger).await {
         Ok(result) => HttpResponse::Ok().json(result),
@@ -356,6 +412,13 @@ async fn execute_command(
 
 #[get("/api/get-devices")]
 async fn get_devices(app_data: Data<RwLock<AppData>>) -> HttpResponse {
+    {
+        let data = app_data.read().await;
+        if !*data.manager_alive.borrow() {
+            return HttpResponse::ServiceUnavailable().finish();
+        }
+    }
+
     if let Ok(response) = get_status(app_data).await {
         return HttpResponse::Ok().json(&response);
     }

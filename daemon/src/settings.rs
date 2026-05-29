@@ -5,7 +5,6 @@ use log::{info, warn};
 use pipeweaver_ipc::commands::GlobalSettings;
 use std::fs;
 use std::fs::{File, create_dir_all};
-use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 pub fn load_settings() -> GlobalSettings {

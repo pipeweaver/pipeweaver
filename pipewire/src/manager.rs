@@ -1020,6 +1020,8 @@ pub fn run_pw_main_loop(
             .expect("OneShot Channel is broken!");
         return;
     };
+
+    let mainloop_error = mainloop.clone();
     let _core_listener = core
         .add_listener_local()
         .info(|info| {
@@ -1031,11 +1033,19 @@ pub fn run_pw_main_loop(
                 info.host_name()
             );
         })
-        .error(|_id, _seq, _res, _msg| {
-            // error!(
-            //     "[PipeWire] Core Error Occurred: {} - {} - {} - {}",
-            //     id, seq, res, msg
-            // );
+        .error(move |id, _seq, res, msg| {
+            if id == 0 {
+                if res == -2 {
+                    // -ENOENT: stale proxy race condition, safe to ignore
+                    debug!("[PipeWire] Stale proxy: {}", msg);
+                } else {
+                    error!(
+                        "[PipeWire] Core error (res={}): {}, shutting down",
+                        res, msg
+                    );
+                    mainloop_error.quit();
+                }
+            }
         })
         .register();
 
@@ -1050,14 +1060,14 @@ pub fn run_pw_main_loop(
         core,
         mainloop.clone(),
         registry,
-        callback_tx,
+        callback_tx.clone(),
     )));
     PipewireManager::create_core_listener(&manager);
 
     let receiver_clone = mainloop.clone();
     let _receiver = pw_rx.attach(mainloop.loop_(), {
         move |message| match message {
-            PipewireInternalMessage::Quit(result) => {
+            PipewireInternalMessage::Quit(_, result) => {
                 debug!("[PipeWire] Triggering Main Loop Quit");
                 let _ = result.send(Ok(()));
                 receiver_clone.quit();
@@ -1129,6 +1139,8 @@ pub fn run_pw_main_loop(
     debug!("Pipewire Initialised, starting mainloop");
     start_tx.send(Ok(())).expect("OneShot Channel is broken!");
     mainloop.run();
+
+    let _ = callback_tx.send(PipewireReceiver::Exited);
 
     info!("[PIPEWIRE] Main Loop Terminated");
 }

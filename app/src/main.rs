@@ -12,9 +12,11 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc;
+use std::thread::sleep;
 use std::time::Duration;
 use std::{env, fs, thread};
-use tungstenite::http::Uri;
+use tungstenite::http::{StatusCode, Uri};
+use tungstenite::protocol::frame::coding::CloseCode;
 use tungstenite::{Message, connect};
 
 mod raise_window;
@@ -199,46 +201,80 @@ fn websocket_main_thread(res: mpsc::Sender<Result<()>>, tx: mpsc::Sender<WindowM
         }
     };
 
-    info!("Attempting to connect to Pipeweaver at {uri}");
-    let (mut socket, response) = match connect(uri) {
-        Ok((socket, response)) => (socket, response),
-        Err(e) => {
-            let _ = res.send(Err(anyhow!(e)));
-            return;
-        }
-    };
+    let mut window_opened = false;
 
-    info!("Connected, HTTP status: {}", response.status());
-    let _ = res.send(Ok(()));
+    'top: loop {
+        let uri = uri.clone();
 
-    loop {
-        match socket.read() {
-            Ok(msg) => match msg {
-                Message::Ping(payload) => {
-                    let _ = socket.send(Message::Pong(payload));
-                }
-                Message::Close(_) => {
-                    println!("Server closed the connection");
-                    break;
-                }
-                _ => {}
-            },
-            Err(tungstenite::Error::ConnectionClosed) => {
-                error!("Disconnected: connection closed");
-                break;
-            }
-            Err(tungstenite::Error::Protocol(e)) => {
-                error!("Disconnected: protocol error: {e}");
-                break;
-            }
+        info!("Attempting to connect to Pipeweaver at {uri}");
+        let (mut socket, response) = match connect(uri) {
+            Ok((socket, response)) => (socket, response),
             Err(e) => {
-                error!("Disconnected: other error: {e}");
-                break;
+                if matches!(&e, tungstenite::Error::Http(r) if r.status() == StatusCode::SERVICE_UNAVAILABLE)
+                {
+                    // Service unavailable is expected - open the window if not already open and keep retrying
+                    if !window_opened {
+                        window_opened = true;
+                        let _ = res.send(Ok(()));
+                    }
+                    info!("Service unavailable, retrying...");
+                    sleep(Duration::from_secs(1));
+                    continue 'top;
+                }
+
+                // Anything else on the initial connection is a real failure
+                error!("Connect failed with non-retryable error: {e}");
+                if !window_opened {
+                    let _ = res.send(Err(anyhow!(e)));
+                    return;
+                }
+                break 'top;
+            }
+        };
+
+        info!("Connected, HTTP status: {}", response.status());
+
+        if !window_opened {
+            window_opened = true;
+            let _ = res.send(Ok(()));
+        }
+
+        loop {
+            match socket.read() {
+                Ok(msg) => match msg {
+                    Message::Ping(payload) => {
+                        let _ = socket.send(Message::Pong(payload));
+                    }
+                    Message::Close(frame) => {
+                        if let Some(frame) = &frame
+                            && frame.code == CloseCode::Restart
+                        {
+                            info!("Server requested reconnect ({:?}), retrying...", frame.code);
+                            sleep(Duration::from_secs(1));
+                            continue 'top;
+                        }
+                        // Any other close code is unrecoverable
+                        error!("Server closed the connection: {:?}", frame);
+                        break 'top;
+                    }
+                    _ => {}
+                },
+                Err(tungstenite::Error::ConnectionClosed) => {
+                    error!("Disconnected: connection closed");
+                    break 'top;
+                }
+                Err(tungstenite::Error::Protocol(e)) => {
+                    error!("Disconnected: protocol error: {e}");
+                    break 'top;
+                }
+                Err(e) => {
+                    error!("Disconnected: other error: {e}");
+                    break 'top;
+                }
             }
         }
     }
 
-    // If we get here, the connection has been dropped, close our window.
     info!("Connection to Pipeweaver Lost, sending Close");
     let _ = tx.send(WindowMessage::Close);
 }
