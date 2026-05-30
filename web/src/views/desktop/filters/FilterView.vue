@@ -27,7 +27,7 @@ export default {
       activeFilter: undefined,
       // Map specific plugin URIs to components
       pluginComponents: {
-        'http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo': 'DelayFilter',
+        //'http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo': 'DelayFilter',
       },
       // Fallback component for each filter type
       fallbackComponents: {
