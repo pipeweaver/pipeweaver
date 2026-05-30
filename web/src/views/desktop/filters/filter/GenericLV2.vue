@@ -103,7 +103,8 @@ export default {
                  @change="e => setFilterPropertyValue(filterId, prop.id, e)"/>
         </span>
         <span v-else-if="getFilterPropertyType(prop) === 'enum'" class="prop-value">
-          <select @change="e => setFilterPropertyValue(filterId, prop.id, e)">
+          <select :value="prop.value.Int32"
+                  @change="e => setFilterPropertyValue(filterId, prop.id, e)">
             <option v-for="(enum_name, enum_value) in prop.enum_def" :value="enum_value"
                     :key="enum_value">
               {{ enum_name }}
