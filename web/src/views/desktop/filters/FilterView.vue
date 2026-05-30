@@ -210,6 +210,11 @@ export default {
 
     removeFilter(filter) {
       let id = this.getFilterInfo(filter).id;
+
+      if (this.activeFilter.id === id) {
+        this.activeFilter = undefined;
+      }
+
       let command = {
         "RemoveFilter": id
       };
