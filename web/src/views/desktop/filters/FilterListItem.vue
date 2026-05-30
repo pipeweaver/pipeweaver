@@ -11,6 +11,9 @@ export default {
 
 <template>
   <div class="filter-item" @click="$emit('select', filter)">
+    <div class="filter-drag-handle">
+      <font-awesome-icon :icon="['fas', 'grip-vertical']"/>
+    </div>
     <div class="title">{{ filterName }}</div>
     <div class="button" @click.stop="$emit('remove', filter)">x</div>
   </div>

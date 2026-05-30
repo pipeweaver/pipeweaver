@@ -6,6 +6,9 @@ import {get_device_by_id} from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
 import {store} from "@/app/store.js";
 import FilterListItem from "@/views/desktop/filters/FilterListItem.vue";
+import {Sortable} from "@shopify/draggable";
+
+const INTERNAL_SCALE = 0.8;
 
 export default {
   name: "FilterView",
@@ -34,6 +37,128 @@ export default {
   },
 
   methods: {
+    setup_draggable() {
+      if (this.draggable) {
+        this.draggable.destroy();
+        this.draggable = null;
+      }
+
+      const container = this.$refs.filters;
+      const draggable = new Sortable(container, {
+        draggable: '.filter-item',
+        handle: '.filter-drag-handle',
+        delay: 0,
+
+        mirror: {
+          xAxis: false,
+          yAxis: false,
+          constrainDimensions: true,
+        },
+      });
+
+      draggable.on('drag:start', (event) => {
+        event.source.dataset.originalLeft = event.source.getBoundingClientRect().left.toString();
+        this.draggedId = event.source.dataset.id;
+      })
+
+      draggable.on('mirror:created', (event) => {
+        event.source.classList.add('drag-placeholder');
+        event.mirror.classList.add('custom-mirror');
+        document.body.classList.add('dragging');
+      });
+
+      draggable.on('drag:move', (event) => {
+        const mirror = document.querySelector('.draggable-mirror');
+        const placeholder = document.querySelector('.drag-placeholder');
+
+        if (!mirror || !placeholder) return;
+        let positionX = placeholder.getBoundingClientRect().left;
+        let positionY = placeholder.getBoundingClientRect().top;
+
+        mirror.style.transform = `translate3d(${positionX}px, ${positionY}px, 0px) scale(${INTERNAL_SCALE})`;
+        if (!mirror.classList.contains("custom-mirror-small")) {
+          mirror.classList.add("custom-mirror-small");
+        }
+      });
+
+      draggable.on('drag:stop', (event) => {
+        const mirror = document.querySelector('.draggable-mirror');
+        const dev_id = event.source.dataset.id;
+        if (mirror) {
+          // Clone the mirror to keep visible after drag ends
+          const clone = mirror.cloneNode(true);
+          clone.style.cssText = mirror.style.cssText;
+
+          // Do not let Shopify Draggable clean up our restore clone.
+          clone.classList.remove('draggable-mirror');
+          clone.classList.remove('drag-placeholder');
+          clone.classList.add('restore-mirror');
+
+          const appRoot = document.getElementById('app');
+          appRoot.appendChild(clone);
+
+          const placeholder = document.querySelector('.drag-placeholder');
+          if (!placeholder) return;
+
+          let localX = event.source.getBoundingClientRect().left;
+          let localY = event.source.getBoundingClientRect().top;
+
+          // Animate back on the next frame so the browser sees a real transition.
+          requestAnimationFrame(() => {
+            clone.style.transform = `translate3d(${localX}px, ${localY}px, 0px) scale(1)`;
+          });
+
+          // Remove the cursor drag icon
+          document.body.classList.remove('dragging');
+
+          console.log("Dragged: " + dev_id);
+
+          // Forcibly re-add the placeholder class to the target location
+          let ref = this.$refs[dev_id][0];
+          console.log(ref);
+          this.draggedId = dev_id;
+
+          // Wait (literally) 2ticks for Vue to internally reorganise and redraw it's DOM
+          this.$nextTick(() => {
+            // Set the 'placeholder' class back on the original ref to keep it invisible while
+            // the restore animation plays.
+            ref.$el.classList.add('drag-placeholder');
+          });
+
+          // Wait for 300ms for the transform to complete
+          setTimeout(() => {
+            this.draggedId = null;
+            clone.remove()
+
+            let ref = this.$refs[dev_id][0];
+            ref.$el.classList.remove('drag-placeholder')
+          }, 300);
+        }
+
+
+        // Wait for the DOM to settle before we update PipeWeaver
+        this.$nextTick(() => {
+          const id = event.source.dataset.id;
+
+          // Grab the list children, then map the order
+          const children = Array.from(this.$refs.filters.children);
+          const newOrder = children.map(el => el.dataset.id);
+
+          // Locate the 'new' index of this item
+          const newIndex = newOrder.indexOf(id);
+
+          // MoveFilter(Ulid, usize),
+          let command = {
+            "MoveFilter": [id, newIndex]
+          }
+          websocket.send_command(command);
+        })
+
+      })
+      this.draggable = draggable;
+    },
+
+
     getFilterState(id) {
       if (store.getAudio().filter_config[id] === undefined) {
         console.error("Filter State Missing: " + id);
@@ -130,6 +255,17 @@ export default {
     }
   },
 
+  mounted() {
+    this.setup_draggable();
+  },
+
+  beforeUnmount() {
+    if (this.draggable) {
+      this.draggable.destroy();
+      this.draggable = null;
+    }
+  },
+
   computed: {
     currentFilterPageComponent() {
       if (!this.activeFilter) return null;
@@ -152,15 +288,19 @@ export default {
         <div class="filter-list">
           <div class="add-filter" @click="addFilter">Add Filter</div>
 
-          <FilterListItem
-            v-for="filter in getFilters()"
-            :key="getFilterInfo(filter).id"
-            :filter="filter"
-            :filter-info="getFilterInfo(filter)"
-            :filter-name="getFilterName(filter)"
-            @select="setActiveFilter"
-            @remove="removeFilter"
-          />
+          <div ref="filters">
+            <FilterListItem
+              v-for="filter in getFilters()"
+              :key="getFilterInfo(filter).id"
+              :ref="getFilterInfo(filter).id"
+              :data-id="getFilterInfo(filter).id"
+              :filter="filter"
+              :filter-info="getFilterInfo(filter)"
+              :filter-name="getFilterName(filter)"
+              @select="setActiveFilter"
+              @remove="removeFilter"
+            />
+          </div>
         </div>
 
         <div v-if="activeFilter === undefined" class="filter-page empty-state">
@@ -246,5 +386,53 @@ export default {
 
 .add-filter:hover {
   background-color: #353a39;
+}
+
+/* We need to hide the contents of the original to so we can instead use a placeholder */
+.drag-placeholder {
+  position: relative;
+}
+
+.drag-placeholder > * {
+  visibility: hidden;
+}
+
+.drag-placeholder::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px dashed #666666;
+  pointer-events: none;
+}
+
+/* Some minor styling to the mirror */
+.custom-mirror {
+  position: fixed !important;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.custom-mirror-small {
+  transition: all 0.3s;
+
+  transform-origin: center center !important;
+  will-change: transform, top, left;
+}
+
+.restore-mirror {
+  position: fixed !important;
+  pointer-events: none;
+  opacity: 0.6;
+  z-index: 9999;
+  transition: transform 0.3s;
+  transform-origin: center center !important;
+  will-change: transform;
+}
+
+/* Some minor styling to the mirror */
+.custom-mirror {
+  position: fixed !important;
+  pointer-events: none;
+  opacity: 0.6;
 }
 </style>
