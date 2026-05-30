@@ -10,8 +10,8 @@ use strum_macros::{Display, EnumIter};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use std::fmt;
 use std::collections::HashMap;
+use std::fmt;
 use std::fmt::Debug;
 use std::str::FromStr;
 
@@ -265,6 +265,7 @@ pub struct FilterProperty {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct FilterConfig {
     pub name: String,
+    pub identifier: String,
     pub state: FilterState,
     pub parameters: Vec<FilterProperty>,
 }

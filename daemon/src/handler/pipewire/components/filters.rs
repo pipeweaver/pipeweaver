@@ -911,6 +911,7 @@ impl FilterManagementLocal for PipewireManager {
 
                     let config = FilterConfig {
                         name,
+                        identifier: uri,
                         state,
                         parameters,
                     };
