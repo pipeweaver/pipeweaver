@@ -1,7 +1,7 @@
 <script>
 import NumberInput from "@/views/desktop/filters/layout/inputs/NumberInput.vue";
 import DropMenu from "@/views/desktop/filters/layout/inputs/DropMenu.vue";
-import {dbToLinear, getFilterConfig, linearToDb, setParameterValue} from "@/app/filters.js";
+import {dbToLinear, getFilterConfig, linearToDb, setFilterValue} from "@/app/filters.js";
 
 export default {
   name: "DelayChannel",
@@ -28,7 +28,7 @@ export default {
     },
 
     setParam(base, value) {
-      setParameterValue(this.filterId, `${base}${this.suffix}`, value);
+      setFilterValue(this.filterId, `${base}${this.suffix}`, value);
     },
 
     setDbParam(base, value) {

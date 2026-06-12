@@ -13,7 +13,7 @@ export function linearToDb(amp) {
   return Math.min(MAXIMUM_DB, Math.max(MINIMUM_DB, 20.0 * Math.log10(amp)));
 }
 
-export function setParameterValue(filterId, paramName, value) {
+export function setFilterValue(filterId, paramName, value) {
   const param = getFilterConfig(filterId).parameters.find(p => p.symbol === paramName);
   const id = parseInt(param.id);
 
