@@ -27,7 +27,10 @@ export default {
       activeFilter: undefined,
       // Map specific plugin URIs to components
       pluginComponents: {
-        //'http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo': 'DelayFilter',
+        "http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo": {
+          display: "Delay",
+          component: "DelayFilter",
+        },
       },
       // Fallback component for each filter type
       fallbackComponents: {
@@ -246,13 +249,17 @@ export default {
         return "Unknown Filter";
       }
 
+      if (this.pluginComponents[store.getAudio().filter_config[id].identifier]) {
+        return this.pluginComponents[store.getAudio().filter_config[id].identifier].display;
+      }
+
       return store.getAudio().filter_config[id].name;
     },
 
     getFilterPageComponent(identifier, filterType) {
       // First try to find a specific component for this plugin URI
       if (this.pluginComponents[identifier]) {
-        return this.pluginComponents[identifier];
+        return this.pluginComponents[identifier].component;
       }
 
       // Fall back to generic component for this filter type
