@@ -132,14 +132,16 @@ export default {
     </div>
     <div>
       <div class="warning">
-        <div style="text-align: center; font-weight: bold;">Adjust Quantum Buffers</div>
+        <div style="text-align: center; font-weight: bold;">Audio Buffer Size</div>
         <div style="margin-bottom: 10px;">
-          The setting below will adjust the buffers pipewire uses when handling Pipeweaver
+          The setting below adjusts the buffer size PipeWire uses when processing Pipeweaver
           audio.<br/><br/>
-          The lower the setting, the higher the CPU and chance of cutouts and issues, the higher the
-          setting,
-          the more latency will be added to the audio. Changing this setting will restart the audio
-          engine.
+
+          Lower values reduce audio latency, but increase CPU usage and may result in audio cutouts
+          or other issues on some systems. Higher values improve stability at the cost of increased
+          audio latency.<br/><br/>
+
+          Changing this setting will restart the audio engine.
         </div>
         <div class="quantum">
           <div class="inner" @click="open_quantum_selector($event)">
