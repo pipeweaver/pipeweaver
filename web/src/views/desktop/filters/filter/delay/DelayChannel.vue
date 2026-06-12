@@ -23,12 +23,8 @@ export default {
   methods: {
     linearToDb,
 
-    getFilterConfig() {
-      return getFilterConfig(this.filterId);
-    },
-
     getParam(base) {
-      return this.getFilterConfig().parameters.find(p => p.symbol === `${base}${this.suffix}`);
+      return getFilterConfig(this.filterId).parameters.find(p => p.symbol === `${base}${this.suffix}`);
     },
 
     setParam(base, value) {
