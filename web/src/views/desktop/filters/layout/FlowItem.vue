@@ -29,7 +29,6 @@ export default {
         width: this.width,
         minWidth: this.minWidth,
         maxWidth: this.maxWidth,
-        flex: "0 0 auto"
       };
     }
   }
@@ -43,6 +42,10 @@ export default {
   padding: 10px;
   border-radius: 10px;
   background-color: #222222;
+
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
 }
 
 </style>

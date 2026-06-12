@@ -19,7 +19,7 @@ export default {
 
   gap: 12px;
 
-  align-items: flex-start;
+  align-items: stretch;
   align-content: flex-start;
 }
 </style>
