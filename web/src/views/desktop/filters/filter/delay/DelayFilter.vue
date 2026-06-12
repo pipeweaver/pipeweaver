@@ -2,10 +2,12 @@
 import {store} from "@/app/store.js";
 import {websocket} from "@/app/sockets.js";
 import DelayChannel from "@/views/desktop/filters/filter/delay/DelayChannel.vue";
+import FlowLayout from "@/views/desktop/filters/layout/FlowLayout.vue";
+import FlowItem from "@/views/desktop/filters/layout/FlowItem.vue";
 
 export default {
   name: "DelayFilter",
-  components: {DelayChannel},
+  components: {FlowItem, FlowLayout, DelayChannel},
   props: {
     filterId: {type: String, required: true},
     filterType: {type: String, required: true}
@@ -13,6 +15,7 @@ export default {
 
   methods: {
     getFilterConfig() {
+      console.log(store.getAudio().filter_config[this.filterId]);
       return store.getAudio().filter_config[this.filterId];
     },
 
@@ -32,6 +35,12 @@ export default {
       };
       websocket.send_command(command);
     },
+
+    get_values(is_left) {
+      const config = this.getFilterConfig();
+      console.log(config);
+      if (!config) return {};
+    }
   },
 
   computed: {
@@ -49,13 +58,15 @@ export default {
 </script>
 
 <template>
-  <div class="delay-filter-page">
-    <span>Aww Shit, a delay filter :D</span>
-    <div class="plugin-uri">{{ filterType }}</div>
-    <div class="delay-controls">
-      <DelayChannel channel="l"/>
-      <DelayChannel channel="r"/>
-    </div>
+  <div style="min-width: 600px; padding: 10px">
+    <FlowLayout>
+      <FlowItem width="200px">
+        <DelayChannel :filterId="filterId" channel="l"/>
+      </FlowItem>
+      <FlowItem width="200px">
+        <DelayChannel :filterId="filterId" channel="r"/>
+      </FlowItem>
+    </FlowLayout>
   </div>
 </template>
 
