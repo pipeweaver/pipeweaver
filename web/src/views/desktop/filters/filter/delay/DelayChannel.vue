@@ -32,7 +32,7 @@ export default {
     },
 
     setParam(base, value) {
-      this.setParameterValue(`${base}${this.suffix}`, value);
+      setParameterValue(this.filterId, `${base}${this.suffix}`, value);
     },
 
     setDbParam(base, value) {
@@ -46,10 +46,6 @@ export default {
         {value: '2', text: 'Time'},
       ];
     },
-
-    setParameterValue(paramName, value) {
-      setParameterValue(this.filterId, paramName, value);
-    }
   }
 }
 </script>
