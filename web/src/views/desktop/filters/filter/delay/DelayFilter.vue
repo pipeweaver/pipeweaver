@@ -12,48 +12,6 @@ export default {
     filterId: {type: String, required: true},
     filterType: {type: String, required: true}
   },
-
-  methods: {
-    getFilterConfig() {
-      console.log(store.getAudio().filter_config[this.filterId]);
-      return store.getAudio().filter_config[this.filterId];
-    },
-
-    setParameterValue(paramId, value) {
-      let send_value;
-
-      if (typeof value === 'boolean') {
-        send_value = {"Bool": value};
-      } else if (Number.isInteger(value)) {
-        send_value = {"Int32": value};
-      } else {
-        send_value = {"Float32": value};
-      }
-
-      let command = {
-        "SetFilterValue": [this.filterId, paramId, send_value]
-      };
-      websocket.send_command(command);
-    },
-
-    get_values(is_left) {
-      const config = this.getFilterConfig();
-      console.log(config);
-      if (!config) return {};
-    }
-  },
-
-  computed: {
-    filterState() {
-      return this.getFilterState(this.filterId);
-    },
-
-    delayParameters() {
-      const config = this.getFilterConfig();
-      if (!config) return [];
-      return config.parameters.filter(p => p.is_input !== false);
-    }
-  }
 }
 </script>
 
@@ -71,23 +29,6 @@ export default {
 </template>
 
 <style scoped>
-.delay-filter-page {
-  width: 800px;
-  padding: 20px;
-}
-
-.plugin-uri {
-  font-size: 0.8em;
-  color: #888;
-  margin-bottom: 20px;
-}
-
-.delay-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
 .delay-section h4 {
   margin-bottom: 15px;
   color: #fff;

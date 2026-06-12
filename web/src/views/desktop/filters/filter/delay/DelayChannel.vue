@@ -13,10 +13,13 @@ export default {
     filterId: {type: String, required: true},
   },
 
-  data() {
-    return {
-      mode: '0',
-    }
+  computed: {
+    suffix() {
+      return this.channel === 'l' ? '_l' : '_r';
+    },
+    activeMode() {
+      return this.getParam('mode').value.Int32;
+    },
   },
 
   methods: {
@@ -26,79 +29,24 @@ export default {
       return store.getAudio().filter_config[this.filterId];
     },
 
-    get_modes() {
+    getParam(base) {
+      return this.getFilterConfig().parameters.find(p => p.symbol === `${base}${this.suffix}`);
+    },
+
+    setParam(base, value) {
+      this.setParameterValue(`${base}${this.suffix}`, value);
+    },
+
+    setDbParam(base, value) {
+      this.setParam(base, dbToLinear(value));
+    },
+
+    getModes() {
       return [
         {value: '0', text: 'Samples'},
         {value: '1', text: 'Distance'},
         {value: '2', text: 'Time'},
-      ]
-    },
-    get_active_mode() {
-      let key = this.channel === 'l' ? 'mode_l' : 'mode_r';
-      console.log(this.getFilterConfig().parameters);
-      return this.getFilterConfig().parameters.find(p => p.symbol === key);
-    },
-    set_active_mode(value) {
-      this.setParameterValue(this.channel === 'l' ? 'mode_l' : 'mode_r', value);
-    },
-
-    // Value fetching
-    get_sample_config() {
-      let key = this.channel === 'l' ? 'samp_l' : 'samp_r';
-      return this.getFilterConfig().parameters.find(p => p.symbol === key);
-    },
-    set_sample_value(value) {
-      this.setParameterValue(this.channel === 'l' ? 'samp_l' : 'samp_r', value);
-    },
-
-    get_meter_config() {
-      let key = this.channel === 'l' ? 'm_l' : 'm_r';
-      return this.getFilterConfig().parameters.find(p => p.symbol === key);
-    },
-    set_meter_value(value) {
-      this.setParameterValue(this.channel === 'l' ? 'm_l' : 'm_r', value);
-    },
-
-    get_centimeter_config() {
-      let key = this.channel === 'l' ? 'cm_l' : 'cm_r';
-      return this.getFilterConfig().parameters.find(p => p.symbol === key);
-    },
-    set_centimeter_value(value) {
-      this.setParameterValue(this.channel === 'l' ? 'cm_l' : 'cm_r', value);
-    },
-
-    get_temperature_config() {
-      let key = this.channel === 'l' ? 't_l' : 't_r';
-      return this.getFilterConfig().parameters.find(p => p.symbol === key);
-    },
-    set_temperature_value(value) {
-      this.setParameterValue(this.channel === 'l' ? 't_l' : 't_r', value);
-    },
-
-    get_time_config() {
-      let key = this.channel === 'l' ? 'time_l' : 'time_r';
-      return this.getFilterConfig().parameters.find(p => p.symbol === key);
-    },
-    set_time_value(value) {
-      this.setParameterValue(this.channel === 'l' ? 'time_l' : 'time_r', value);
-    },
-
-    get_dry() {
-      let key = this.channel === 'l' ? 'dry_l' : 'dry_r';
-      return this.getFilterConfig().parameters.find(p => p.symbol === key);
-    },
-    set_dry_value(value) {
-      let parsed = dbToLinear(value);
-      this.setParameterValue(this.channel === 'l' ? 'dry_l' : 'dry_r', parsed);
-    },
-
-    get_wet() {
-      let key = this.channel === 'l' ? 'wet_l' : 'wet_r';
-      return this.getFilterConfig().parameters.find(p => p.symbol === key);
-    },
-    set_wet_value(value) {
-      let parsed = dbToLinear(value);
-      this.setParameterValue(this.channel === 'l' ? 'wet_l' : 'wet_r', parsed);
+      ];
     },
 
     setParameterValue(paramName, value) {
@@ -124,73 +72,63 @@ export default {
 
 <template>
   <div class="top">
-    <div class="title">
-      <div v-if="channel === 'l'">Left</div>
-      <div v-else>Right</div>
-    </div>
+    <div class="title">{{ channel === 'l' ? 'Left' : 'Right' }}</div>
+
     <div>
       <div>Mode</div>
-      <DropMenu :values="get_modes()" :selected="`${get_active_mode().value.Int32}`"
-                @valueClicked="set_active_mode"/>
+      <DropMenu :values="getModes()" :selected="`${activeMode}`"
+                @valueClicked="setParam('mode', $event)"/>
     </div>
-    <div id="samples" v-if="get_active_mode().value.Int32 === 0">
+
+    <div id="samples" v-if="activeMode === 0">
       <div>Samples</div>
-      <div>
-        <NumberInput :min="get_sample_config().min" :max="get_sample_config().max" :step="1"
-                     :value="get_sample_config().value.Int32" @input="set_sample_value"
-                     :allow-empty="false"/>
-      </div>
+      <NumberInput :min="getParam('samp').min" :max="getParam('samp').max" :step="1"
+                   :value="getParam('samp').value.Int32"
+                   @input="setParam('samp', $event)" :allow-empty="false"/>
     </div>
-    <div id="distance" v-if="get_active_mode().value.Int32 === 1">
+
+    <div id="distance" v-if="activeMode === 1">
       <div class="split">
         <div>
           <div>Meters</div>
-          <div>
-            <NumberInput :min="get_meter_config().min" :max="get_meter_config().max" :step="1"
-                         :value="get_meter_config().value.Int32" :suffix="'m'"
-                         @input="set_meter_value" :allow-empty="false"/>
-          </div>
+          <NumberInput :min="getParam('m').min" :max="getParam('m').max" :step="1"
+                       :value="getParam('m').value.Int32" suffix="m"
+                       @input="setParam('m', $event)" :allow-empty="false"/>
         </div>
         <div>
           <div>Centimeters</div>
-          <div>
-            <NumberInput :min="get_centimeter_config().min" :max="get_centimeter_config().max"
-                         :value="get_centimeter_config().value.Float32" :step="0.1" :suffix="'cm'"
-                         @input="set_centimeter_value" :allow-empty="false"/>
-          </div>
+          <NumberInput :min="getParam('cm').min" :max="getParam('cm').max" :step="0.1"
+                       :value="getParam('cm').value.Float32" suffix="cm"
+                       @input="setParam('cm', $event)" :allow-empty="false"/>
         </div>
       </div>
       <div>
         <div>Temperature</div>
-        <div>
-          <NumberInput :min="get_temperature_config().min" :max="get_temperature_config().max"
-                       :value="get_temperature_config().value.Float32" :step="0.1" :suffix="'°C'"
-                       @input="set_temperature_value" :allow-empty="false"/>
-        </div>
+        <NumberInput :min="getParam('t').min" :max="getParam('t').max" :step="0.1"
+                     :value="getParam('t').value.Float32" suffix="°C"
+                     @input="setParam('t', $event)" :allow-empty="false"/>
       </div>
     </div>
-    <div id="time" v-if="get_active_mode().value.Int32 === 2">
+
+    <div id="time" v-if="activeMode === 2">
       <div>Time</div>
-      <div>
-        <NumberInput :min="get_time_config().min" :max="get_time_config().max"
-                     :value="get_time_config().value.Float32" :step="1" :suffix="'ms'"
-                     @input="set_time_value" :allow-empty="false"/>
-      </div>
+      <NumberInput :min="getParam('time').min" :max="getParam('time').max" :step="1"
+                   :value="getParam('time').value.Float32" suffix="ms"
+                   @input="setParam('time', $event)" :allow-empty="false"/>
     </div>
+
     <div class="split">
       <div>
         <div>Dry</div>
-        <div>
-          <NumberInput :min="-80.0" :max="20.0" :value="linearToDb(get_dry().value.Float32)"
-                       :step="0.01" :suffix="'dB'" @input="set_dry_value" :allow-empty="false"/>
-        </div>
+        <NumberInput :min="-80.0" :max="20.0" :step="0.01" suffix="dB"
+                     :value="linearToDb(getParam('dry').value.Float32)"
+                     @input="setDbParam('dry', $event)" :allow-empty="false"/>
       </div>
       <div>
         <div>Wet</div>
-        <div>
-          <NumberInput :min="-80.0" :max="20.0" :value="linearToDb(get_wet().value.Float32)"
-                       :step="0.01" :suffix="'dB'" @input="set_wet_value" :allow-empty="false"/>
-        </div>
+        <NumberInput :min="-80.0" :max="20.0" :step="0.01" suffix="dB"
+                     :value="linearToDb(getParam('wet').value.Float32)"
+                     @input="setDbParam('wet', $event)" :allow-empty="false"/>
       </div>
     </div>
   </div>
@@ -217,5 +155,4 @@ export default {
   width: 100%;
   box-sizing: border-box;
 }
-
 </style>
