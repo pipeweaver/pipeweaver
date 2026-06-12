@@ -29,21 +29,4 @@ export default {
 </template>
 
 <style scoped>
-.delay-section h4 {
-  margin-bottom: 15px;
-  color: #fff;
-}
-
-.error-state a {
-  color: #6bb6ff;
-}
-
-select {
-  padding: 5px 10px;
-  background-color: #1a1f1e;
-  border: 1px solid #444;
-  color: #fff;
-  border-radius: 3px;
-  min-width: 150px;
-}
 </style>
