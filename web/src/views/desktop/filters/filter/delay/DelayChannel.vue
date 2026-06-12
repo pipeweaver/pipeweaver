@@ -112,7 +112,7 @@ export default {
 
     <div id="time" v-if="activeMode === 2">
       <div>Time</div>
-      <NumberInput :min="getParam('time').min" :max="getParam('time').max" :step="1"
+      <NumberInput :min="getParam('time').min" :max="getParam('time').max" :step="0.01"
                    :value="getParam('time').value.Float32" suffix="ms"
                    @input="setParam('time', $event)" :allow-empty="false"/>
     </div>
