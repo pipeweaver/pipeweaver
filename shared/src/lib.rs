@@ -110,8 +110,20 @@ pub enum Quantum {
     Quantum256,
     #[default]
     Quantum512,
+    Quantum768,
     Quantum1024,
+    Quantum1280,
+    Quantum1536,
+    Quantum1792,
     Quantum2048,
+    Quantum2304,
+    Quantum2560,
+    Quantum2816,
+    Quantum3072,
+    Quantum3328,
+    Quantum3584,
+    Quantum3840,
+    Quantum4096,
 }
 
 impl From<Quantum> for u32 {
@@ -124,8 +136,20 @@ impl From<Quantum> for u32 {
             Quantum::Quantum128 => 128,
             Quantum::Quantum256 => 256,
             Quantum::Quantum512 => 512,
+            Quantum::Quantum768 => 768,
             Quantum::Quantum1024 => 1024,
+            Quantum::Quantum1280 => 1280,
+            Quantum::Quantum1536 => 1536,
+            Quantum::Quantum1792 => 1792,
             Quantum::Quantum2048 => 2048,
+            Quantum::Quantum2304 => 2304,
+            Quantum::Quantum2560 => 2560,
+            Quantum::Quantum2816 => 2816,
+            Quantum::Quantum3072 => 3072,
+            Quantum::Quantum3328 => 3328,
+            Quantum::Quantum3584 => 3584,
+            Quantum::Quantum3840 => 3840,
+            Quantum::Quantum4096 => 4096,
         }
     }
 }
@@ -140,7 +164,20 @@ impl From<u32> for Quantum {
             128 => Quantum::Quantum128,
             256 => Quantum::Quantum256,
             512 => Quantum::Quantum512,
+            768 => Quantum::Quantum768,
             1024 => Quantum::Quantum1024,
+            1280 => Quantum::Quantum1280,
+            1536 => Quantum::Quantum1536,
+            1792 => Quantum::Quantum1792,
+            2048 => Quantum::Quantum2048,
+            2304 => Quantum::Quantum2304,
+            2560 => Quantum::Quantum2560,
+            2816 => Quantum::Quantum2816,
+            3072 => Quantum::Quantum3072,
+            3328 => Quantum::Quantum3328,
+            3584 => Quantum::Quantum3584,
+            3840 => Quantum::Quantum3840,
+            4096 => Quantum::Quantum4096,
             _ => panic!("Unsupported quantum size: {}", value),
         }
     }
