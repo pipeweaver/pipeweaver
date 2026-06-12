@@ -1,9 +1,7 @@
 <script>
 import NumberInput from "@/views/desktop/filters/layout/inputs/NumberInput.vue";
 import DropMenu from "@/views/desktop/filters/layout/inputs/DropMenu.vue";
-import {websocket} from "@/app/sockets.js";
-import {store} from "@/app/store.js";
-import {dbToLinear, linearToDb} from "@/app/audio.js";
+import {dbToLinear, getFilterConfig, linearToDb, setParameterValue} from "@/app/filters.js";
 
 export default {
   name: "DelayChannel",
@@ -26,7 +24,7 @@ export default {
     linearToDb,
 
     getFilterConfig() {
-      return store.getAudio().filter_config[this.filterId];
+      return getFilterConfig(this.filterId);
     },
 
     getParam(base) {
@@ -50,22 +48,8 @@ export default {
     },
 
     setParameterValue(paramName, value) {
-      const param = this.getFilterConfig().parameters.find(p => p.symbol === paramName);
-      const id = parseInt(param.id);
-
-      let send_value;
-      if (typeof value === 'boolean' || value === 'true' || value === 'false') {
-        send_value = {"Bool": value === true || value === 'true'};
-      } else if ('Int32' in param.value) {
-        send_value = {"Int32": parseInt(value)};
-      } else if ('Float32' in param.value) {
-        send_value = {"Float32": parseFloat(value)};
-      } else {
-        send_value = {"Float32": parseFloat(value)};
-      }
-
-      websocket.send_command({"SetFilterValue": [this.filterId, id, send_value]});
-    },
+      setParameterValue(this.filterId, paramName, value);
+    }
   }
 }
 </script>
