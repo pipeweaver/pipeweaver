@@ -126,6 +126,9 @@ pub struct PhysicalTargetDevice {
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 
     #[serde(default)]
+    pub sync_with_devices: bool,
+
+    #[serde(default)]
     pub attached_port_maps: Vec<Ulid>,
 }
 
@@ -139,6 +142,8 @@ impl Default for PhysicalTargetDevice {
             mix: Default::default(),
 
             attached_devices: Default::default(),
+            sync_with_devices: false,
+
             attached_port_maps: Default::default(),
         }
     }

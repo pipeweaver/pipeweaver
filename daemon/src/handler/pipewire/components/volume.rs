@@ -8,7 +8,7 @@ use anyhow::{Result, anyhow, bail};
 use log::debug;
 use pipeweaver_pipewire::{FilterValue, PipewireMessage, oneshot};
 use pipeweaver_profile::Volumes;
-use pipeweaver_shared::{Mix, MuteState, NodeType};
+use pipeweaver_shared::{DeviceType, Mix, MuteState, NodeType};
 use ulid::Ulid;
 
 pub(crate) trait VolumeManager {
@@ -268,8 +268,28 @@ impl VolumeManager for PipewireManager {
                 let message = PipewireMessage::SetNodeVolume(id, volume);
                 self.pipewire().send_message(message)?;
             }
-        } else if self.get_target_mute_state(id).await? == MuteState::Unmuted {
-            self.filter_volume_set(id, volume).await?;
+        } else {
+            // We need the node details for this, to check for sync
+            let node = self
+                .get_physical_target(id)
+                .ok_or(anyhow!("Unknown Node"))?;
+
+            // If we're syncing, we need to send this to pipewire
+            if node.sync_with_devices {
+                // We need to find all the nodes attached here
+                let devices = self.physical_target.get(&id);
+                if let Some(devices) = devices {
+                    for device in devices {
+                        debug!("Attached Device: {}", device);
+                    }
+                } else {
+                    debug!("No Devices Found for {}", id);
+                }
+            } else {
+                if self.get_target_mute_state(id).await? == MuteState::Unmuted {
+                    self.filter_volume_set(id, volume).await?;
+                }
+            }
         }
 
         // We can safely unwrap here, errors will be thrown by get_target_mute_state if it's wrong
@@ -446,11 +466,15 @@ impl VolumeManagerLocal for PipewireManager {
         }
 
         if node_type == NodeType::PhysicalTarget {
-            // Physical Targets use a Volume filter
-            if self.get_target_mute_state(id).await? == MuteState::Muted {
-                self.filter_volume_set(id, 0).await?;
+            let err = anyhow!("Unable to Locate Node");
+            let node = self.get_physical_target(id).ok_or(err)?;
+            if node.sync_with_devices {
             } else {
-                self.filter_volume_set(id, volume).await?;
+                if self.get_target_mute_state(id).await? == MuteState::Muted {
+                    self.filter_volume_set(id, 0).await?;
+                } else {
+                    self.filter_volume_set(id, volume).await?;
+                }
             }
         } else {
             // Virtual Targets use pipewire

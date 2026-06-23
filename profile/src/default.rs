@@ -109,6 +109,7 @@ impl Profile {
                         volume: 100,
                         mix: Mix::A,
                         attached_devices: vec![],
+                        sync_with_devices: false,
                         attached_port_maps: vec![],
                     }],
                     virtual_devices: vec![VirtualTargetDevice {

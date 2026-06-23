@@ -397,9 +397,20 @@ impl NodeManagementLocal for PipewireManager {
     }
 
     async fn node_create_physical_target(&mut self, desc: &DeviceDescription) -> Result<()> {
-        // A 'Physical' Target is just a volume filter by itself with the ID of the device
-        self.filter_volume_create_id(desc.name.clone(), desc.id)
-            .await?;
+        let node = self
+            .get_physical_target(desc.id)
+            .ok_or(anyhow!("Cannot Find Target"))?;
+
+        // If this node is supposed to sync with the attached devices, we'll create a passthrough
+        // node instead, otherwise create a volume filter.
+        if node.sync_with_devices {
+            self.filter_pass_create_id(desc.name.clone(), desc.id)
+                .await?;
+        } else {
+            // A 'Physical' Target is just a volume filter by itself with the ID of the device
+            self.filter_volume_create_id(desc.name.clone(), desc.id)
+                .await?;
+        }
 
         let filter_name = format!("{}-meter", desc.name);
         let meter = self.filter_meter_create(desc.id, filter_name).await?;
