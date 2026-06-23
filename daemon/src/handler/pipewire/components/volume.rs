@@ -8,7 +8,7 @@ use anyhow::{Result, anyhow, bail};
 use log::debug;
 use pipeweaver_pipewire::{FilterValue, PipewireMessage, oneshot};
 use pipeweaver_profile::Volumes;
-use pipeweaver_shared::{DeviceType, Mix, MuteState, NodeType};
+use pipeweaver_shared::{Mix, MuteState, NodeType};
 use ulid::Ulid;
 
 pub(crate) trait VolumeManager {
