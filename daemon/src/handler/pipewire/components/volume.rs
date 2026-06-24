@@ -25,7 +25,7 @@ pub(crate) trait VolumeManager {
     async fn sync_node_mute(&mut self, id: Ulid, muted: bool) -> Result<()>;
 
     async fn device_sync_volume(&mut self, id: u32, volume: u8) -> Result<()>;
-    async fn device_set_mute(&mut self, id: u32, muted: bool) -> Result<()>;
+    async fn device_sync_mute(&mut self, id: u32, muted: bool) -> Result<()>;
 
     async fn set_source_volume(&mut self, id: Ulid, mix: Mix, volume: u8, api: bool) -> Result<()>;
     async fn set_source_volume_linked(&mut self, id: Ulid, linked: bool) -> Result<()>;
@@ -216,7 +216,7 @@ impl VolumeManager for PipewireManager {
         Ok(())
     }
 
-    async fn device_set_mute(&mut self, id: u32, muted: bool) -> Result<()> {
+    async fn device_sync_mute(&mut self, id: u32, muted: bool) -> Result<()> {
         todo!()
     }
 

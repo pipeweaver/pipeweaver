@@ -1,7 +1,6 @@
 use anyhow::{Result, bail};
 
 use crate::store::Store;
-use log::debug;
 use pipewire::device::{Device, DeviceChangeMask, DeviceListener};
 use pipewire::keys::{DEVICE_DESCRIPTION, DEVICE_NAME, DEVICE_NICK, OBJECT_SERIAL};
 use pipewire::registry::{GlobalObject, Registry};
