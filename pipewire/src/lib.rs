@@ -449,6 +449,8 @@ pub struct DeviceNode {
     pub nickname: Option<String>,
     pub description: Option<String>,
 
+    pub volume: u8,
+
     pub ports: EnumMap<Direction, Vec<NodePort>>,
 }
 

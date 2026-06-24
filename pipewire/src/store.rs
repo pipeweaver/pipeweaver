@@ -1154,6 +1154,8 @@ impl Store {
             nickname: node.nickname.clone(),
             description: node.description.clone(),
 
+            volume: 0,
+
             ports,
         };
 
