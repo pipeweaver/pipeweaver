@@ -889,6 +889,53 @@ impl Store {
         }
     }
 
+    pub fn unmanaged_device_node_mute_changed(
+        &mut self,
+        device_id: u32,
+        route_device: u32,
+        muted: bool,
+    ) {
+        let device_nodes = self
+            .unmanaged_devices
+            .get(&device_id)
+            .map(|d| d.nodes.clone())
+            .unwrap_or_default();
+
+        // First, try to match by profile_port
+        for &node_id in &device_nodes {
+            if let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id)
+                && node.profile_port() == Some(route_device)
+            {
+                node.muted = muted;
+
+                if node.sent_upstream {
+                    let message = PipewireReceiver::DeviceMuteChanged(node_id, muted);
+                    let _ = self.callback_tx.send(message);
+                }
+                return;
+            }
+        }
+
+        // Fallback: if the device only has one node, use it directly
+        if device_nodes.len() == 1 {
+            let node_id = device_nodes[0];
+            debug!(
+                "No profile_port match for device {} route_device {}, using sole node {} as fallback",
+                device_id, route_device, node_id
+            );
+
+            if let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id) {
+                node.muted = muted;
+
+                if node.sent_upstream {
+                    let _ = self
+                        .callback_tx
+                        .send(PipewireReceiver::DeviceMuteChanged(node_id, muted));
+                }
+            }
+        }
+    }
+
     pub fn unmanaged_device_remove(&mut self, id: u32) {
         self.unmanaged_devices.remove(&id);
     }
@@ -1167,6 +1214,7 @@ impl Store {
             description: node.description.clone(),
 
             volume: node.volume,
+            muted: node.muted,
 
             ports,
         };

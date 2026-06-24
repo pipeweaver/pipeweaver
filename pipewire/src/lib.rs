@@ -100,9 +100,10 @@ pub enum PipewireReceiver {
     DefaultChanged(MediaClass, NodeTarget),
 
     DeviceAdded(DeviceNode),
-    DeviceRemoved(u32),
-    DeviceVolumeChanged(u32, u8),
     DeviceUsable(u32, bool),
+    DeviceVolumeChanged(u32, u8),
+    DeviceMuteChanged(u32, bool),
+    DeviceRemoved(u32),
 
     ApplicationAdded(ApplicationNode),
     ApplicationTargetChanged(u32, Option<NodeTarget>),
@@ -450,6 +451,7 @@ pub struct DeviceNode {
     pub description: Option<String>,
 
     pub volume: u8,
+    pub muted: bool,
 
     pub ports: EnumMap<Direction, Vec<NodePort>>,
 }

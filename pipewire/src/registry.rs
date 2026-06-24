@@ -117,6 +117,7 @@ impl PipewireRegistry {
                                         let mut route_device: Option<u32> = None;
                                         let mut n_channels: u32 = 2;
                                         let mut current_volume: Option<u8> = None;
+                                        let mut current_mute: Option<bool> = None;
 
                                         for prop in &obj.properties {
                                             let key = prop.key;
@@ -131,15 +132,23 @@ impl PipewireRegistry {
                                                 }
                                             } else if key == SPA_PARAM_ROUTE_props
                                                 && let Value::Object(props_obj) = &prop.value
-                                                && let Some(p) = props_obj.properties.iter().find(|p| p.key == SPA_PROP_channelVolumes)
-                                                && let Value::ValueArray(ValueArray::Float(vols)) = &p.value
                                             {
-                                                debug!("Recieved Props Changed: {:?}", p);
+                                                if let Some(p) = props_obj.properties.iter().find(|p| p.key == SPA_PROP_channelVolumes)
+                                                    && let Value::ValueArray(ValueArray::Float(vols)) = &p.value
+                                                {
+                                                    debug!("Recieved Props Changed: {:?}", p);
 
-                                                n_channels = vols.len().max(1) as u32;
-                                                current_volume = vols.iter().copied()
-                                                    .max_by(|a, b| a.partial_cmp(b).unwrap())
-                                                    .map(|vol| (vol.cbrt() * 100.0).round() as u8);
+                                                    n_channels = vols.len().max(1) as u32;
+                                                    current_volume = vols.iter().copied()
+                                                        .max_by(|a, b| a.partial_cmp(b).unwrap())
+                                                        .map(|vol| (vol.cbrt() * 100.0).round() as u8);
+                                                }
+
+                                                if let Some(p) = props_obj.properties.iter().find(|p| p.key == SPA_PROP_mute)
+                                                    && let Bool(muted) = p.value
+                                                {
+                                                    current_mute = Some(muted);
+                                                }
                                             }
                                         }
                                         if let (Some(route_index), Some(route_dev)) = (route_index, route_device)
@@ -158,6 +167,9 @@ impl PipewireRegistry {
 
                                             if let Some(volume) = current_volume {
                                                 store.unmanaged_device_node_volume_changed(id, route_dev, volume);
+                                            }
+                                            if let Some(mute) = current_mute {
+                                                store.unmanaged_device_node_mute_changed(id, route_dev, mute);
                                             }
                                         }
                                     })
@@ -611,6 +623,7 @@ pub(crate) struct RegistryDeviceNode {
     pub is_synced: bool,
 
     pub volume: u8,
+    pub muted: bool,
 
     pub nickname: Option<String>,
     pub description: Option<String>,
@@ -664,6 +677,7 @@ impl TryFrom<&DictRef> for RegistryDeviceNode {
             is_synced: false,
 
             volume: 0,
+            muted: false,
 
             nickname,
             description,
