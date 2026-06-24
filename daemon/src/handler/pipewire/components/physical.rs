@@ -348,7 +348,7 @@ impl PhysicalDevices for PipewireManager {
 
     async fn source_device_removed(&mut self, node_id: u32) -> Result<()> {
         self.node_list[DeviceType::Source].retain(|node| node.node_id != node_id);
-        for (_, devs) in &mut self.physical_source {
+        for devs in self.physical_source.values_mut() {
             devs.retain(|id| *id != node_id);
         }
 
@@ -357,7 +357,7 @@ impl PhysicalDevices for PipewireManager {
 
     async fn target_device_removed(&mut self, node_id: u32) -> Result<()> {
         self.node_list[DeviceType::Target].retain(|node| node.node_id != node_id);
-        for (_, devs) in &mut self.physical_target {
+        for devs in self.physical_target.values_mut() {
             devs.retain(|id| *id != node_id);
         }
 
