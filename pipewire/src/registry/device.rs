@@ -160,8 +160,6 @@ pub fn handle_device(
                     }
                 })
                 .param(move |_seq, _type, _index, _next, param| {
-                    debug!("Device param fired, type: {:?}", _type);
-
                     let Some(pod) = param else { return };
                     let Ok((_, Value::Object(obj))) =
                         PodDeserializer::deserialize_any_from(pod.as_bytes())
@@ -199,8 +197,6 @@ pub fn handle_device(
                                 .find(|p| p.key == SPA_PROP_channelVolumes)
                                 && let Value::ValueArray(ValueArray::Float(vols)) = &p.value
                             {
-                                debug!("Recieved Props Changed: {:?}", p);
-
                                 n_channels = vols.len().max(1) as u32;
                                 current_volume = vols
                                     .iter()
