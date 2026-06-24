@@ -407,6 +407,11 @@ impl PipewireManager {
                                 let _ = self.worker_sender.send(TransientChange).await;
                             }
                         }
+                        PipewireReceiver::DeviceVolumeChanged(id, volume) => {
+                            if let Some(node) = self.device_nodes.get_mut(&id) {
+                                debug!("Volume Changed for Node {:?} ({}): {}", node.name, id, volume);
+                            }
+                        }
                         PipewireReceiver::DeviceRemoved(id) => {
                             debug!("Device Removed: {}", id);
                             if let Some(node) = self.device_nodes.remove(&id) {
