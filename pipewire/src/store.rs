@@ -876,11 +876,6 @@ impl Store {
         // Fallback: if the device only has one node, use it directly
         if device_nodes.len() == 1 {
             let node_id = device_nodes[0];
-            debug!(
-                "No profile_port match for device {} route_device {}, using sole node {} as fallback",
-                device_id, route_device, node_id
-            );
-
             if let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id) {
                 node.volume = volume;
 
@@ -924,11 +919,6 @@ impl Store {
         // Fallback: if the device only has one node, use it directly
         if device_nodes.len() == 1 {
             let node_id = device_nodes[0];
-            debug!(
-                "No profile_port match for device {} route_device {}, using sole node {} as fallback",
-                device_id, route_device, node_id
-            );
-
             if let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id)
                 && node.muted != muted
             {
