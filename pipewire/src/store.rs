@@ -1,9 +1,13 @@
 use crate::default_device::{DefaultDefinition, DefaultDevice};
 use crate::manager::FilterData;
-use crate::registry::{
-    ActiveRoute, MetadataStore, RegistryClient, RegistryClientNode, RegistryDevice,
-    RegistryDeviceNode, RegistryFactory, RegistryLink, RegistryPort,
-};
+use crate::registry::client::RegistryClient;
+use crate::registry::client_node::RegistryClientNode;
+use crate::registry::device::{ActiveRoute, RegistryDevice};
+use crate::registry::device_node::RegistryDeviceNode;
+use crate::registry::factory::RegistryFactory;
+use crate::registry::link::RegistryLink;
+use crate::registry::metadata::MetadataStore;
+use crate::registry::port::RegistryPort;
 use crate::{
     ApplicationNode, DeviceNode, Direction, FilterProperty, FilterValue, LinkType, MediaClass,
     NodePort, NodeTarget, PipewireReceiver,
@@ -1272,58 +1276,26 @@ impl Store {
     }
 
     pub fn unmanaged_node_set_volume(&mut self, id: u32, volume: u8) -> Result<()> {
-        let node_profile_port = self
+        let node_port = self
             .unmanaged_device_nodes
             .get(&id)
             .ok_or_else(|| anyhow!("Node not found"))?
             .profile_port();
 
-        let device_id = self
+        let Some(node_profile_port) = node_port else {
+            return Ok(());
+        };
+
+        let device = self
             .unmanaged_devices
-            .iter()
-            .find(|(_, d)| d.nodes.contains(&id))
-            .map(|(id, _)| *id)
+            .values()
+            .find(|d| d.nodes.contains(&id))
             .ok_or_else(|| anyhow!("No parent device for node {id}"))?;
 
-        // Collect matching routes first to avoid borrow conflict with proxy
-        let matching_routes: Vec<(u32, u32, u32)> = self
-            .unmanaged_devices
-            .get(&device_id)
-            .ok_or_else(|| anyhow!("Device not found"))?
-            .active_routes
-            .iter()
-            .filter(|(route_dev, _)| Some(*route_dev) == node_profile_port.as_ref())
-            .map(|(&route_dev, r)| (route_dev, r.index, r.n_channels))
-            .collect();
-
-        let proxy = self
-            .unmanaged_devices
-            .get(&device_id)
-            .and_then(|d| d._proxy.as_ref())
-            .ok_or_else(|| anyhow!("No device proxy"))?;
-
         let linear_vol = (volume as f32 / 100.0).powi(3);
-
-        for (route_device_id, route_index, n_channels) in matching_routes {
-            let channels = vec![linear_vol; n_channels as usize];
-
-            let pod = Value::Object(object! {
-                utils::SpaTypes::ObjectParamRoute,
-                ParamType::Route,
-                Property::new(SPA_PARAM_ROUTE_index,  Value::Int(route_index as i32)),
-                Property::new(SPA_PARAM_ROUTE_device, Value::Int(route_device_id as i32)),
-                Property::new(SPA_PARAM_ROUTE_props,  Value::Object(object! {
-                    utils::SpaTypes::ObjectParamProps,
-                    ParamType::Props,
-                    Property::new(SPA_PROP_channelVolumes, Value::ValueArray(ValueArray::Float(channels))),
-                })),
-                Property::new(SPA_PARAM_ROUTE_save, Value::Bool(true)),
-            });
-
-            let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod)?;
-            let bytes = cursor.into_inner();
-            if let Some(pod) = Pod::from_bytes(&bytes) {
-                proxy.set_param(ParamType::Route, 0, pod);
+        for (route_dev, route) in &device.active_routes {
+            if route_dev == &node_profile_port {
+                device.set_volume(*route_dev, route.index, route.n_channels, linear_vol)?;
             }
         }
 
