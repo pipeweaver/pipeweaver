@@ -428,6 +428,23 @@ impl PipewireManager {
                                 debug!("Volume Changed for Node {:?} ({}): {}", node.name, id, volume);
                             }
                         }
+                        PipewireReceiver::DeviceMuteChanged(id, muted) => {
+                            if let Some(node) = self.device_nodes.get_mut(&id) {
+                                node.muted = muted;
+
+                                // Find the physical node associated with this and set its volume
+                                for device_type in DeviceType::iter() {
+                                    for device in self.node_list[device_type].iter_mut() {
+                                        if device.node_id == id {
+                                            device.muted = muted;
+                                        }
+                                    }
+                                }
+
+                                let _ = self.worker_sender.send(TransientChange).await;
+                                debug!("Mute Changed for Node {:?} ({}): {}", node.name, id, muted);
+                            }
+                        }
                         PipewireReceiver::DeviceRemoved(id) => {
                             debug!("Device Removed: {}", id);
                             if let Some(node) = self.device_nodes.remove(&id) {
