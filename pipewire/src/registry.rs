@@ -610,6 +610,8 @@ pub(crate) struct RegistryDeviceNode {
     pub clock_ready: bool,
     pub is_synced: bool,
 
+    pub volume: u8,
+
     pub nickname: Option<String>,
     pub description: Option<String>,
     pub name: Option<String>,
@@ -660,6 +662,8 @@ impl TryFrom<&DictRef> for RegistryDeviceNode {
             is_usable: false,
             clock_ready: false,
             is_synced: false,
+
+            volume: 0,
 
             nickname,
             description,

@@ -856,11 +856,15 @@ impl Store {
 
         // First, try to match by profile_port
         for &node_id in &device_nodes {
-            if let Some(node) = self.unmanaged_device_nodes.get(&node_id)
+            if let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id)
                 && node.profile_port() == Some(route_device)
             {
-                let message = PipewireReceiver::DeviceVolumeChanged(node_id, volume);
-                let _ = self.callback_tx.send(message);
+                node.volume = volume;
+
+                if node.sent_upstream {
+                    let message = PipewireReceiver::DeviceVolumeChanged(node_id, volume);
+                    let _ = self.callback_tx.send(message);
+                }
                 return;
             }
         }
@@ -872,8 +876,16 @@ impl Store {
                 "No profile_port match for device {} route_device {}, using sole node {} as fallback",
                 device_id, route_device, node_id
             );
-            let message = PipewireReceiver::DeviceVolumeChanged(node_id, volume);
-            let _ = self.callback_tx.send(message);
+
+            if let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id) {
+                node.volume = volume;
+
+                if node.sent_upstream {
+                    let _ = self
+                        .callback_tx
+                        .send(PipewireReceiver::DeviceVolumeChanged(node_id, volume));
+                }
+            }
         }
     }
 
@@ -1154,7 +1166,7 @@ impl Store {
             nickname: node.nickname.clone(),
             description: node.description.clone(),
 
-            volume: 0,
+            volume: node.volume,
 
             ports,
         };
@@ -1243,6 +1255,7 @@ impl Store {
             .ok_or_else(|| anyhow!("No device proxy"))?;
 
         let linear_vol = (volume as f32 / 100.0).powi(3);
+
         for (route_device_id, route_index, n_channels) in matching_routes {
             let channels = vec![linear_vol; n_channels as usize];
 
