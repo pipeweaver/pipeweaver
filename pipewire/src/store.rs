@@ -1300,22 +1300,26 @@ impl Store {
     }
 
     pub fn unmanaged_node_set_mute(&mut self, id: u32, muted: bool) -> Result<()> {
-        let node = self
+        let node_port = self
             .unmanaged_device_nodes
             .get(&id)
-            .ok_or(anyhow!("Failed to find node"))?;
+            .ok_or_else(|| anyhow!("Node not found"))?
+            .profile_port();
 
-        let pod = Value::Object(object! {
-            utils::SpaTypes::ObjectParamProps,
-            ParamType::Props,
-            Property::new(SPA_PROP_mute, Value::Bool(muted)),
-        });
-        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod)?;
-        let bytes = cursor.into_inner();
-        if let Some(bytes) = Pod::from_bytes(&bytes)
-            && let Some(proxy) = &node._proxy
-        {
-            proxy.set_param(ParamType::Props, 0, bytes);
+        let Some(node_profile_port) = node_port else {
+            return Ok(());
+        };
+
+        let device = self
+            .unmanaged_devices
+            .values()
+            .find(|d| d.nodes.contains(&id))
+            .ok_or_else(|| anyhow!("No parent device for node {id}"))?;
+
+        for (route_dev, route) in &device.active_routes {
+            if route_dev == &node_profile_port {
+                device.set_mute(*route_dev, route.index, muted)?;
+            }
         }
         Ok(())
     }
