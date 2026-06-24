@@ -6,9 +6,9 @@ use crate::handler::primary_worker::WorkerMessage;
 use anyhow::{Result, anyhow, bail};
 use log::debug;
 use pipeweaver_ipc::commands::PhysicalDevice;
-use pipeweaver_pipewire::DeviceNode;
+use pipeweaver_pipewire::{DeviceNode, PipewireMessage};
 use pipeweaver_profile::PhysicalDeviceDescriptor;
-use pipeweaver_shared::{DeviceType, NodeType};
+use pipeweaver_shared::{DeviceType, MuteState, NodeType};
 use tokio::sync::mpsc::Sender;
 use ulid::Ulid;
 
@@ -221,6 +221,21 @@ impl PhysicalDevices for PipewireManager {
                     {
                         debug!("Attaching Node {} to {}", node_name, device.description.id);
 
+                        if device.sync_with_devices {
+                            // Sync the volume and mute state of this device
+                            let volume = device.volume;
+                            let muted = match device.mute_state {
+                                MuteState::Muted => true,
+                                MuteState::Unmuted => false,
+                            };
+
+                            let message = PipewireMessage::SetDeviceVolume(node.node_id, volume);
+                            let _ = self.pipewire().send_message(message);
+
+                            let message = PipewireMessage::SetDeviceMute(node.node_id, muted);
+                            let _ = self.pipewire().send_message(message);
+                        }
+
                         // Got a hit, attach to our filter, and bring it into the tree
                         self.link_create_filter_to_unmanaged(device.description.id, node.node_id)
                             .await?;
@@ -256,6 +271,22 @@ impl PhysicalDevices for PipewireManager {
                             "Attaching Node {} to {}",
                             device.description.id, node.node_id
                         );
+
+                        if device.sync_with_devices {
+                            // Sync the volume and mute state of this device
+                            let volume = device.volume;
+                            let muted = match device.mute_state {
+                                MuteState::Muted => true,
+                                MuteState::Unmuted => false,
+                            };
+
+                            let message = PipewireMessage::SetDeviceVolume(node.node_id, volume);
+                            let _ = self.pipewire().send_message(message);
+
+                            let message = PipewireMessage::SetDeviceMute(node.node_id, muted);
+                            let _ = self.pipewire().send_message(message);
+                        }
+
                         self.link_create_filter_to_unmanaged(device.description.id, node.node_id)
                             .await?;
 
