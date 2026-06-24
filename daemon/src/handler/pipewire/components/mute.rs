@@ -257,10 +257,28 @@ impl MuteManager for PipewireManager {
         *current_state = state;
 
         if node_type == NodeType::PhysicalTarget {
-            // Attempt to apply the 'Muted' / 'Unmuted' volume to the filter
-            match state {
-                MuteState::Unmuted => self.filter_volume_set(id, profile_volume).await?,
-                MuteState::Muted => self.filter_volume_set(id, 0).await?,
+            let err = anyhow!("Unable to Locate Target");
+            let node = self.get_physical_target(id).ok_or(err)?;
+
+            if node.sync_with_devices {
+                let state = match state {
+                    MuteState::Unmuted => false,
+                    MuteState::Muted => true,
+                };
+
+                let devices = self.physical_target.get(&id);
+                if let Some(devices) = devices {
+                    for device in devices {
+                        let message = PipewireMessage::SetDeviceMute(*device, state);
+                        self.pipewire().send_message(message)?;
+                    }
+                }
+            } else {
+                // Attempt to apply the 'Muted' / 'Unmuted' volume to the filter
+                match state {
+                    MuteState::Unmuted => self.filter_volume_set(id, profile_volume).await?,
+                    MuteState::Muted => self.filter_volume_set(id, 0).await?,
+                }
             }
         } else {
             // Apply mute state to Pipewire
