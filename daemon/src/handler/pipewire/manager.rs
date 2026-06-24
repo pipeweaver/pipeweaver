@@ -370,7 +370,7 @@ impl PipewireManager {
                                 description: node.description.clone(),
                                 is_usable: node.is_usable,
                                 volume: node.volume,
-                                muted: false,
+                                muted: node.muted,
 
                                 ports: enum_map!{
                                     PortDirection::In => node.ports[Direction::In].iter().map(|port| PhysicalDevicePort {
