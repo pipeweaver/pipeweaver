@@ -908,6 +908,7 @@ impl Store {
         // First, try to match by profile_port
         for &node_id in &device_nodes {
             if let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id)
+                && node.muted != muted
                 && node.profile_port() == Some(route_device)
             {
                 node.muted = muted;
@@ -928,7 +929,9 @@ impl Store {
                 device_id, route_device, node_id
             );
 
-            if let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id) {
+            if let Some(node) = self.unmanaged_device_nodes.get_mut(&node_id)
+                && node.muted != muted
+            {
                 node.muted = muted;
 
                 if node.sent_upstream {
