@@ -419,10 +419,7 @@ impl PipewireManager {
                         PipewireReceiver::DeviceVolumeChanged(id, volume) => {
                             if let Some(node) = self.device_nodes.get_mut(&id) {
                                 node.volume = volume;
-                                Some(node.name.clone())
-                            } else {
-                                None
-                            };
+                            }
 
                             for device_type in DeviceType::iter() {
                                 for device in self.node_list[device_type].iter_mut() {
@@ -438,19 +435,18 @@ impl PipewireManager {
                         PipewireReceiver::DeviceMuteChanged(id, muted) => {
                             if let Some(node) = self.device_nodes.get_mut(&id) {
                                 node.muted = muted;
+                            }
 
-                                // Find the physical node associated with this and set its volume
-                                for device_type in DeviceType::iter() {
-                                    for device in self.node_list[device_type].iter_mut() {
-                                        if device.node_id == id {
-                                            device.muted = muted;
-                                        }
+                            for device_type in DeviceType::iter() {
+                                for device in self.node_list[device_type].iter_mut() {
+                                    if device.node_id == id {
+                                        device.muted = muted;
                                     }
                                 }
-
-                                let _ = self.worker_sender.send(TransientChange).await;
-                                //debug!("Mute Changed for Node {:?} ({}): {}", node.name, id, muted);
                             }
+
+                            let _ = self.device_sync_mute(id, muted).await;
+                            let _ = self.worker_sender.send(TransientChange).await;
                         }
                         PipewireReceiver::DeviceRemoved(id) => {
                             debug!("Device Removed: {}", id);

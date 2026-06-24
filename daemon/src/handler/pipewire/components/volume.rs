@@ -217,7 +217,39 @@ impl VolumeManager for PipewireManager {
     }
 
     async fn device_sync_mute(&mut self, id: u32, muted: bool) -> Result<()> {
-        todo!()
+        // Find nodes this is attached to
+        let attached: Vec<Ulid> = self
+            .physical_target
+            .iter()
+            .filter(|(_, values)| values.contains(&id))
+            .map(|(ulid, _)| *ulid)
+            .collect();
+
+        let mute_state = match muted {
+            true => MuteState::Muted,
+            false => MuteState::Unmuted,
+        };
+
+        for node_id in attached {
+            if let Some(node) = self.get_physical_target_mut(node_id)
+                && node.sync_with_devices
+                && mute_state != node.mute_state
+            {
+                node.mute_state = mute_state;
+
+                if let Some(devices) = self.physical_target.get(&node_id) {
+                    for device in devices.clone() {
+                        if device == id {
+                            continue;
+                        }
+
+                        let message = PipewireMessage::SetDeviceMute(device, muted);
+                        self.pipewire().send_message(message)?;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     async fn set_source_volume(&mut self, id: Ulid, mix: Mix, volume: u8, api: bool) -> Result<()> {
