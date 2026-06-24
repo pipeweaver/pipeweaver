@@ -25,97 +25,94 @@ pub fn handle_client_node(
     store: &mut Store,
     listener_store: Weak<RefCell<Store>>,
 ) {
-    if let Some(props) = global.props {
-        if let Ok(mut node) = RegistryClientNode::try_from(props) {
-            if let Some(client) = store.unmanaged_client_get(node.parent_id) {
-                let bound: Option<Node> = registry.borrow().bind(global).ok();
-                if let Some(proxy) = bound {
-                    let param_local = listener_store.clone();
-                    let info_local = listener_store.clone();
-                    let listener = proxy
-                        .add_listener_local()
-                        .param(move |_seq, _type, _index, _next, param| {
-                            if let Some(pod) = param {
-                                let pod = PodDeserializer::deserialize_any_from(pod.as_bytes())
-                                    .map(|(_, v)| v);
+    if let Some(props) = global.props
+        && let Ok(mut node) = RegistryClientNode::try_from(props)
+        && let Some(client) = store.unmanaged_client_get(node.parent_id)
+    {
+        let bound: Option<Node> = registry.borrow().bind(global).ok();
+        if let Some(proxy) = bound {
+            let param_local = listener_store.clone();
+            let info_local = listener_store.clone();
+            let listener = proxy
+                .add_listener_local()
+                .param(move |_seq, _type, _index, _next, param| {
+                    if let Some(pod) = param {
+                        let pod =
+                            PodDeserializer::deserialize_any_from(pod.as_bytes()).map(|(_, v)| v);
 
-                                if let Ok(Value::Object(object)) = pod
-                                    && object.id == SPA_PARAM_Props
-                                {
-                                    let prop = object
-                                        .properties
+                        if let Ok(Value::Object(object)) = pod
+                            && object.id == SPA_PARAM_Props
+                        {
+                            let prop = object
+                                .properties
+                                .iter()
+                                .find(|p| p.key == SPA_PROP_channelVolumes);
+
+                            if let Some(prop) = prop
+                                && let Value::ValueArray(ValueArray::Float(value)) = &prop.value
+                            {
+                                let vol = if value.is_empty() {
+                                    0_f32
+                                } else if value.len() == 1 {
+                                    *value.first().unwrap()
+                                } else {
+                                    value
                                         .iter()
-                                        .find(|p| p.key == SPA_PROP_channelVolumes);
+                                        .copied()
+                                        .max_by(|a, b| a.partial_cmp(b).unwrap())
+                                        .unwrap()
+                                };
 
-                                    if let Some(prop) = prop
-                                        && let Value::ValueArray(ValueArray::Float(value)) =
-                                            &prop.value
-                                    {
-                                        let vol = if value.is_empty() {
-                                            0_f32
-                                        } else if value.len() == 1 {
-                                            *value.first().unwrap()
-                                        } else {
-                                            value
-                                                .iter()
-                                                .copied()
-                                                .max_by(|a, b| a.partial_cmp(b).unwrap())
-                                                .unwrap()
-                                        };
-
-                                        let volume = (vol.cbrt() * 100.0).round() as u8;
-                                        if let Some(param_local) = param_local.upgrade() {
-                                            param_local
-                                                .borrow_mut()
-                                                .unmanaged_client_node_set_volume(id, volume);
-                                        }
-                                    }
-
-                                    let prop =
-                                        object.properties.iter().find(|p| p.key == SPA_PROP_mute);
-                                    if let Some(prop) = prop
-                                        && let Bool(value) = prop.value
-                                        && let Some(param_local) = param_local.upgrade()
-                                    {
-                                        param_local
-                                            .borrow_mut()
-                                            .unmanaged_client_node_set_mute(id, value);
-                                    }
+                                let volume = (vol.cbrt() * 100.0).round() as u8;
+                                if let Some(param_local) = param_local.upgrade() {
+                                    param_local
+                                        .borrow_mut()
+                                        .unmanaged_client_node_set_volume(id, volume);
                                 }
                             }
-                        })
-                        .info(move |info| {
-                            for change in info.change_mask().iter() {
-                                if change == NodeChangeMask::PROPS
-                                    && let Some(props) = info.props()
-                                    && let Some(media) = props.get(*MEDIA_NAME)
-                                    && let Some(info_local) = info_local.upgrade()
-                                {
-                                    info_local
-                                        .borrow_mut()
-                                        .unmanaged_client_node_set_media(id, String::from(media));
-                                }
 
-                                if change == NodeChangeMask::STATE
-                                    && let Some(info_local) = info_local.upgrade()
-                                {
-                                    info_local
-                                        .borrow_mut()
-                                        .unmanaged_client_node_set_state(id, info.state());
-                                }
+                            let prop = object.properties.iter().find(|p| p.key == SPA_PROP_mute);
+                            if let Some(prop) = prop
+                                && let Bool(value) = prop.value
+                                && let Some(param_local) = param_local.upgrade()
+                            {
+                                param_local
+                                    .borrow_mut()
+                                    .unmanaged_client_node_set_mute(id, value);
                             }
-                        })
-                        .register();
+                        }
+                    }
+                })
+                .info(move |info| {
+                    for change in info.change_mask().iter() {
+                        if change == NodeChangeMask::PROPS
+                            && let Some(props) = info.props()
+                            && let Some(media) = props.get(*MEDIA_NAME)
+                            && let Some(info_local) = info_local.upgrade()
+                        {
+                            info_local
+                                .borrow_mut()
+                                .unmanaged_client_node_set_media(id, String::from(media));
+                        }
 
-                    proxy.subscribe_params(&[ParamType::Props]);
-                    proxy.enum_params(0, None, 0, u32::MAX);
-                    node.proxy = Some(proxy);
-                    node._listener = Some(listener);
-                }
-                client.add_node(id);
-                store.unmanaged_client_node_add(id, node);
-            }
+                        if change == NodeChangeMask::STATE
+                            && let Some(info_local) = info_local.upgrade()
+                        {
+                            info_local
+                                .borrow_mut()
+                                .unmanaged_client_node_set_state(id, info.state());
+                        }
+                    }
+                })
+                .register();
+
+            proxy.subscribe_params(&[ParamType::Props]);
+            proxy.enum_params(0, None, 0, u32::MAX);
+            node.proxy = Some(proxy);
+            node._listener = Some(listener);
         }
+        client.add_node(id);
+        store.unmanaged_client_node_add(id, node);
     }
 }
 

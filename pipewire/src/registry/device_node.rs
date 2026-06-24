@@ -23,47 +23,45 @@ pub fn handle_device_node(
     store: &mut Store,
     listener_store: Weak<RefCell<Store>>,
 ) {
-    if let Some(props) = global.props {
-        if let Ok(mut node) = RegistryDeviceNode::try_from(props) {
-            if let Some(parent_id) = node.parent_id
-                && let Some(device) = store.unmanaged_device_get(parent_id)
-            {
-                device.add_node(id);
-            }
+    if let Some(props) = global.props
+        && let Ok(mut node) = RegistryDeviceNode::try_from(props)
+    {
+        if let Some(parent_id) = node.parent_id
+            && let Some(device) = store.unmanaged_device_get(parent_id)
+        {
+            device.add_node(id);
+        }
 
-            let bound: Option<Node> = registry.borrow().bind(global).ok();
-            let info_local = listener_store.clone();
-            let core_local = core.clone();
-            if let Some(proxy) = bound {
-                let listener = proxy
-                    .add_listener_local()
-                    .info(move |info| {
-                        let inputs = info.n_input_ports();
-                        let outputs = info.n_output_ports();
+        let bound: Option<Node> = registry.borrow().bind(global).ok();
+        let info_local = listener_store.clone();
+        let core_local = core.clone();
+        if let Some(proxy) = bound {
+            let listener = proxy
+                .add_listener_local()
+                .info(move |info| {
+                    let inputs = info.n_input_ports();
+                    let outputs = info.n_output_ports();
 
-                        if let Some(store) = info_local.upgrade() {
-                            let mut store = store.borrow_mut();
+                    if let Some(store) = info_local.upgrade() {
+                        let mut store = store.borrow_mut();
 
-                            if store.unmanaged_device_node_get(id).is_some() {
-                                store.unmanaged_node_port_count_update(id, inputs, outputs);
+                        if store.unmanaged_device_node_get(id).is_some() {
+                            store.unmanaged_node_port_count_update(id, inputs, outputs);
 
-                                if info.props().is_some()
-                                    && store.unmanaged_node_set_clock_ready(id)
-                                {
-                                    let seq = core_local.sync(0).expect("core sync failed");
-                                    store.add_pending_device_sync(seq.raw(), id);
-                                }
+                            if info.props().is_some() && store.unmanaged_node_set_clock_ready(id) {
+                                let seq = core_local.sync(0).expect("core sync failed");
+                                store.add_pending_device_sync(seq.raw(), id);
                             }
                         }
-                    })
-                    .register();
+                    }
+                })
+                .register();
 
-                node._proxy = Some(proxy);
-                node._listener = Some(listener);
-            }
-            // All unmanaged nodes should be handled, even if they don't have a parent
-            store.unmanaged_device_node_add(id, node);
+            node._proxy = Some(proxy);
+            node._listener = Some(listener);
         }
+        // All unmanaged nodes should be handled, even if they don't have a parent
+        store.unmanaged_device_node_add(id, node);
     }
 }
 

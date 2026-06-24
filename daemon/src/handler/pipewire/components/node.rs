@@ -10,7 +10,6 @@ use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME};
 use anyhow::{Result, anyhow, bail};
 use enum_map::{EnumMap, enum_map};
-use log::debug;
 use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{MediaClass, NodeProperties, PipewireMessage};
 use pipeweaver_profile::{

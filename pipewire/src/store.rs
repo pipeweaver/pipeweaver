@@ -27,10 +27,7 @@ use pipewire::proxy::ProxyListener;
 use pipewire::spa::param::ParamType;
 use pipewire::spa::pod::serialize::PodSerializer;
 use pipewire::spa::pod::{Pod, Property, Value, ValueArray, object};
-use pipewire::spa::sys::{
-    SPA_PARAM_ROUTE_device, SPA_PARAM_ROUTE_index, SPA_PARAM_ROUTE_props, SPA_PARAM_ROUTE_save,
-    SPA_PROP_channelVolumes, SPA_PROP_mute,
-};
+use pipewire::spa::sys::{SPA_PROP_channelVolumes, SPA_PROP_mute};
 use pipewire::spa::utils;
 use std::cell::RefCell;
 use std::collections::HashMap;

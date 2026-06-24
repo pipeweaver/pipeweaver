@@ -2,7 +2,6 @@ use anyhow::{Result, bail};
 
 use crate::store::Store;
 use log::debug;
-use pipewire::core::Core;
 use pipewire::device::{Device, DeviceChangeMask, DeviceListener};
 use pipewire::keys::{DEVICE_DESCRIPTION, DEVICE_NAME, DEVICE_NICK, OBJECT_SERIAL};
 use pipewire::registry::{GlobalObject, Registry};
@@ -103,6 +102,7 @@ impl RegistryDevice {
         Ok(())
     }
 
+    #[allow(unused)]
     pub fn set_mute(&self, device_id: u32, route_index: u32, mute: bool) -> Result<()> {
         let Some(ref proxy) = self._proxy else {
             bail!("Proxy not found")
