@@ -43,6 +43,10 @@ pub enum PipewireMessage {
     SetApplicationTarget(u32, Ulid),
     SetApplicationVolume(u32, u8),
     SetApplicationMute(u32, bool),
+
+    SetDeviceVolume(u32, u8),
+    SetDeviceMute(u32, bool),
+
     ClearApplicationTarget(u32),
 
     SetDefaultDevice(MediaClass, NodeTarget),
@@ -74,6 +78,9 @@ pub enum PipewireInternalMessage {
     SetApplicationVolume(u32, u8, oneshot::Sender<Result<()>>),
     SetApplicationMute(u32, bool, oneshot::Sender<Result<()>>),
 
+    SetDeviceVolume(u32, u8, oneshot::Sender<Result<()>>),
+    SetDeviceMute(u32, bool, oneshot::Sender<Result<()>>),
+
     SetApplicationTarget(u32, Ulid, oneshot::Sender<Result<()>>),
     ClearApplicationTarget(u32, oneshot::Sender<Result<()>>),
 
@@ -94,6 +101,7 @@ pub enum PipewireReceiver {
 
     DeviceAdded(DeviceNode),
     DeviceRemoved(u32),
+    DeviceVolumeChanged(u32, u8),
     DeviceUsable(u32, bool),
 
     ApplicationAdded(ApplicationNode),
@@ -215,6 +223,12 @@ impl PipewireRunner {
             }
             PipewireMessage::SetApplicationMute(id, state) => {
                 PipewireInternalMessage::SetApplicationMute(id, state, tx)
+            }
+            PipewireMessage::SetDeviceVolume(id, volume) => {
+                PipewireInternalMessage::SetDeviceVolume(id, volume, tx)
+            }
+            PipewireMessage::SetDeviceMute(id, state) => {
+                PipewireInternalMessage::SetDeviceMute(id, state, tx)
             }
             PipewireMessage::SetDefaultDevice(class, target) => {
                 PipewireInternalMessage::SetDefaultDevice(class, target, tx)

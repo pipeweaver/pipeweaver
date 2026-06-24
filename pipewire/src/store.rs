@@ -1,8 +1,8 @@
 use crate::default_device::{DefaultDefinition, DefaultDevice};
 use crate::manager::FilterData;
 use crate::registry::{
-    MetadataStore, RegistryClient, RegistryClientNode, RegistryDevice, RegistryDeviceNode,
-    RegistryFactory, RegistryLink, RegistryPort,
+    ActiveRoute, MetadataStore, RegistryClient, RegistryClientNode, RegistryDevice,
+    RegistryDeviceNode, RegistryFactory, RegistryLink, RegistryPort,
 };
 use crate::{
     ApplicationNode, DeviceNode, Direction, FilterProperty, FilterValue, LinkType, MediaClass,
@@ -23,7 +23,10 @@ use pipewire::proxy::ProxyListener;
 use pipewire::spa::param::ParamType;
 use pipewire::spa::pod::serialize::PodSerializer;
 use pipewire::spa::pod::{Pod, Property, Value, ValueArray, object};
-use pipewire::spa::sys::{SPA_PROP_channelVolumes, SPA_PROP_mute};
+use pipewire::spa::sys::{
+    SPA_PARAM_ROUTE_device, SPA_PARAM_ROUTE_index, SPA_PARAM_ROUTE_props, SPA_PARAM_ROUTE_save,
+    SPA_PROP_channelVolumes, SPA_PROP_mute,
+};
 use pipewire::spa::utils;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -60,7 +63,7 @@ pub struct Store {
     managed_links: HashMap<Ulid, LinkStore>,
 
     // These are devices and device nodes not created by us
-    unmanaged_devices: HashMap<u32, RegistryDevice>,
+    pub(crate) unmanaged_devices: HashMap<u32, RegistryDevice>,
     pub(crate) unmanaged_device_nodes: HashMap<u32, RegistryDeviceNode>,
 
     // These are clients and client nodes not created by us
@@ -825,6 +828,55 @@ impl Store {
         self.unmanaged_devices.get_mut(&id)
     }
 
+    pub fn unmanaged_device_set_active_route(
+        &mut self,
+        device_id: u32,
+        route_device: u32,
+        index: u32,
+        n_channels: u32,
+    ) {
+        if let Some(device) = self.unmanaged_devices.get_mut(&device_id) {
+            device
+                .active_routes
+                .insert(route_device, ActiveRoute { index, n_channels });
+        }
+    }
+
+    pub fn unmanaged_device_node_volume_changed(
+        &mut self,
+        device_id: u32,
+        route_device: u32,
+        volume: u8,
+    ) {
+        let device_nodes = self
+            .unmanaged_devices
+            .get(&device_id)
+            .map(|d| d.nodes.clone())
+            .unwrap_or_default();
+
+        // First, try to match by profile_port
+        for &node_id in &device_nodes {
+            if let Some(node) = self.unmanaged_device_nodes.get(&node_id)
+                && node.profile_port() == Some(route_device)
+            {
+                let message = PipewireReceiver::DeviceVolumeChanged(node_id, volume);
+                let _ = self.callback_tx.send(message);
+                return;
+            }
+        }
+
+        // Fallback: if the device only has one node, use it directly
+        if device_nodes.len() == 1 {
+            let node_id = device_nodes[0];
+            debug!(
+                "No profile_port match for device {} route_device {}, using sole node {} as fallback",
+                device_id, route_device, node_id
+            );
+            let message = PipewireReceiver::DeviceVolumeChanged(node_id, volume);
+            let _ = self.callback_tx.send(message);
+        }
+    }
+
     pub fn unmanaged_device_remove(&mut self, id: u32) {
         self.unmanaged_devices.remove(&id);
     }
@@ -1155,6 +1207,85 @@ impl Store {
             return self.get_media_class(in_count, out_count);
         }
         None
+    }
+
+    pub fn unmanaged_node_set_volume(&mut self, id: u32, volume: u8) -> Result<()> {
+        let node_profile_port = self
+            .unmanaged_device_nodes
+            .get(&id)
+            .ok_or_else(|| anyhow!("Node not found"))?
+            .profile_port();
+
+        let device_id = self
+            .unmanaged_devices
+            .iter()
+            .find(|(_, d)| d.nodes.contains(&id))
+            .map(|(id, _)| *id)
+            .ok_or_else(|| anyhow!("No parent device for node {id}"))?;
+
+        // Collect matching routes first to avoid borrow conflict with proxy
+        let matching_routes: Vec<(u32, u32, u32)> = self
+            .unmanaged_devices
+            .get(&device_id)
+            .ok_or_else(|| anyhow!("Device not found"))?
+            .active_routes
+            .iter()
+            .filter(|(route_dev, _)| Some(*route_dev) == node_profile_port.as_ref())
+            .map(|(&route_dev, r)| (route_dev, r.index, r.n_channels))
+            .collect();
+
+        let proxy = self
+            .unmanaged_devices
+            .get(&device_id)
+            .and_then(|d| d._proxy.as_ref())
+            .ok_or_else(|| anyhow!("No device proxy"))?;
+
+        let linear_vol = (volume as f32 / 100.0).powi(3);
+        for (route_device_id, route_index, n_channels) in matching_routes {
+            let channels = vec![linear_vol; n_channels as usize];
+
+            let pod = Value::Object(object! {
+                utils::SpaTypes::ObjectParamRoute,
+                ParamType::Route,
+                Property::new(SPA_PARAM_ROUTE_index,  Value::Int(route_index as i32)),
+                Property::new(SPA_PARAM_ROUTE_device, Value::Int(route_device_id as i32)),
+                Property::new(SPA_PARAM_ROUTE_props,  Value::Object(object! {
+                    utils::SpaTypes::ObjectParamProps,
+                    ParamType::Props,
+                    Property::new(SPA_PROP_channelVolumes, Value::ValueArray(ValueArray::Float(channels))),
+                })),
+                Property::new(SPA_PARAM_ROUTE_save, Value::Bool(true)),
+            });
+
+            let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod)?;
+            let bytes = cursor.into_inner();
+            if let Some(pod) = Pod::from_bytes(&bytes) {
+                proxy.set_param(ParamType::Route, 0, pod);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn unmanaged_node_set_mute(&mut self, id: u32, muted: bool) -> Result<()> {
+        let node = self
+            .unmanaged_device_nodes
+            .get(&id)
+            .ok_or(anyhow!("Failed to find node"))?;
+
+        let pod = Value::Object(object! {
+            utils::SpaTypes::ObjectParamProps,
+            ParamType::Props,
+            Property::new(SPA_PROP_mute, Value::Bool(muted)),
+        });
+        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod)?;
+        let bytes = cursor.into_inner();
+        if let Some(bytes) = Pod::from_bytes(&bytes)
+            && let Some(proxy) = &node._proxy
+        {
+            proxy.set_param(ParamType::Props, 0, bytes);
+        }
+        Ok(())
     }
 
     // ----- UNMANAGED CLIENT -----

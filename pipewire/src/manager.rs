@@ -968,6 +968,15 @@ impl PipewireManager {
         self.store.borrow_mut().set_application_muted(id, state)
     }
 
+    fn set_device_volume(&mut self, id: u32, volume: u8) -> Result<()> {
+        self.store
+            .borrow_mut()
+            .unmanaged_node_set_volume(id, volume)
+    }
+    fn set_device_muted(&mut self, id: u32, muted: bool) -> Result<()> {
+        self.store.borrow_mut().unmanaged_node_set_mute(id, muted)
+    }
+
     fn set_default_device(&mut self, class: MediaClass, node: NodeTarget) -> Result<()> {
         match class {
             MediaClass::Source => self.store.borrow_mut().set_default_source_node(node)?,
@@ -1120,12 +1129,21 @@ pub fn run_pw_main_loop(
             PipewireInternalMessage::SetApplicationTarget(id, target, result) => {
                 let _ = result.send(manager.borrow_mut().set_application_target(id, target));
             }
+
             PipewireInternalMessage::SetApplicationVolume(id, volue, result) => {
                 let _ = result.send(manager.borrow_mut().set_application_volume(id, volue));
             }
             PipewireInternalMessage::SetApplicationMute(id, state, result) => {
                 let _ = result.send(manager.borrow_mut().set_application_muted(id, state));
             }
+
+            PipewireInternalMessage::SetDeviceVolume(id, volume, result) => {
+                let _ = result.send(manager.borrow_mut().set_device_volume(id, volume));
+            }
+            PipewireInternalMessage::SetDeviceMute(id, muted, result) => {
+                let _ = result.send(manager.borrow_mut().set_device_muted(id, muted));
+            }
+
             PipewireInternalMessage::SetDefaultDevice(class, node, result) => {
                 let _ = result.send(manager.borrow_mut().set_default_device(class, node));
             }
