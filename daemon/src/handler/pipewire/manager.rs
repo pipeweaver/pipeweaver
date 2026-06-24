@@ -51,6 +51,9 @@ pub(crate) struct PipewireManager {
     pub(crate) physical_source: HashMap<Ulid, Vec<u32>>,
     pub(crate) physical_target: HashMap<Ulid, Vec<u32>>,
 
+    // Volume syncs which we're waiting for a response from Pipewire
+    pub(crate) pending_volume_syncs: HashMap<u32, u8>,
+
     // Maps node to a Meter
     pub(crate) meter_enabled: bool,
     pub(crate) meter_map: HashMap<Ulid, Ulid>,
@@ -88,6 +91,8 @@ impl PipewireManager {
 
             physical_source: HashMap::default(),
             physical_target: HashMap::default(),
+
+            pending_volume_syncs: HashMap::default(),
 
             meter_enabled: false,
             meter_map: HashMap::default(),
@@ -414,19 +419,21 @@ impl PipewireManager {
                         PipewireReceiver::DeviceVolumeChanged(id, volume) => {
                             if let Some(node) = self.device_nodes.get_mut(&id) {
                                 node.volume = volume;
+                                Some(node.name.clone())
+                            } else {
+                                None
+                            };
 
-                                // Find the physical node associated with this and set its volume
-                                for device_type in DeviceType::iter() {
-                                    for device in self.node_list[device_type].iter_mut() {
-                                        if device.node_id == id {
-                                            device.volume = volume;
-                                        }
+                            for device_type in DeviceType::iter() {
+                                for device in self.node_list[device_type].iter_mut() {
+                                    if device.node_id == id {
+                                        device.volume = volume;
                                     }
                                 }
-
-                                let _ = self.worker_sender.send(TransientChange).await;
-                                debug!("Volume Changed for Node {:?} ({}): {}", node.name, id, volume);
                             }
+
+                            let _ = self.device_sync_volume(id, volume).await;
+                            let _ = self.worker_sender.send(TransientChange).await;
                         }
                         PipewireReceiver::DeviceMuteChanged(id, muted) => {
                             if let Some(node) = self.device_nodes.get_mut(&id) {
@@ -442,7 +449,7 @@ impl PipewireManager {
                                 }
 
                                 let _ = self.worker_sender.send(TransientChange).await;
-                                debug!("Mute Changed for Node {:?} ({}): {}", node.name, id, muted);
+                                //debug!("Mute Changed for Node {:?} ({}): {}", node.name, id, muted);
                             }
                         }
                         PipewireReceiver::DeviceRemoved(id) => {

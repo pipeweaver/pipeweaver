@@ -24,6 +24,9 @@ pub(crate) trait VolumeManager {
     async fn sync_node_volume(&mut self, id: Ulid, volume: u8) -> Result<()>;
     async fn sync_node_mute(&mut self, id: Ulid, muted: bool) -> Result<()>;
 
+    async fn device_sync_volume(&mut self, id: u32, volume: u8) -> Result<()>;
+    async fn device_set_mute(&mut self, id: u32, muted: bool) -> Result<()>;
+
     async fn set_source_volume(&mut self, id: Ulid, mix: Mix, volume: u8, api: bool) -> Result<()>;
     async fn set_source_volume_linked(&mut self, id: Ulid, linked: bool) -> Result<()>;
 
@@ -171,6 +174,52 @@ impl VolumeManager for PipewireManager {
         Ok(())
     }
 
+    async fn device_sync_volume(&mut self, id: u32, volume: u8) -> Result<()> {
+        if let Some(expected) = self.pending_volume_syncs.get(&id) {
+            // Wait until we receive the expected volume, then remove it from the map
+            if *expected == volume {
+                self.pending_volume_syncs.remove(&id);
+                return Ok(());
+            }
+            return Ok(());
+        }
+
+        // Find nodes this is attached to
+        let attached: Vec<Ulid> = self
+            .physical_target
+            .iter()
+            .filter(|(_, values)| values.contains(&id))
+            .map(|(ulid, _)| *ulid)
+            .collect();
+
+        for node_id in attached {
+            if let Some(node) = self.get_physical_target_mut(node_id)
+                && node.sync_with_devices
+                && volume != node.volume
+            {
+                node.volume = volume;
+
+                if let Some(devices) = self.physical_target.get(&node_id) {
+                    for device in devices.clone() {
+                        if device == id {
+                            continue;
+                        }
+
+                        self.pending_volume_syncs.insert(device, volume);
+
+                        let message = PipewireMessage::SetDeviceVolume(device, volume);
+                        self.pipewire().send_message(message)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn device_set_mute(&mut self, id: u32, muted: bool) -> Result<()> {
+        todo!()
+    }
+
     async fn set_source_volume(&mut self, id: Ulid, mix: Mix, volume: u8, api: bool) -> Result<()> {
         if !(0..=100).contains(&volume) {
             bail!("Volume Must be between 0 and 100");
@@ -280,6 +329,8 @@ impl VolumeManager for PipewireManager {
                 let devices = self.physical_target.get(&id);
                 if let Some(devices) = devices {
                     for device in devices {
+                        self.pending_volume_syncs.insert(*device, volume);
+
                         let message = PipewireMessage::SetDeviceVolume(*device, volume);
                         self.pipewire().send_message(message)?;
                     }
