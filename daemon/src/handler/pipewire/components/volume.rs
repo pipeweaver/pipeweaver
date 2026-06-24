@@ -280,10 +280,9 @@ impl VolumeManager for PipewireManager {
                 let devices = self.physical_target.get(&id);
                 if let Some(devices) = devices {
                     for device in devices {
-                        debug!("Attached Device: {}", device);
+                        let message = PipewireMessage::SetDeviceVolume(*device, volume);
+                        self.pipewire().send_message(message)?;
                     }
-                } else {
-                    debug!("No Devices Found for {}", id);
                 }
             } else {
                 if self.get_target_mute_state(id).await? == MuteState::Unmuted {
