@@ -24,6 +24,7 @@ use pipeweaver_shared::{AppTarget, DeviceType, Mix, PortDirection};
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
+use strum::IntoEnumIterator;
 use tokio::select;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -368,6 +369,8 @@ impl PipewireManager {
                                 name: node.name.clone(),
                                 description: node.description.clone(),
                                 is_usable: node.is_usable,
+                                volume: node.volume,
+
                                 ports: enum_map!{
                                     PortDirection::In => node.ports[Direction::In].iter().map(|port| PhysicalDevicePort {
                                         name: port.name.clone(),
@@ -409,6 +412,18 @@ impl PipewireManager {
                         }
                         PipewireReceiver::DeviceVolumeChanged(id, volume) => {
                             if let Some(node) = self.device_nodes.get_mut(&id) {
+                                node.volume = volume;
+
+                                // Find the physical node associated with this and set its volume
+                                for device_type in DeviceType::iter() {
+                                    for device in self.node_list[device_type].iter_mut() {
+                                        if device.node_id == id {
+                                            device.volume = volume;
+                                        }
+                                    }
+                                }
+
+                                let _ = self.worker_sender.send(TransientChange).await;
                                 debug!("Volume Changed for Node {:?} ({}): {}", node.name, id, volume);
                             }
                         }
@@ -453,6 +468,8 @@ impl PipewireManager {
                                     name: dev.name.clone(),
                                     description: dev.description.clone(),
                                     is_usable: usable,
+
+                                    volume: 0,
 
                                     ports: enum_map!{
                                         PortDirection::In => dev.ports[Direction::In].iter().map(|port| PhysicalDevicePort {

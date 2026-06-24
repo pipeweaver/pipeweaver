@@ -211,6 +211,8 @@ pub struct PhysicalDevice {
     pub description: Option<String>,
     pub is_usable: bool,
 
+    pub volume: u8,
+
     pub ports: EnumMap<PortDirection, Vec<PhysicalDevicePort>>,
 }
 
