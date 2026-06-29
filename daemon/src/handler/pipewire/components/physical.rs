@@ -491,18 +491,43 @@ impl PhysicalDevices for PipewireManager {
                 }
             }
             NodeType::PhysicalTarget => {
-                let device = self.get_physical_target_mut(id).ok_or(error)?;
-
                 let new_node = PhysicalDeviceDescriptor {
                     name: node.name.clone(),
                     description: node.description.clone(),
                 };
 
+                // We need to do sync checks, a device can't be attached to two
+                let err = anyhow!("Unable to Locate Node: {}", id);
+                let sync = self.get_physical_target(id).ok_or(err)?.sync_with_devices;
+                if sync {
+                    for device in &self.profile.devices.targets.physical_devices {
+                        if device.sync_with_devices && device.attached_devices.contains(&new_node) {
+                            bail!("Device is already attached to another sync device");
+                        }
+                    }
+                }
+
+                let device = self.get_physical_target_mut(id).ok_or(error)?;
                 if device.attached_devices.contains(&new_node) {
                     bail!("Device is already attached to this node");
                 }
 
                 device.attached_devices.push(new_node.clone());
+                if sync {
+                    // Adjust the volume if needed first..
+                    let volume = device.volume;
+                    let muted = match device.mute_state {
+                        MuteState::Muted => true,
+                        MuteState::Unmuted => false,
+                    };
+
+                    let message = PipewireMessage::SetDeviceVolume(node.node_id, volume);
+                    let _ = self.pipewire().send_message(message);
+
+                    let message = PipewireMessage::SetDeviceMute(node.node_id, muted);
+                    let _ = self.pipewire().send_message(message);
+                }
+
                 let pw_node = self.locate_node(new_node);
                 if let Some(node) = pw_node {
                     self.link_create_filter_to_unmanaged(id, node.node_id)
