@@ -35,6 +35,9 @@ pub(crate) trait PhysicalDevices {
 
     async fn add_device_to_node(&mut self, id: Ulid, node_id: u32) -> Result<()>;
     async fn remove_device_from_node(&mut self, id: Ulid, vec_index: usize) -> Result<()>;
+
+    async fn set_device_volume(&mut self, node_id: Ulid, volume: u8) -> Result<()>;
+    async fn set_device_mute(&mut self, node_id: Ulid, muted: bool) -> Result<()>;
 }
 
 impl PhysicalDevices for PipewireManager {
@@ -611,6 +614,38 @@ impl PhysicalDevices for PipewireManager {
         }
 
         Ok(())
+    }
+
+    async fn set_device_volume(&mut self, id: Ulid, volume: u8) -> Result<()> {
+        let node = self
+            .node_list
+            .values()
+            .flat_map(|devices| devices.iter())
+            .find(|device| device.id == id)
+            .map(|device| device.node_id);
+
+        if let Some(node_id) = node {
+            let message = PipewireMessage::SetDeviceVolume(node_id, volume);
+            self.pipewire().send_message(message)
+        } else {
+            bail!("Unable to locate Pipewire Node for Device: {}", id);
+        }
+    }
+
+    async fn set_device_mute(&mut self, id: Ulid, muted: bool) -> Result<()> {
+        let node = self
+            .node_list
+            .values()
+            .flat_map(|devices| devices.iter())
+            .find(|device| device.id == id)
+            .map(|device| device.node_id);
+
+        if let Some(node_id) = node {
+            let message = PipewireMessage::SetDeviceMute(node_id, muted);
+            self.pipewire().send_message(message)
+        } else {
+            bail!("Unable to locate Pipewire Node for Device: {}", id);
+        }
     }
 }
 

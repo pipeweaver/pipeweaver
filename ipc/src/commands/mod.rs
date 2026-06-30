@@ -125,6 +125,9 @@ pub enum APICommand {
     SetApplicationVolume(u32, u8),
     SetApplicationMute(u32, bool),
 
+    SetPhysicalDeviceVolume(Ulid, u8),
+    SetPhysicalDeviceMute(Ulid, bool),
+
     // Set the position of a node in the order tree
     SetOrderGroup(Ulid, OrderGroup),
     SetOrderGroupByName(String, OrderGroup),

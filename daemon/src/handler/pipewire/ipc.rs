@@ -373,14 +373,20 @@ impl IPCHandler for PipewireManager {
                 .clear_application_transient_target(id)
                 .await
                 .map(|_| Resp::Ok),
-            Cmd::SetApplicationVolume(id, volume) => {
-                debug!("ERR?");
-                self.set_application_volume(id, volume)
-                    .await
-                    .map(|_| Resp::Ok)
-            }
+
+            Cmd::SetApplicationVolume(id, volume) => self
+                .set_application_volume(id, volume)
+                .await
+                .map(|_| Resp::Ok),
             Cmd::SetApplicationMute(id, state) => {
                 self.set_application_mute(id, state).await.map(|_| Resp::Ok)
+            }
+
+            Cmd::SetPhysicalDeviceVolume(id, volume) => {
+                self.set_device_volume(id, volume).await.map(|_| Resp::Ok)
+            }
+            Cmd::SetPhysicalDeviceMute(id, muted) => {
+                self.set_device_mute(id, muted).await.map(|_| Resp::Ok)
             }
 
             Cmd::SetOrderGroup(id, group) => self.node_set_group(id, group).await.map(|_| Resp::Ok),
