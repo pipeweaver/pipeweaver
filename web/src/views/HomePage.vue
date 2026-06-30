@@ -5,6 +5,7 @@ import Mixer from "@/views/Mixer.vue";
 import ApplicationsList from "@/views/desktop/applications/ApplicationsList.vue";
 import {nextTick, ref} from "vue";
 import Settings from "@/views/Settings.vue";
+import PhysicalDevices from "@/views/desktop/devices/PhysicalDevices.vue";
 
 const activeTab = ref('router');
 
@@ -32,6 +33,9 @@ async function switchTab(tab) {
         <button :class="['tab', { active: activeTab === 'apps' }]" @click="switchTab('apps')">
           Applications
         </button>
+        <button :class="['tab', { active: activeTab === 'devices' }]" @click="switchTab('devices')">
+          Devices
+        </button>
         <button :class="['tab', { active: activeTab === 'settings' }]"
                 @click="switchTab('settings')">
           <font-awesome-icon icon="fa-solid fa-gear"/>
@@ -40,6 +44,7 @@ async function switchTab(tab) {
       <div class="tab-content">
         <Router v-if="activeTab === 'router'"/>
         <ApplicationsList v-if="activeTab === 'apps'"/>
+        <PhysicalDevices v-if="activeTab === 'devices'"/>
         <Settings v-if="activeTab === 'settings'"/>
       </div>
     </div>
