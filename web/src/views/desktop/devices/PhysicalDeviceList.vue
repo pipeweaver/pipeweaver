@@ -14,7 +14,7 @@ export default {
       let devices = store.getDevices();
       let devs = this.isSource ? devices["Source"] : devices["Target"];
 
-      return devs.sort((a, b) =>
+      return devs.toSorted((a, b) =>
         this.get_name(a).localeCompare(this.get_name(b))
       );
     },
@@ -45,16 +45,15 @@ export default {
 </script>
 
 <template>
-  <div v-for="dev in get_nodes()" :key="dev.id">
+  <div v-for="dev in get_nodes()">
     <div class="title">{{ get_name(dev) }}</div>
     <div ref="controls" class="content">
       <div>
         <button>
-                <span ref="mute">
+                <span ref="mute" :class="{ 'muted': dev.muted }">
                   <button>
                     <span @click="toggle_mute(dev)">
-                      <font-awesome-icon v-if="dev.muted" :icon="['fas', 'volume-xmark']"
-                                         style="color: #ff0000"/>
+                      <font-awesome-icon v-if="dev.muted" :icon="['fas', 'volume-xmark']"/>
                       <font-awesome-icon v-else :icon="['fas', 'volume-high']"/>
                     </span>
                   </button>
@@ -84,6 +83,10 @@ export default {
   all: unset;
   width: 20px;
   height: 20px;
+}
+
+.content .muted {
+  color: #ff0000;
 }
 
 .content button span {
