@@ -94,6 +94,9 @@ pub struct PhysicalSourceDevice {
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 
     #[serde(default)]
+    pub sync_with_devices: bool,
+
+    #[serde(default)]
     pub attached_port_maps: Vec<Ulid>,
 }
 

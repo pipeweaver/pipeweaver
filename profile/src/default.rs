@@ -40,6 +40,7 @@ impl Profile {
                             },
                             volumes_linked: Some(1.),
                         },
+                        sync_with_devices: false,
                         attached_devices: vec![],
                         attached_port_maps: vec![],
                     }],
@@ -131,7 +132,7 @@ impl Profile {
                     }],
 
                     device_order: enum_map! {
-                    OrderGroup::Default => vec![
+                        OrderGroup::Default => vec![
                             headphones_id,
                             chat_mic_id,
                         ],
