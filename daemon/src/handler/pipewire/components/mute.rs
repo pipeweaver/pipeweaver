@@ -167,7 +167,8 @@ impl MuteManager for PipewireManager {
             }
         }
 
-        if target == MuteTarget::TargetA {
+        let node_type = self.get_node_type(id).ok_or(anyhow!("Unknown Node"))?;
+        if target == MuteTarget::TargetA && node_type == NodeType::VirtualSource {
             // Apply mute state to Pipewire
             let message = PipewireMessage::SetNodeMute(
                 id,
