@@ -897,8 +897,11 @@ impl Store {
         let device_nodes = self
             .unmanaged_devices
             .get(&device_id)
-            .map(|d| d.nodes.clone())
-            .unwrap_or_default();
+            .map(|d| d.nodes.clone());
+
+        let Some(device_nodes) = device_nodes else {
+            return;
+        };
 
         // First, try to match by profile_port
         for &node_id in &device_nodes {

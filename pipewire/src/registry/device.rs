@@ -136,8 +136,6 @@ pub fn handle_device(
     store: &mut Store,
     listener_store: Weak<RefCell<Store>>,
 ) {
-    //let mut store = listener_store.borrow_mut();
-
     if let Some(props) = global.props {
         let mut device = RegistryDevice::from(props);
         let bound: Option<Device> = registry.borrow().bind(global).ok();
