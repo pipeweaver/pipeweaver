@@ -8,7 +8,7 @@ use anyhow::{Result, anyhow, bail};
 use log::debug;
 use pipeweaver_pipewire::{FilterValue, PipewireMessage, oneshot};
 use pipeweaver_profile::Volumes;
-use pipeweaver_shared::{Mix, MuteState, NodeType};
+use pipeweaver_shared::{Mix, MuteState, MuteTarget, NodeType};
 use ulid::Ulid;
 
 pub(crate) trait VolumeManager {
@@ -158,18 +158,27 @@ impl VolumeManager for PipewireManager {
 
     async fn sync_node_mute(&mut self, id: Ulid, muted: bool) -> Result<()> {
         let node_type = self.get_node_type(id).ok_or(anyhow!("Node Not Found"))?;
-        if !matches!(node_type, NodeType::VirtualTarget) {
-            // We don't need to sync here
-            return Ok(());
+
+        match node_type {
+            NodeType::VirtualTarget => {
+                let err = anyhow!("Node not Found");
+                let dev = self.get_virtual_target_mut(id).ok_or(err)?;
+
+                dev.mute_state = match muted {
+                    true => MuteState::Muted,
+                    false => MuteState::Unmuted,
+                };
+            }
+            NodeType::VirtualSource => {
+                let muted = match muted {
+                    true => MuteState::Muted,
+                    false => MuteState::Unmuted,
+                };
+                self.set_source_mute_state(id, MuteTarget::TargetA, muted)
+                    .await?;
+            }
+            _ => {}
         }
-
-        let err = anyhow!("Node not Found");
-        let dev = self.get_virtual_target_mut(id).ok_or(err)?;
-
-        dev.mute_state = match muted {
-            true => MuteState::Muted,
-            false => MuteState::Unmuted,
-        };
 
         Ok(())
     }

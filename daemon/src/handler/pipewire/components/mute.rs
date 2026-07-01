@@ -167,6 +167,21 @@ impl MuteManager for PipewireManager {
             }
         }
 
+        if target == MuteTarget::TargetA {
+            // Apply mute state to Pipewire
+            let message = PipewireMessage::SetNodeMute(
+                id,
+                match state {
+                    MuteState::Unmuted => false,
+                    MuteState::Muted => true,
+                },
+            );
+            let _ = self.pipewire().send_message(message);
+        }
+
+        // Re-fetch the state to avoid borrow issues
+        let mute_state = self.get_source_mute_states_mut(id)?;
+
         // Let's do this again for the new values
         let has_new_mute_state = !mute_state.mute_state.is_empty();
         let new_mute_targets = Self::get_mute_targets(mute_state);
@@ -496,9 +511,14 @@ impl MuteManagerLocal for PipewireManager {
         let mix_err = anyhow!("Unable to Find Source Mixes");
         let map = self.source_map.get(&source).copied().ok_or(mix_err)?;
 
-        if !self.routing_route_exists(source, target).await? {
-            // We don't have a route here anyway, so nothing to remove.
-            bail!("Route doesn't Exist");
+        match self.routing_route_exists(source, target).await {
+            Ok(false) => {
+                bail!("Route doesn't Exist");
+            }
+            Err(e) => {
+                bail!("Cannot Restore Route: {}", e);
+            }
+            _ => {}
         }
 
         let node_type = self
