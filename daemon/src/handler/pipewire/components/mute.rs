@@ -40,6 +40,20 @@ pub(crate) trait MuteManager {
     async fn is_source_muted_to_some(&self, source: Ulid, target: Ulid) -> Result<bool>;
     async fn is_source_muted_to_all(&self, source: Ulid) -> Result<bool>;
     async fn get_target_mute_state(&self, target: Ulid) -> Result<MuteState>;
+
+    /// Determine whether `source` is currently silent, even if it's not flagged as
+    /// "Muted to All". This covers the case where a source is "Muted to Some" but the
+    /// muted targets happen to cover every route it's currently configured with.
+    async fn is_source_effectively_silent(&self, source: Ulid) -> Result<bool>;
+
+    /// Given the live Pipewire node_id of a physical device, determine whether it's
+    /// effectively muted across every PhysicalSource it's currently attached to. A device
+    /// can be attached to more than one PhysicalSource, so it's only effectively muted if
+    /// *all* of them are silent - if even one owning PhysicalSource is still live, the
+    /// device is audible via that route.
+    async fn is_device_effectively_muted(&self, node_id: u32) -> Result<bool>;
+
+    async fn handle_source_effective_mute(&self, source: Ulid) -> Result<()>;
 }
 
 impl MuteManager for PipewireManager {
@@ -234,6 +248,8 @@ impl MuteManager for PipewireManager {
             warn!("Unexpected: Unmuted → Unmuted (No change needed)");
         }
 
+        // If we're a physical source, check whether our devices are effectively muted
+        self.handle_source_effective_mute(id).await?;
         Ok(())
     }
 
@@ -353,6 +369,82 @@ impl MuteManager for PipewireManager {
         };
 
         Ok(*state)
+    }
+
+    async fn is_source_effectively_silent(&self, source: Ulid) -> Result<bool> {
+        // The literal 'Muted to All' case short-circuits here, since it already implies
+        // every target - present or future - is silenced.
+        if self.is_source_muted_to_all(source).await? {
+            return Ok(true);
+        }
+
+        // Otherwise walk the source's currently active routes. No routes means nothing to
+        // make noise on anyway; if there are some, every single one needs to be muted for
+        // the source to be considered silent.
+        let routes = match self.profile.routes.get(&source) {
+            Some(routes) => routes,
+            None => return Ok(true),
+        };
+
+        if routes.is_empty() {
+            return Ok(true);
+        }
+
+        for target in routes {
+            if !self.is_source_muted_to_some(source, *target).await? {
+                // At least one active route is still live, so this source is audible.
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    async fn is_device_effectively_muted(&self, node_id: u32) -> Result<bool> {
+        // Find every PhysicalSource this device is currently attached to.
+        let owning_sources: Vec<Ulid> = self
+            .physical_source
+            .iter()
+            .filter(|(_, devices)| devices.contains(&node_id))
+            .map(|(id, _)| *id)
+            .collect();
+
+        // If it isn't attached to a PhysicalSource at all, there's no route for it to be
+        // heard on, so treat it as effectively muted.
+        if owning_sources.is_empty() {
+            return Ok(true);
+        }
+
+        // The device is only effectively muted if it's silent on *every* PhysicalSource
+        // it appears in - one live, unmuted route is enough to make it audible.
+        for source in owning_sources {
+            if !self.is_source_effectively_silent(source).await? {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    async fn handle_source_effective_mute(&self, source: Ulid) -> Result<()> {
+        // Only PhysicalSources have attached hardware devices to report on.
+        if self.get_node_type(source) != Some(NodeType::PhysicalSource) {
+            return Ok(());
+        }
+
+        let Some(devices) = self.physical_source.get(&source) else {
+            return Ok(());
+        };
+
+        for device in devices {
+            let effectively_muted = self.is_device_effectively_muted(*device).await?;
+            debug!(
+                "Device {} (Source {}) effectively muted: {}",
+                device, source, effectively_muted
+            );
+        }
+
+        Ok(())
     }
 }
 
