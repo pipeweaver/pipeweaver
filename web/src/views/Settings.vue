@@ -32,6 +32,7 @@ export default {
 
     get_quantum_list() {
       return [
+        {name: "Default", label: "Pipewire Configured"},
         {name: "Quantum8", label: "8"},
         {name: "Quantum16", label: "16"},
         {name: "Quantum32", label: "32"},
@@ -57,7 +58,13 @@ export default {
     },
 
     get_quantum_label(quantum) {
+      console.log("Getting quantum label for " + quantum);
+
       for (let input of this.get_quantum_list()) {
+        if (quantum === null) {
+          return "Pipewire Configured";
+        }
+
         if (quantum === input.name) {
           return input.label;
         }
@@ -71,18 +78,42 @@ export default {
       const anchor = (e && e.currentTarget) ? e.currentTarget : (e && e.target) ? e.target : undefined;
       const event = Object.assign({}, e, {target: anchor});
       if (this.$refs.quantum_popup) {
-        // pass the anchor element (instead of the raw target)
-        this.$refs.quantum_popup.showDialog(event, undefined, true);
+        this.$refs.quantum_popup.showDialog(event, undefined, true, true);
       }
     },
 
+    is_active(name) {
+      if (name === "Default" && this.get_quantum() === null) {
+        return true;
+      }
+      return this.get_quantum() === name;
+    },
+
     get_quantum() {
-      return store.getAudio().profile.audio_quantum
+      return store.getAudio().profile.audio_node_quantum
     },
 
     set_quantum(value) {
       this.$refs.quantum_popup.close();
-      if (value !== this.get_quantum()) {
+      let quantum = this.get_quantum();
+
+      console.log("Setting quantum to " + value);
+
+      if (quantum === null && value !== "Default") {
+        websocket.send_daemon_command({"SetAudioQuantum": value})
+        return;
+      }
+
+      if (quantum !== null && value === "Default") {
+        websocket.send_daemon_command({"SetAudioQuantum": null})
+        return;
+      }
+
+      if (quantum === null && value === "Default") {
+        return;
+      }
+
+      if (value !== quantum) {
         websocket.send_daemon_command({"SetAudioQuantum": value})
       }
     }
@@ -94,7 +125,7 @@ export default {
   <PopupBox ref="quantum_popup">
     <div v-for="quantum in get_quantum_list()">
       <div
-        :class="{ 'selected': get_quantum() === quantum.nale }"
+        :class="{ 'selected': is_active(quantum.name) }"
         class="entry"
         @click="set_quantum(quantum.name)">
         <span class="title">{{ quantum.label }}</span>
@@ -137,10 +168,11 @@ export default {
           The setting below adjusts the buffer size PipeWire uses when processing Pipeweaver
           audio.<br/><br/>
 
-          Lower values reduce audio latency, but increase CPU usage and may result in audio cutouts
-          or other issues on some systems. Higher values improve stability at the cost of increased
-          audio latency.<br/><br/>
+          Leave this as <b>“PipeWire Configured”</b> unless you need manual control and understand
+          the impact on latency and CPU usage. Read more in the
+          <a href="https://github.com/pipeweaver/pipeweaver/wiki/Audio-Buffer-Size" target="_blank">documentation</a>.
 
+          <br/><br/>
           Changing this setting will restart the audio engine.
         </div>
         <div class="quantum">
@@ -195,7 +227,8 @@ export default {
 }
 
 .quantum .inner span {
-  padding: 2px 5px;
+  white-space: nowrap;
+  padding: 5px 5px;
   overflow: hidden;
   text-overflow: ellipsis;
 }

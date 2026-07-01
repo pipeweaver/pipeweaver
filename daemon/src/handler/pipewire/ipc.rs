@@ -8,7 +8,6 @@ use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::components::volume::VolumeManager;
 use crate::handler::pipewire::manager::PipewireManager;
 use anyhow::{Error, bail};
-use log::debug;
 use pipeweaver_ipc::commands::{APICommand, PWCommandResponse};
 use pipeweaver_shared::MuteState::{Muted, Unmuted};
 use pipeweaver_shared::{Mix, NodeType};

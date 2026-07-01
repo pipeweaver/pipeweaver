@@ -286,7 +286,7 @@ impl PipewireManager {
                             let _ = self.set_metering(enabled).await;
                         }
                         ManagerMessage::SetAudioQuantum(value, callback) => {
-                            self.profile.audio_quantum = value;
+                            self.profile.audio_node_quantum = value;
                             let _ = callback.send(());
                         }
                         ManagerMessage::Quit => {

@@ -715,6 +715,8 @@ impl NodeManagementLocal for PipewireManager {
             .to_lowercase()
             .replace(" ", "_");
 
+        let buffer = self.profile.audio_node_quantum.map(|buffer| buffer.into());
+
         NodeProperties {
             node_id: desc.id,
             node_name: identifier.clone(),
@@ -726,7 +728,7 @@ impl NodeManagementLocal for PipewireManager {
             linger: false,
             class,
             managed_volume,
-            buffer: self.profile.audio_quantum.into(),
+            buffer,
             rate: self.clock_rate.unwrap_or(48000),
             ready_sender: None,
         }

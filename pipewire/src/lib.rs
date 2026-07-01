@@ -334,7 +334,7 @@ pub struct NodeProperties {
     pub managed_volume: bool,
 
     // Latency Configuration
-    pub buffer: u32,
+    pub buffer: Option<u32>,
     pub rate: u32,
 
     // Ready Sender
