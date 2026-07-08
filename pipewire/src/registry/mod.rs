@@ -98,7 +98,10 @@ impl PipewireRegistry {
                             let inner_store = listener_store.clone();
                             let core = core.clone();
                             match props.get(*MEDIA_CLASS) {
-                                Some("Audio/Sink") | Some("Audio/Source") => {
+                                Some(class)
+                                    if class.starts_with("Audio/Sink")
+                                        || class.starts_with("Audio/Source") =>
+                                {
                                     handle_device_node(id, core, global, reg, store, inner_store);
                                 }
                                 Some("Stream/Input/Audio") | Some("Stream/Output/Audio") => {

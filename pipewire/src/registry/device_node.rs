@@ -3,16 +3,23 @@ use crate::registry::port::RegistryPort;
 use crate::store::Store;
 use anyhow::{anyhow, bail};
 use enum_map::EnumMap;
+use log::debug;
 use pipewire::core::Core;
 use pipewire::keys::{
     DEVICE_ID, MEDIA_CLASS, NODE_DESCRIPTION, NODE_NAME, NODE_NICK, OBJECT_PATH, OBJECT_SERIAL,
 };
 use pipewire::node::{Node, NodeListener};
 use pipewire::registry::{GlobalObject, Registry};
+use pipewire::spa::param::ParamType;
+use pipewire::spa::pod::serialize::PodSerializer;
+use pipewire::spa::pod::{Pod, Property, Value, ValueArray, object};
+use pipewire::spa::sys::{SPA_PROP_channelVolumes, SPA_PROP_mute};
+use pipewire::spa::utils;
 use pipewire::spa::utils::dict::DictRef;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::io::Cursor;
 use std::rc::{Rc, Weak};
 
 pub fn handle_device_node(
@@ -169,5 +176,43 @@ impl RegistryDeviceNode {
         let path = self.object_path.as_deref()?;
         let mut parts = path.split(':');
         parts.nth(3)?.parse().ok()
+    }
+
+    pub fn set_volume(&self, volume: u8) {
+        let Some(proxy) = &self._proxy else {
+            debug!("Proxy not active for node");
+            return;
+        };
+
+        let volume = (volume as f32 / 100.0).powi(3);
+        let pod = Value::Object(object! {
+            utils::SpaTypes::ObjectParamProps,
+            ParamType::Props,
+            Property::new(SPA_PROP_channelVolumes, Value::ValueArray(ValueArray::Float(vec![volume, volume]))),
+        });
+
+        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod).unwrap();
+        let bytes = cursor.into_inner();
+        if let Some(bytes) = Pod::from_bytes(&bytes) {
+            proxy.set_param(ParamType::Props, 0, bytes);
+        }
+    }
+
+    pub fn set_mute(&self, muted: bool) {
+        let Some(proxy) = &self._proxy else {
+            debug!("Proxy not active for node");
+            return;
+        };
+
+        let pod = Value::Object(object! {
+            utils::SpaTypes::ObjectParamProps,
+            ParamType::Props,
+            Property::new(SPA_PROP_mute, Value::Bool(muted)),
+        });
+        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod).unwrap();
+        let bytes = cursor.into_inner();
+        if let Some(bytes) = Pod::from_bytes(&bytes) {
+            proxy.set_param(ParamType::Props, 0, bytes);
+        }
     }
 }
