@@ -655,6 +655,16 @@ impl NodeManagementLocal for PipewireManager {
             self.meter_map.remove(&id);
         }
 
+        // We need to detach any monitored nodes
+        let error = anyhow!("Unable to Locate Node: {}", id);
+        let device = self.get_virtual_target_mut(id).ok_or(error)?;
+        for device in device.attached_devices.clone() {
+            let pw_node = self.locate_node(device);
+            if let Some(node) = pw_node {
+                self.link_remove_node_to_unmanaged(id, node.node_id).await?;
+            }
+        }
+
         for (source, targets) in self.profile.routes.clone() {
             if targets.contains(&id) {
                 // Grab the A/B Mixes for this source

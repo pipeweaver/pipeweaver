@@ -38,6 +38,8 @@ pub(crate) trait PhysicalDevices {
 
     async fn set_device_volume(&mut self, node_id: Ulid, volume: u8) -> Result<()>;
     async fn set_device_mute(&mut self, node_id: Ulid, muted: bool) -> Result<()>;
+
+    fn locate_node(&self, descriptor: PhysicalDeviceDescriptor) -> Option<&DeviceNode>;
 }
 
 impl PhysicalDevices for PipewireManager {
@@ -647,13 +649,7 @@ impl PhysicalDevices for PipewireManager {
             bail!("Unable to locate Pipewire Node for Device: {}", id);
         }
     }
-}
 
-trait PhysicalDevicesLocal {
-    fn locate_node(&self, descriptor: PhysicalDeviceDescriptor) -> Option<&DeviceNode>;
-}
-
-impl PhysicalDevicesLocal for PipewireManager {
     fn locate_node(&self, descriptor: PhysicalDeviceDescriptor) -> Option<&DeviceNode> {
         if let Some(name) = descriptor.name {
             let node = self
@@ -675,3 +671,8 @@ impl PhysicalDevicesLocal for PipewireManager {
         None
     }
 }
+
+#[allow(unused)]
+trait PhysicalDevicesLocal {}
+
+impl PhysicalDevicesLocal for PipewireManager {}

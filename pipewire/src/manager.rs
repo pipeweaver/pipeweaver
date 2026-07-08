@@ -769,7 +769,9 @@ impl PipewireManager {
         let mut store = self.store.borrow_mut();
         match link {
             LinkType::Node(id) => {
-                let node = store.managed_node_get(*id).unwrap();
+                let Some(node) = store.managed_node_get(*id) else {
+                    bail!("Unable to Locate Node");
+                };
 
                 let id = node.pw_id.unwrap();
                 let port = node.port_map[location].unwrap();
