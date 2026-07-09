@@ -46,7 +46,7 @@ pub struct WebsocketResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DaemonCommand {
     SetAutoStart(bool),
-    SetAudioQuantum(Quantum),
+    SetAudioQuantum(Option<Quantum>),
     SetMetering(bool),
     SetUseBrowser(bool),
     OpenInterface,
@@ -124,6 +124,9 @@ pub enum APICommand {
 
     SetApplicationVolume(u32, u8),
     SetApplicationMute(u32, bool),
+
+    SetPhysicalDeviceVolume(Ulid, u8),
+    SetPhysicalDeviceMute(Ulid, bool),
 
     // Set the position of a node in the order tree
     SetOrderGroup(Ulid, OrderGroup),
@@ -217,6 +220,9 @@ pub struct PhysicalDevice {
     pub name: Option<String>,
     pub description: Option<String>,
     pub is_usable: bool,
+
+    pub volume: u8,
+    pub muted: bool,
 
     pub ports: EnumMap<PortDirection, Vec<PhysicalDevicePort>>,
 }

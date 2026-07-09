@@ -578,7 +578,7 @@ pub enum ManagerMessage {
     Execute(APICommand, oneshot::Sender<PWCommandResponse>),
     GetAudioConfiguration(oneshot::Sender<AudioConfiguration>),
     SetMetering(bool),
-    SetAudioQuantum(Quantum, oneshot::Sender<()>),
+    SetAudioQuantum(Option<Quantum>, oneshot::Sender<()>),
     Quit,
 }
 

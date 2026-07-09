@@ -175,7 +175,8 @@ fn handle_daemon_command(cmd: cli::DaemonCommands) -> DaemonRequest {
     let daemon_cmd = match cmd {
         SetAutoStart { enabled } => DaemonCommand::SetAutoStart(enabled),
         SetUseBrowser { enabled } => DaemonCommand::SetUseBrowser(enabled),
-        SetAudioQuantum { quantum } => DaemonCommand::SetAudioQuantum(quantum),
+        SetAudioQuantum { quantum } => DaemonCommand::SetAudioQuantum(Some(quantum)),
+        ClearAudioQuantum => DaemonCommand::SetAudioQuantum(None),
         OpenInterface => DaemonCommand::OpenInterface,
         ResetAudio => DaemonCommand::ResetAudio,
     };

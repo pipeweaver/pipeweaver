@@ -199,9 +199,7 @@ impl PipewireManager {
 
             *AUDIO_CHANNELS => "2",
 
-            // Force the QUANTUM and the RATE to ensure that we're not internally adjusted when
-            // latency occurs following a link
-            *NODE_FORCE_QUANTUM => properties.buffer.to_string(),
+            // Force the RATE to match the system rate
             *NODE_FORCE_RATE => properties.rate.to_string(),
 
             // We don't want to set a driver here. If creating a large number of nodes each of them
@@ -225,6 +223,11 @@ impl PipewireManager {
                 false => "true"
             },
         };
+
+        // If a quantum is provided, send it in to the props
+        if let Some(quantum) = properties.buffer {
+            node_properties.insert(*NODE_FORCE_QUANTUM, quantum.to_string());
+        }
 
         debug!(
             "[{}] Attempting to Create Device '{}'",
@@ -766,8 +769,9 @@ impl PipewireManager {
         let mut store = self.store.borrow_mut();
         match link {
             LinkType::Node(id) => {
-                debug!("Getting Port for Node: {}", id);
-                let node = store.managed_node_get(*id).unwrap();
+                let Some(node) = store.managed_node_get(*id) else {
+                    bail!("Unable to Locate Node");
+                };
 
                 let id = node.pw_id.unwrap();
                 let port = node.port_map[location].unwrap();
@@ -969,6 +973,15 @@ impl PipewireManager {
         self.store.borrow_mut().set_application_muted(id, state)
     }
 
+    fn set_device_volume(&mut self, id: u32, volume: u8) -> Result<()> {
+        self.store
+            .borrow_mut()
+            .unmanaged_node_set_volume(id, volume)
+    }
+    fn set_device_muted(&mut self, id: u32, muted: bool) -> Result<()> {
+        self.store.borrow_mut().unmanaged_node_set_mute(id, muted)
+    }
+
     fn set_default_device(&mut self, class: MediaClass, node: NodeTarget) -> Result<()> {
         match class {
             MediaClass::Source => self.store.borrow_mut().set_default_source_node(node)?,
@@ -1121,12 +1134,21 @@ pub fn run_pw_main_loop(
             PipewireInternalMessage::SetApplicationTarget(id, target, result) => {
                 let _ = result.send(manager.borrow_mut().set_application_target(id, target));
             }
+
             PipewireInternalMessage::SetApplicationVolume(id, volue, result) => {
                 let _ = result.send(manager.borrow_mut().set_application_volume(id, volue));
             }
             PipewireInternalMessage::SetApplicationMute(id, state, result) => {
                 let _ = result.send(manager.borrow_mut().set_application_muted(id, state));
             }
+
+            PipewireInternalMessage::SetDeviceVolume(id, volume, result) => {
+                let _ = result.send(manager.borrow_mut().set_device_volume(id, volume));
+            }
+            PipewireInternalMessage::SetDeviceMute(id, muted, result) => {
+                let _ = result.send(manager.borrow_mut().set_device_muted(id, muted));
+            }
+
             PipewireInternalMessage::SetDefaultDevice(class, node, result) => {
                 let _ = result.send(manager.borrow_mut().set_default_device(class, node));
             }

@@ -43,6 +43,10 @@ pub enum PipewireMessage {
     SetApplicationTarget(u32, Ulid),
     SetApplicationVolume(u32, u8),
     SetApplicationMute(u32, bool),
+
+    SetDeviceVolume(u32, u8),
+    SetDeviceMute(u32, bool),
+
     ClearApplicationTarget(u32),
 
     SetDefaultDevice(MediaClass, NodeTarget),
@@ -74,6 +78,9 @@ pub enum PipewireInternalMessage {
     SetApplicationVolume(u32, u8, oneshot::Sender<Result<()>>),
     SetApplicationMute(u32, bool, oneshot::Sender<Result<()>>),
 
+    SetDeviceVolume(u32, u8, oneshot::Sender<Result<()>>),
+    SetDeviceMute(u32, bool, oneshot::Sender<Result<()>>),
+
     SetApplicationTarget(u32, Ulid, oneshot::Sender<Result<()>>),
     ClearApplicationTarget(u32, oneshot::Sender<Result<()>>),
 
@@ -93,8 +100,10 @@ pub enum PipewireReceiver {
     DefaultChanged(MediaClass, NodeTarget),
 
     DeviceAdded(DeviceNode),
-    DeviceRemoved(u32),
     DeviceUsable(u32, bool),
+    DeviceVolumeChanged(u32, u8),
+    DeviceMuteChanged(u32, bool),
+    DeviceRemoved(u32),
 
     ApplicationAdded(ApplicationNode),
     ApplicationTargetChanged(u32, Option<NodeTarget>),
@@ -216,6 +225,12 @@ impl PipewireRunner {
             PipewireMessage::SetApplicationMute(id, state) => {
                 PipewireInternalMessage::SetApplicationMute(id, state, tx)
             }
+            PipewireMessage::SetDeviceVolume(id, volume) => {
+                PipewireInternalMessage::SetDeviceVolume(id, volume, tx)
+            }
+            PipewireMessage::SetDeviceMute(id, state) => {
+                PipewireInternalMessage::SetDeviceMute(id, state, tx)
+            }
             PipewireMessage::SetDefaultDevice(class, target) => {
                 PipewireInternalMessage::SetDefaultDevice(class, target, tx)
             }
@@ -319,7 +334,7 @@ pub struct NodeProperties {
     pub managed_volume: bool,
 
     // Latency Configuration
-    pub buffer: u32,
+    pub buffer: Option<u32>,
     pub rate: u32,
 
     // Ready Sender
@@ -408,6 +423,9 @@ pub struct DeviceNode {
     pub name: Option<String>,
     pub nickname: Option<String>,
     pub description: Option<String>,
+
+    pub volume: u8,
+    pub muted: bool,
 
     pub ports: EnumMap<Direction, Vec<NodePort>>,
 }

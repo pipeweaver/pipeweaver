@@ -108,8 +108,10 @@ impl RoutingManagement for PipewireManager {
         }
         if enabled {
             route.insert(target);
+            self.handle_source_effective_mute(source).await?;
         } else {
             route.remove(&target);
+            self.handle_source_effective_mute(source).await?;
         }
 
         // Next, we need to get the A/B IDs for the Source

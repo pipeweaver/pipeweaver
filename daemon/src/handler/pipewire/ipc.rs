@@ -381,6 +381,13 @@ impl IPCHandler for PipewireManager {
                 self.set_application_mute(id, state).await.map(|_| Resp::Ok)
             }
 
+            Cmd::SetPhysicalDeviceVolume(id, volume) => {
+                self.set_device_volume(id, volume).await.map(|_| Resp::Ok)
+            }
+            Cmd::SetPhysicalDeviceMute(id, muted) => {
+                self.set_device_mute(id, muted).await.map(|_| Resp::Ok)
+            }
+
             Cmd::SetOrderGroup(id, group) => self.node_set_group(id, group).await.map(|_| Resp::Ok),
             Cmd::SetOrderGroupByName(name, group) => {
                 if let Some(id) = self.get_node_id_by_name(&name) {

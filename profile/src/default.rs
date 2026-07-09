@@ -4,7 +4,7 @@ use crate::{
     VirtualTargetDevice, Volumes,
 };
 use enum_map::enum_map;
-use pipeweaver_shared::{Colour, DeviceType, OrderGroup, Quantum};
+use pipeweaver_shared::{Colour, DeviceType, OrderGroup};
 use std::collections::{HashMap, HashSet};
 use ulid::Ulid;
 
@@ -41,6 +41,7 @@ impl Profile {
                             volumes_linked: Some(1.),
                         },
                         filters: vec![],
+                        sync_with_devices: false,
                         attached_devices: vec![],
                         attached_port_maps: vec![],
                     }],
@@ -113,6 +114,7 @@ impl Profile {
                         mix: Mix::A,
                         filters: vec![],
                         attached_devices: vec![],
+                        sync_with_devices: false,
                         attached_port_maps: vec![],
                     }],
                     virtual_devices: vec![VirtualTargetDevice {
@@ -135,7 +137,7 @@ impl Profile {
                     }],
 
                     device_order: enum_map! {
-                    OrderGroup::Default => vec![
+                        OrderGroup::Default => vec![
                             headphones_id,
                             chat_mic_id,
                         ],
@@ -153,7 +155,7 @@ impl Profile {
             .into_iter()
             .collect(),
 
-            audio_quantum: Quantum::Quantum2048,
+            audio_node_quantum: None,
             application_mapping: enum_map! {
                 DeviceType::Source => {
                     HashMap::from([

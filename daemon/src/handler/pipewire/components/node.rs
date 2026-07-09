@@ -393,6 +393,9 @@ impl NodeManagementLocal for PipewireManager {
             self.source_link_to_filters(desc.id, false).await?;
         }
 
+        // Add this for mapping physical devices
+        self.physical_source.insert(desc.id, vec![]);
+
         // Create a map for this ID to the mixes
         self.source_map
             .insert(desc.id, enum_map! { Mix::A => mix_a, Mix::B => mix_b });
@@ -445,9 +448,22 @@ impl NodeManagementLocal for PipewireManager {
     }
 
     async fn node_create_physical_target(&mut self, desc: &DeviceDescription) -> Result<()> {
-        // A 'Physical' Target is just a volume filter by itself with the ID of the device
-        self.filter_volume_create_id(desc.name.clone(), desc.id)
-            .await?;
+        let node = self
+            .get_physical_target(desc.id)
+            .ok_or(anyhow!("Cannot Find Target"))?;
+
+        // If this node is supposed to sync with the attached devices, we'll create a passthrough
+        // node instead, otherwise create a volume filter.
+        if node.sync_with_devices {
+            self.filter_pass_create_id(desc.name.clone(), desc.id)
+                .await?;
+        } else {
+            // A 'Physical' Target is just a volume filter by itself with the ID of the device
+            self.filter_volume_create_id(desc.name.clone(), desc.id)
+                .await?;
+        }
+
+        self.physical_target.insert(desc.id, vec![]);
 
         let filter_name = format!("{}-meter", desc.name);
         let meter = self.filter_meter_create(desc.id, filter_name).await?;
@@ -687,6 +703,16 @@ impl NodeManagementLocal for PipewireManager {
             self.meter_map.remove(&id);
         }
 
+        // We need to detach any monitored nodes
+        let error = anyhow!("Unable to Locate Node: {}", id);
+        let device = self.get_virtual_target_mut(id).ok_or(error)?;
+        for device in device.attached_devices.clone() {
+            let pw_node = self.locate_node(device);
+            if let Some(node) = pw_node {
+                self.link_remove_node_to_unmanaged(id, node.node_id).await?;
+            }
+        }
+
         for (source, targets) in self.profile.routes.clone() {
             if targets.contains(&id) {
                 // Grab the A/B Mixes for this source
@@ -747,6 +773,8 @@ impl NodeManagementLocal for PipewireManager {
             .to_lowercase()
             .replace(" ", "_");
 
+        let buffer = self.profile.audio_node_quantum.map(|buffer| buffer.into());
+
         NodeProperties {
             node_id: desc.id,
             node_name: identifier.clone(),
@@ -758,7 +786,7 @@ impl NodeManagementLocal for PipewireManager {
             linger: false,
             class,
             managed_volume,
-            buffer: self.profile.audio_quantum.into(),
+            buffer,
             rate: self.clock_rate.unwrap_or(48000),
             ready_sender: None,
         }

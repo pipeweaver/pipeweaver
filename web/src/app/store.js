@@ -65,7 +65,7 @@ export const store = reactive({
   },
 
   getDevices() {
-    return this.status.devices;
+    return this.status.audio.devices;
   },
 
   getApplications() {

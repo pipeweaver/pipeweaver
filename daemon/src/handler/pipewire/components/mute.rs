@@ -40,6 +40,8 @@ pub(crate) trait MuteManager {
     async fn is_source_muted_to_some(&self, source: Ulid, target: Ulid) -> Result<bool>;
     async fn is_source_muted_to_all(&self, source: Ulid) -> Result<bool>;
     async fn get_target_mute_state(&self, target: Ulid) -> Result<MuteState>;
+
+    async fn handle_source_effective_mute(&self, source: Ulid) -> Result<()>;
 }
 
 impl MuteManager for PipewireManager {
@@ -167,6 +169,22 @@ impl MuteManager for PipewireManager {
             }
         }
 
+        let node_type = self.get_node_type(id).ok_or(anyhow!("Unknown Node"))?;
+        if target == MuteTarget::TargetA && node_type == NodeType::VirtualSource {
+            // Apply mute state to Pipewire
+            let message = PipewireMessage::SetNodeMute(
+                id,
+                match state {
+                    MuteState::Unmuted => false,
+                    MuteState::Muted => true,
+                },
+            );
+            let _ = self.pipewire().send_message(message);
+        }
+
+        // Re-fetch the state to avoid borrow issues
+        let mute_state = self.get_source_mute_states_mut(id)?;
+
         // Let's do this again for the new values
         let has_new_mute_state = !mute_state.mute_state.is_empty();
         let new_mute_targets = Self::get_mute_targets(mute_state);
@@ -218,6 +236,8 @@ impl MuteManager for PipewireManager {
             warn!("Unexpected: Unmuted → Unmuted (No change needed)");
         }
 
+        // If we're a physical source, check whether our devices are effectively muted
+        self.handle_source_effective_mute(id).await?;
         Ok(())
     }
 
@@ -257,10 +277,28 @@ impl MuteManager for PipewireManager {
         *current_state = state;
 
         if node_type == NodeType::PhysicalTarget {
-            // Attempt to apply the 'Muted' / 'Unmuted' volume to the filter
-            match state {
-                MuteState::Unmuted => self.filter_volume_set(id, profile_volume).await?,
-                MuteState::Muted => self.filter_volume_set(id, 0).await?,
+            let err = anyhow!("Unable to Locate Target");
+            let node = self.get_physical_target(id).ok_or(err)?;
+
+            if node.sync_with_devices {
+                let state = match state {
+                    MuteState::Unmuted => false,
+                    MuteState::Muted => true,
+                };
+
+                let devices = self.physical_target.get(&id);
+                if let Some(devices) = devices {
+                    for device in devices {
+                        let message = PipewireMessage::SetDeviceMute(*device, state);
+                        self.pipewire().send_message(message)?;
+                    }
+                }
+            } else {
+                // Attempt to apply the 'Muted' / 'Unmuted' volume to the filter
+                match state {
+                    MuteState::Unmuted => self.filter_volume_set(id, profile_volume).await?,
+                    MuteState::Muted => self.filter_volume_set(id, 0).await?,
+                }
             }
         } else {
             // Apply mute state to Pipewire
@@ -320,6 +358,38 @@ impl MuteManager for PipewireManager {
 
         Ok(*state)
     }
+
+    async fn handle_source_effective_mute(&self, source: Ulid) -> Result<()> {
+        // Only PhysicalSources have attached hardware devices to report on.
+        if self.get_node_type(source) != Some(NodeType::PhysicalSource) {
+            return Ok(());
+        }
+
+        let Some(devices) = self.physical_source.get(&source) else {
+            return Ok(());
+        };
+
+        let Some(node) = self.get_physical_source(source) else {
+            return Ok(());
+        };
+
+        // This should probably be a global setting
+        if node.sync_with_devices {
+            for device in devices {
+                let effectively_muted = self.is_device_effectively_muted(*device).await?;
+
+                debug!(
+                    "Device {} of Source {} effective mute state: {}",
+                    device, source, effectively_muted
+                );
+
+                let message = PipewireMessage::SetDeviceMute(*device, effectively_muted);
+                let _ = self.pipewire().send_message(message);
+            }
+        }
+
+        Ok(())
+    }
 }
 
 trait MuteManagerLocal {
@@ -337,6 +407,9 @@ trait MuteManagerLocal {
     async fn mute_restore_volume(&mut self, source: Ulid) -> Result<()>;
     async fn mute_restore_routes(&mut self, source: Ulid, targets: &HashSet<Ulid>) -> Result<()>;
     async fn mute_restore_route(&mut self, source: Ulid, target: Ulid) -> Result<()>;
+
+    async fn is_source_effectively_silent(&self, source: Ulid) -> Result<bool>;
+    async fn is_device_effectively_muted(&self, node_id: u32) -> Result<bool>;
 }
 
 impl MuteManagerLocal for PipewireManager {
@@ -478,9 +551,14 @@ impl MuteManagerLocal for PipewireManager {
         let mix_err = anyhow!("Unable to Find Source Mixes");
         let map = self.source_map.get(&source).copied().ok_or(mix_err)?;
 
-        if !self.routing_route_exists(source, target).await? {
-            // We don't have a route here anyway, so nothing to remove.
-            bail!("Route doesn't Exist");
+        match self.routing_route_exists(source, target).await {
+            Ok(false) => {
+                bail!("Route doesn't Exist");
+            }
+            Err(e) => {
+                bail!("Cannot Restore Route: {}", e);
+            }
+            _ => {}
         }
 
         let node_type = self
@@ -500,5 +578,60 @@ impl MuteManagerLocal for PipewireManager {
             self.link_create_filter_to_node(map[mix], target).await?;
         }
         Ok(())
+    }
+
+    async fn is_source_effectively_silent(&self, source: Ulid) -> Result<bool> {
+        // The literal 'Muted to All' case short-circuits here, since it already implies
+        // every target - present or future - is silenced.
+        if self.is_source_muted_to_all(source).await? {
+            return Ok(true);
+        }
+
+        // Otherwise walk the source's currently active routes. No routes means nothing to
+        // make noise on anyway; if there are some, every single one needs to be muted for
+        // the source to be considered silent.
+        let routes = match self.profile.routes.get(&source) {
+            Some(routes) => routes,
+            None => return Ok(true),
+        };
+
+        if routes.is_empty() {
+            return Ok(true);
+        }
+
+        for target in routes {
+            if !self.is_source_muted_to_some(source, *target).await? {
+                // At least one active route is still live, so this source is audible.
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    async fn is_device_effectively_muted(&self, node_id: u32) -> Result<bool> {
+        // Find every PhysicalSource this device is currently attached to.
+        let owning_sources: Vec<Ulid> = self
+            .physical_source
+            .iter()
+            .filter(|(_, devices)| devices.contains(&node_id))
+            .map(|(id, _)| *id)
+            .collect();
+
+        // If it isn't attached to a PhysicalSource at all, there's no route for it to be
+        // heard on, so treat it as effectively muted.
+        if owning_sources.is_empty() {
+            return Ok(true);
+        }
+
+        // The device is only effectively muted if it's silent on *every* PhysicalSource
+        // it appears in - one live, unmuted route is enough to make it audible.
+        for source in owning_sources {
+            if !self.is_source_effectively_silent(source).await? {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
     }
 }
