@@ -27,7 +27,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 // URI constants
 const LV2_AUDIO_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#AudioPort\0";
 const LV2_CONTROL_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#ControlPort\0";
-const LV2_ATOM_PORT_URI: &[u8] = b"http://lv2plug.in/ns/ext/atom#AtomPort\0";
 const LV2_INPUT_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#InputPort\0";
 const LV2_OUTPUT_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#OutputPort\0";
 const LV2_INTEGER_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#integer\0";
@@ -47,7 +46,7 @@ const LV2_SIDECHAIN_GROUP_URI: &[u8] = b"http://lv2plug.in/ns/ext/port-groups#Si
 const LV2_IS_SIDECHAIN_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#isSideChain\0";
 
 // String slice versions of URIs for comparison (without null terminator)
-const LV2_STEREO_GROUP_URI_STR: &str = "http://lv2plug.in/ns/ext/port-groups#StereoGroup";
+//const LV2_STEREO_GROUP_URI_STR: &str = "http://lv2plug.in/ns/ext/port-groups#StereoGroup";
 const LV2_SIDECHAIN_GROUP_URI_STR: &str = "http://lv2plug.in/ns/ext/port-groups#SideChainGroup";
 
 // Features which may be needed
@@ -89,7 +88,6 @@ struct UriNodes {
     // Core port types
     audio_port: *mut LilvNode,
     control_port: *mut LilvNode,
-    atom_port: *mut LilvNode,
     input_port: *mut LilvNode,
     output_port: *mut LilvNode,
 
@@ -122,7 +120,6 @@ impl UriNodes {
             control_port: unsafe {
                 lilv_new_uri(world, LV2_CONTROL_PORT_URI.as_ptr() as *const i8)
             },
-            atom_port: unsafe { lilv_new_uri(world, LV2_ATOM_PORT_URI.as_ptr() as *const i8) },
             input_port: unsafe { lilv_new_uri(world, LV2_INPUT_PORT_URI.as_ptr() as *const i8) },
             output_port: unsafe { lilv_new_uri(world, LV2_OUTPUT_PORT_URI.as_ptr() as *const i8) },
             integer: unsafe { lilv_new_uri(world, LV2_INTEGER_URI.as_ptr() as *const i8) },
@@ -458,7 +455,7 @@ pub struct PortInfo {
 /// A simple LV2 Plugin wrapper
 pub struct LV2PluginBase {
     // LV2 objects provided by Lilv
-    plugin: *const LilvPlugin,
+    _plugin: *const LilvPlugin,
     instance: *mut LilvInstance,
     uri_node: *mut LilvNode,
 
@@ -474,12 +471,12 @@ pub struct LV2PluginBase {
 
     // Control port values, these point directly to the LV2 internal values
     control_values: Vec<f32>,
-    num_ports: u32,
+    _num_ports: u32,
 
     // Config
-    pub plugin_uri: String,
+    pub _plugin_uri: String,
     pub plugin_name: String,
-    pub sample_rate: u32,
+    pub _sample_rate: u32,
 }
 
 impl LV2PluginBase {
@@ -757,7 +754,7 @@ impl LV2PluginBase {
             }
 
             let mut plugin_base = Self {
-                plugin,
+                _plugin: plugin,
                 instance,
                 uri_node,
                 audio_input_ports,
@@ -765,11 +762,11 @@ impl LV2PluginBase {
                 control_ports,
                 symbol_to_port,
                 control_values,
-                num_ports,
+                _num_ports: num_ports,
 
-                plugin_uri: plugin_uri.to_string(),
+                _plugin_uri: plugin_uri.to_string(),
                 plugin_name,
-                sample_rate: rate,
+                _sample_rate: rate,
             };
 
             // Connect all control ports once during initialization (both inputs and outputs)
@@ -793,6 +790,7 @@ impl LV2PluginBase {
 
     /// Read the current values of control output ports.
     /// TODO: Possibly allow individual lookups? For now this is fine.
+    #[allow(unused)]
     pub fn read_control_outputs(&self) -> HashMap<String, f32> {
         let mut map = HashMap::new();
         for port_opt in &self.control_ports {
@@ -807,6 +805,7 @@ impl LV2PluginBase {
     }
 
     /// Get control port value by symbol
+    #[allow(unused)]
     pub fn get_control_by_symbol(&self, symbol: &str) -> Option<f32> {
         self.symbol_to_port
             .get(symbol)
@@ -826,12 +825,14 @@ impl LV2PluginBase {
 
     /// Trait-based typed getter/setter support for control ports.
     /// Implementations convert between Rust types and f32 used by LV2 control_values.
+    #[allow(unused)]
     pub fn get_control_typed<T: ControlConvert + Debug>(&self, symbol: &str) -> Option<T> {
         self.get_control_by_symbol(symbol).map(|v| T::from_f32(v))
     }
 
     /// Set a control port using a typed value. Performs rounding for integer ports and clamps
     /// to the port min/max. Returns Err if the symbol is unknown.
+    #[allow(unused)]
     pub fn set_control_typed<T: ControlConvert + Debug>(
         &mut self,
         symbol: &str,
@@ -875,6 +876,7 @@ impl LV2PluginBase {
     }
 
     /// Set a control port using a typed value with warning logging and callback.
+    #[allow(unused)]
     pub fn set_typed_prop<T, F>(&mut self, symbol: &str, value: T, update: F)
     where
         T: ControlConvert + Debug + Clone,
@@ -933,10 +935,12 @@ impl LV2PluginBase {
         }
     }
 
+    #[allow(unused)]
     pub fn num_inputs(&self) -> usize {
         self.audio_input_ports.len()
     }
 
+    #[allow(unused)]
     pub fn num_outputs(&self) -> usize {
         self.audio_output_ports.len()
     }
@@ -960,6 +964,7 @@ impl Drop for LV2PluginBase {
 }
 
 /// Trait to convert between Rust types and the f32 representation used in LV2 control ports.
+#[allow(unused)]
 pub trait ControlConvert: Sized {
     fn to_f32(self) -> f32;
     fn from_f32(v: f32) -> Self;

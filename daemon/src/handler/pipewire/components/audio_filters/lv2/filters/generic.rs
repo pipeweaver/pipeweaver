@@ -1,4 +1,5 @@
 use crate::handler::pipewire::components::audio_filters::lv2::base::LV2PluginBase;
+use crate::handler::pipewire::components::audio_filters::lv2::filters::defaults_map;
 use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use anyhow::{Result, bail};
 use log::{debug, warn};
@@ -206,7 +207,11 @@ pub fn filter_lv2(
 
     debug!("Filter Name: {}", filter_name);
 
-    let callback = GenericLV2Filter::new(&plugin_uri, rate, defaults)?;
+    // Some plugins may have specific defaults, merge them with the incoming map
+    let mut merged_defaults = defaults_map(plugin_uri.clone());
+    merged_defaults.extend(defaults);
+
+    let callback = GenericLV2Filter::new(&plugin_uri, rate, merged_defaults)?;
     let name = callback.plugin_name.clone();
 
     let props = FilterProperties {
