@@ -387,21 +387,15 @@ impl NodeManagementLocal for PipewireManager {
             .copied()
             .unwrap_or(desc.id);
 
-        let source = if let Some(id) = self.source_filter_end.get(&desc.id) {
-            id
-        } else {
-            &desc.id
-        };
-
         if self.meter_enabled {
-            self.link_create_filter_to_filter(*source, meter).await?;
+            self.link_create_filter_to_filter(source, meter).await?;
         }
 
         // Now we need to link our filter to the Mixes
-        self.link_create_filter_to_filter(*source, mix_a).await?;
-        self.link_create_filter_to_filter(*source, mix_b).await?;
+        self.link_create_filter_to_filter(source, mix_a).await?;
+        self.link_create_filter_to_filter(source, mix_b).await?;
 
-        if source != &desc.id {
+        if source != desc.id {
             // We need to attach this to our filter tree
             self.source_link_to_filters(desc.id, false).await?;
         }
