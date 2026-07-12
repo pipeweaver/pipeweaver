@@ -126,7 +126,9 @@ impl FilterManagement for PipewireManager {
                 // Flag the pass-through filter as the end of the tree
                 self.source_filter_end.insert(id, pass);
             }
-            NodeType::PhysicalTarget | NodeType::VirtualTarget => {}
+            NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                self.target_filter_start.insert(id, pass);
+            }
         }
 
         let mut previous_filter_id = None;
@@ -243,14 +245,19 @@ impl FilterManagement for PipewireManager {
             .ok_or_else(|| anyhow!("Node not Found"))?;
 
         // Ensure the pass-through exists, creating it if needed
-        let pass_id = match self.source_filter_end.get(&device_id).copied() {
+        let pass_id = match self
+            .source_filter_end
+            .get(&device_id)
+            .copied()
+            .or_else(|| self.target_filter_start.get(&device_id).copied())
+        {
             Some(existing) => existing,
             None => {
                 let pass_id = self.filter_pass_create(String::from("FilterTree")).await?;
-                self.source_filter_end.insert(device_id, pass_id);
-
                 match node_type {
                     NodeType::PhysicalSource | NodeType::VirtualSource => {
+                        self.source_filter_end.insert(device_id, pass_id);
+
                         // We need to attach the pass-through to the volume / meter ports..
                         let meter = self.meter_map[&target];
 
@@ -280,8 +287,10 @@ impl FilterManagement for PipewireManager {
                             self.link_remove_filter_to_filter(device_id, mix_b).await?;
                         }
                     }
-                    _ => {
-                        // Not implemented yet
+                    NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                        self.target_filter_start.insert(device_id, pass_id);
+
+                        // This one is more complicated, we need to link in all the expected routes
                     }
                 }
 
@@ -291,8 +300,21 @@ impl FilterManagement for PipewireManager {
 
         // Detach whatever is currently linked to the pass-through
         match last_running {
-            Some(last_id) => self.link_remove_filter_to_filter(last_id, pass_id).await?,
+            Some(last_id) => match node_type {
+                NodeType::PhysicalSource | NodeType::VirtualSource => {
+                    self.link_remove_filter_to_filter(last_id, pass_id).await?
+                }
+                NodeType::PhysicalTarget => {
+                    // We need to detach the last running from the device filter
+                    self.link_remove_filter_to_filter(last_id, device_id)
+                        .await?
+                }
+                NodeType::VirtualTarget => {
+                    self.link_remove_filter_to_node(last_id, device_id).await?
+                }
+            },
             None => match node_type {
+                // We don't have an existing last filter, so detach the passthrough
                 NodeType::PhysicalSource => {
                     self.link_remove_filter_to_filter(device_id, pass_id)
                         .await?
@@ -300,13 +322,14 @@ impl FilterManagement for PipewireManager {
                 NodeType::VirtualSource => {
                     self.link_remove_node_to_filter(device_id, pass_id).await?
                 }
-
-                // TODO: Not supported yet :D
-                NodeType::PhysicalTarget | NodeType::VirtualTarget => {}
+                NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                    self.link_remove_filter_to_filter(pass_id, device_id)
+                        .await?
+                }
             },
         }
 
-        // Insert the new filter before the pass-through
+        // Insert the new filter
         match last_running {
             Some(last_id) => {
                 self.link_create_filter_to_filter(last_id, filter.id)
@@ -321,25 +344,43 @@ impl FilterManagement for PipewireManager {
                     self.link_create_node_to_filter(device_id, filter.id)
                         .await?
                 }
-
-                // TODO: Not supported yet :D
-                NodeType::PhysicalTarget | NodeType::VirtualTarget => {}
+                NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                    self.link_create_filter_to_filter(pass_id, filter.id)
+                        .await?;
+                }
             },
         }
 
-        self.link_create_filter_to_filter(filter.id, pass_id)
-            .await?;
+        match node_type {
+            NodeType::PhysicalSource | NodeType::VirtualSource => {
+                self.link_create_filter_to_filter(filter.id, pass_id)
+                    .await?;
+            }
+            NodeType::PhysicalTarget => {
+                self.link_create_filter_to_filter(filter.id, device_id)
+                    .await?;
+            }
+            NodeType::VirtualTarget => {
+                self.link_create_filter_to_node(filter.id, device_id)
+                    .await?;
+            }
+        }
+
         self.add_filter_to_profile(target, filter)?;
         Ok(())
     }
 
     async fn filter_custom_remove(&mut self, id: Ulid) -> Result<()> {
         let err = anyhow!("Filter not found in config");
-        let filter = self.filter_config.remove(&id).ok_or(err)?;
+        let Some(filter) = self.filter_config.remove(&id) else {
+            // We need to make sure this is cleared from the profile, otherwise we'll get a stuck
+            // state where the filter is still in the profile but the filter is not running.
+            self.remove_filter_from_profile(id)?;
+            bail!(err);
+        };
 
         // If this filter isn't running, we just need to remove it from the profile
         if filter.state != FilterState::Running {
-            self.remove_filter_from_profile(id)?;
             return Ok(());
         }
 
@@ -347,9 +388,12 @@ impl FilterManagement for PipewireManager {
         let (device_id, node_type) = self.get_device_id_by_filter(id)?;
         let (prev, next) = self.find_running_neighbours(id)?;
 
+        // Remove it from the profile now we have everything we need
+        self.remove_filter_from_profile(id)?;
+
         // For sources, find the pass-through filter at the end of the chain
         // (only relevant when the removed filter has no next running neighbour)
-        let source_pass_filter = matches!(
+        let pass_filter = matches!(
             node_type,
             NodeType::PhysicalSource | NodeType::VirtualSource
         )
@@ -359,7 +403,17 @@ impl FilterManagement for PipewireManager {
                 .copied()
                 .filter(|&pass_id| pass_id != id)
         })
-        .flatten();
+        .flatten()
+        .or_else(|| {
+            self.target_filter_start
+                .get(&device_id)
+                .copied()
+                .filter(|&pass_id| pass_id != id)
+        });
+
+        let Some(pass) = pass_filter else {
+            bail!("Failed to find pass-through filter");
+        };
 
         // Remove the incoming link
         match (prev, node_type) {
@@ -370,30 +424,40 @@ impl FilterManagement for PipewireManager {
             (None, NodeType::VirtualSource) => {
                 self.link_remove_node_to_filter(device_id, id).await?
             }
-            (None, NodeType::PhysicalTarget | NodeType::VirtualTarget) => {}
+            (None, NodeType::PhysicalTarget | NodeType::VirtualTarget) => {
+                self.link_remove_filter_to_filter(pass, id).await?
+            }
         }
 
         // Remove the outgoing link
-        match (next, source_pass_filter) {
-            (Some(next_id), _) => self.link_remove_filter_to_filter(id, next_id).await?,
-            (None, Some(pass_id)) => self.link_remove_filter_to_filter(id, pass_id).await?,
-            (None, None) => {}
+        match next {
+            Some(next_id) => self.link_remove_filter_to_filter(id, next_id).await?,
+            None => self.link_remove_filter_to_filter(id, pass).await?,
         }
 
         // Bridge across the outgoing filter
-        match (prev, next, source_pass_filter) {
+        match (prev, next) {
             // We have a previous and next filter, so link between the two
-            (Some(prev_id), Some(next_id), _) => {
+            (Some(prev_id), Some(next_id)) => {
                 self.link_create_filter_to_filter(prev_id, next_id).await?;
             }
 
             // We don't have a next filter, so link to the pass-through
-            (Some(prev_id), None, Some(pass_id)) => {
-                self.link_create_filter_to_filter(prev_id, pass_id).await?;
-            }
+            (Some(prev_id), None) => match node_type {
+                NodeType::PhysicalSource | NodeType::VirtualSource => {
+                    self.link_create_filter_to_filter(prev_id, pass).await?;
+                }
+                NodeType::PhysicalTarget => {
+                    self.link_create_filter_to_filter(prev_id, device_id)
+                        .await?;
+                }
+                NodeType::VirtualTarget => {
+                    self.link_create_filter_to_node(prev_id, device_id).await?;
+                }
+            },
 
             // We don't have a previous filter, so link from source node
-            (None, Some(next_id), _) => match node_type {
+            (None, Some(next_id)) => match node_type {
                 NodeType::PhysicalSource => {
                     self.link_create_filter_to_filter(device_id, next_id)
                         .await?
@@ -402,22 +466,24 @@ impl FilterManagement for PipewireManager {
                     self.link_create_node_to_filter(device_id, next_id).await?
                 }
 
-                // TODO: Not supported yet :D
-                NodeType::PhysicalTarget | NodeType::VirtualTarget => {}
+                NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                    self.link_create_filter_to_filter(pass, next_id).await?;
+                }
             },
 
             // We don't have a previous or next filter, so link source to the pass-through
-            (None, None, Some(pass_id)) => match node_type {
+            (None, None) => match node_type {
                 NodeType::PhysicalSource => {
-                    self.link_create_filter_to_filter(device_id, pass_id)
-                        .await?
+                    self.link_create_filter_to_filter(device_id, pass).await?
                 }
-                NodeType::VirtualSource => {
-                    self.link_create_node_to_filter(device_id, pass_id).await?
-                }
+                NodeType::VirtualSource => self.link_create_node_to_filter(device_id, pass).await?,
 
-                // TODO: Not supported yet :D
-                NodeType::PhysicalTarget | NodeType::VirtualTarget => {}
+                NodeType::PhysicalTarget => {
+                    self.link_create_filter_to_filter(pass, device_id).await?;
+                }
+                NodeType::VirtualTarget => {
+                    self.link_create_filter_to_node(pass, device_id).await?;
+                }
             },
             _ => {
                 bail!("Unexpected filter chain");
@@ -426,9 +492,6 @@ impl FilterManagement for PipewireManager {
 
         // Remove the filter from pipewire
         self.filter_pw_remove(id).await?;
-
-        // Remove the filter from the profile
-        self.remove_filter_from_profile(id)?;
 
         // And we should be done :)
         Ok(())
@@ -472,12 +535,17 @@ impl FilterManagement for PipewireManager {
             return Ok(());
         }
 
-        let source_pass_filter = matches!(
+        let pass_filter = matches!(
             node_type,
             NodeType::PhysicalSource | NodeType::VirtualSource
         )
         .then(|| self.source_filter_end.get(&device_id).copied())
-        .flatten();
+        .flatten()
+        .or_else(|| self.target_filter_start.get(&device_id).copied());
+
+        let Some(pass_filter) = pass_filter else {
+            bail!("Failed to find pass-through filter");
+        };
 
         // Remove incoming link to filter
         match (old_prev, node_type) {
@@ -488,27 +556,44 @@ impl FilterManagement for PipewireManager {
             (None, NodeType::VirtualSource) => {
                 self.link_remove_node_to_filter(device_id, id).await?
             }
-            (None, NodeType::PhysicalTarget | NodeType::VirtualTarget) => {}
+            (None, NodeType::PhysicalTarget | NodeType::VirtualTarget) => {
+                self.link_remove_filter_to_filter(pass_filter, id).await?
+            }
         }
 
         // Remove outgoing link from filter
-        match (old_next, source_pass_filter) {
-            (Some(next_id), _) => self.link_remove_filter_to_filter(id, next_id).await?,
-            (None, Some(pass_id)) => self.link_remove_filter_to_filter(id, pass_id).await?,
-            (None, None) => {
-                bail!("Failed to remove old outgoing link (next and pass are None)");
-            }
+        match old_next {
+            Some(next_id) => self.link_remove_filter_to_filter(id, next_id).await?,
+            None => match node_type {
+                NodeType::PhysicalSource | NodeType::VirtualSource => {
+                    self.link_remove_filter_to_filter(id, pass_filter).await?
+                }
+                NodeType::PhysicalTarget => {
+                    self.link_remove_filter_to_filter(id, device_id).await?
+                }
+                NodeType::VirtualTarget => self.link_remove_filter_to_node(id, device_id).await?,
+            },
         }
 
         // Bridge the old gap
-        match (old_prev, old_next, source_pass_filter) {
-            (Some(prev_id), Some(next_id), _) => {
+        match (old_prev, old_next) {
+            (Some(prev_id), Some(next_id)) => {
                 self.link_create_filter_to_filter(prev_id, next_id).await?;
             }
-            (Some(prev_id), None, Some(pass_id)) => {
-                self.link_create_filter_to_filter(prev_id, pass_id).await?;
-            }
-            (None, Some(next_id), _) => match node_type {
+            (Some(prev_id), None) => match node_type {
+                NodeType::PhysicalSource | NodeType::VirtualSource => {
+                    self.link_create_filter_to_filter(prev_id, pass_filter)
+                        .await?;
+                }
+                NodeType::PhysicalTarget => {
+                    self.link_create_filter_to_filter(prev_id, device_id)
+                        .await?;
+                }
+                NodeType::VirtualTarget => {
+                    self.link_create_filter_to_node(prev_id, device_id).await?;
+                }
+            },
+            (None, Some(next_id)) => match node_type {
                 NodeType::PhysicalSource => {
                     self.link_create_filter_to_filter(device_id, next_id)
                         .await?
@@ -516,32 +601,46 @@ impl FilterManagement for PipewireManager {
                 NodeType::VirtualSource => {
                     self.link_create_node_to_filter(device_id, next_id).await?
                 }
-                NodeType::PhysicalTarget | NodeType::VirtualTarget => {}
+                NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                    self.link_create_filter_to_filter(pass_filter, next_id)
+                        .await?
+                }
             },
-            (None, None, Some(pass_id)) => match node_type {
+            (None, None) => match node_type {
                 NodeType::PhysicalSource => {
-                    self.link_create_filter_to_filter(device_id, pass_id)
+                    self.link_create_filter_to_filter(device_id, pass_filter)
                         .await?
                 }
                 NodeType::VirtualSource => {
-                    self.link_create_node_to_filter(device_id, pass_id).await?
+                    self.link_create_node_to_filter(device_id, pass_filter)
+                        .await?
                 }
-                NodeType::PhysicalTarget | NodeType::VirtualTarget => {}
+                NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                    self.link_create_filter_to_node(pass_filter, device_id)
+                        .await?
+                }
             },
-            _ => {
-                bail!("Failed to bridge old link (prev, next and pass are None)");
-            }
         }
 
         // Remove whatever link currently bridges the new gap
-        match (new_prev, new_next, source_pass_filter) {
-            (Some(prev_id), Some(next_id), _) => {
+        match (new_prev, new_next) {
+            (Some(prev_id), Some(next_id)) => {
                 self.link_remove_filter_to_filter(prev_id, next_id).await?;
             }
-            (Some(prev_id), None, Some(pass_id)) => {
-                self.link_remove_filter_to_filter(prev_id, pass_id).await?;
-            }
-            (None, Some(next_id), _) => match node_type {
+            (Some(prev_id), None) => match node_type {
+                NodeType::PhysicalSource | NodeType::VirtualSource => {
+                    self.link_remove_filter_to_filter(prev_id, pass_filter)
+                        .await?;
+                }
+                NodeType::PhysicalTarget => {
+                    self.link_remove_filter_to_filter(prev_id, device_id)
+                        .await?;
+                }
+                NodeType::VirtualTarget => {
+                    self.link_remove_filter_to_node(prev_id, device_id).await?;
+                }
+            },
+            (None, Some(next_id)) => match node_type {
                 NodeType::PhysicalSource => {
                     self.link_remove_filter_to_filter(device_id, next_id)
                         .await?
@@ -549,21 +648,29 @@ impl FilterManagement for PipewireManager {
                 NodeType::VirtualSource => {
                     self.link_remove_node_to_filter(device_id, next_id).await?
                 }
-                NodeType::PhysicalTarget | NodeType::VirtualTarget => {}
+                NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                    self.link_remove_filter_to_filter(pass_filter, next_id)
+                        .await?
+                }
             },
-            (None, None, Some(pass_id)) => match node_type {
+            (None, None) => match node_type {
                 NodeType::PhysicalSource => {
-                    self.link_remove_filter_to_filter(device_id, pass_id)
+                    self.link_remove_filter_to_filter(device_id, pass_filter)
                         .await?
                 }
                 NodeType::VirtualSource => {
-                    self.link_remove_node_to_filter(device_id, pass_id).await?
+                    self.link_remove_node_to_filter(device_id, pass_filter)
+                        .await?
                 }
-                NodeType::PhysicalTarget | NodeType::VirtualTarget => {}
+                NodeType::PhysicalTarget => {
+                    self.link_remove_filter_to_filter(pass_filter, device_id)
+                        .await?
+                }
+                NodeType::VirtualTarget => {
+                    self.link_remove_filter_to_node(pass_filter, device_id)
+                        .await?
+                }
             },
-            _ => {
-                bail!("Failed to remove outgoing link (prev, next and pass are None)");
-            }
         }
 
         // Create incoming link in new position
@@ -575,16 +682,23 @@ impl FilterManagement for PipewireManager {
             (None, NodeType::VirtualSource) => {
                 self.link_create_node_to_filter(device_id, id).await?
             }
-            (None, NodeType::PhysicalTarget | NodeType::VirtualTarget) => {}
+            (None, NodeType::PhysicalTarget | NodeType::VirtualTarget) => {
+                self.link_create_filter_to_filter(pass_filter, id).await?
+            }
         }
 
         // Create outgoing link in new position
-        match (new_next, source_pass_filter) {
-            (Some(next_id), _) => self.link_create_filter_to_filter(id, next_id).await?,
-            (None, Some(pass_id)) => self.link_create_filter_to_filter(id, pass_id).await?,
-            (None, None) => {
-                bail!("Failed to create outgoing link");
-            }
+        match new_next {
+            Some(next_id) => self.link_create_filter_to_filter(id, next_id).await?,
+            None => match node_type {
+                NodeType::PhysicalSource | NodeType::VirtualSource => {
+                    self.link_create_filter_to_filter(id, pass_filter).await?
+                }
+                NodeType::PhysicalTarget => {
+                    self.link_create_filter_to_filter(id, device_id).await?
+                }
+                NodeType::VirtualTarget => self.link_create_filter_to_node(id, device_id).await?,
+            },
         }
 
         Ok(())
@@ -827,7 +941,9 @@ impl FilterManagementLocal for PipewireManager {
         search_devices!(self.profile.devices.sources.virtual_devices);
         search_devices!(self.profile.devices.targets.virtual_devices);
 
-        Err(anyhow!("Filter not found in any device"))
+        Err(anyhow!(
+            "[get_device_by_filter_mut] Filter not found in any device"
+        ))
     }
 
     fn get_device_id_by_filter(&self, filter: Ulid) -> Result<(Ulid, NodeType)> {
@@ -861,7 +977,9 @@ impl FilterManagementLocal for PipewireManager {
             NodeType::VirtualTarget
         );
 
-        Err(anyhow!("Filter not found in any device"))
+        Err(anyhow!(
+            "[get_device_id_by_filter] Filter not found in any device"
+        ))
     }
 
     fn find_running_neighbours(&mut self, id: Ulid) -> Result<(Option<Ulid>, Option<Ulid>)> {
