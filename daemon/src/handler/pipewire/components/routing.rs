@@ -12,6 +12,8 @@ pub(crate) trait RoutingManagement {
     async fn routing_load(&mut self) -> Result<()>;
     async fn routing_load_source(&mut self, source: &Ulid) -> Result<()>;
     async fn routing_load_target(&mut self, target: &Ulid) -> Result<()>;
+    async fn routing_clear_target(&mut self, target: &Ulid) -> Result<()>;
+
     async fn routing_toggle_route(&mut self, source: Ulid, target: Ulid) -> Result<()>;
 
     async fn routing_set_route(&mut self, source: Ulid, target: Ulid, enabled: bool) -> Result<()>;
@@ -83,6 +85,33 @@ impl RoutingManagement for PipewireManager {
                             self.link_create_filter_to_node(map[mix], *target).await?;
                         } else {
                             self.link_create_filter_to_filter(map[mix], *target).await?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn routing_clear_target(&mut self, target: &Ulid) -> Result<()> {
+        debug!("Clearing Routing for Target: {}", target);
+
+        // This one's a little different, it's for a newly appearing target that may need routing
+        for (source, targets) in &self.profile.routes {
+            if targets.contains(target)
+                && !self.is_source_muted_to_some(*source, *target).await?
+                && let Some(map) = self.source_map.get(source)
+            {
+                let mix = self.routing_get_target_mix(target).await?;
+                if let Some(target_type) = self.get_node_type(*target) {
+                    if let Some(target) = self.target_filter_start.get(target) {
+                        // Connect this route to the filter tree
+                        self.link_remove_filter_to_filter(map[mix], *target).await?;
+                    } else {
+                        if target_type == NodeType::VirtualTarget {
+                            self.link_remove_filter_to_node(map[mix], *target).await?;
+                        } else {
+                            self.link_remove_filter_to_filter(map[mix], *target).await?;
                         }
                     }
                 }

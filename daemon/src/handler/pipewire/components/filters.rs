@@ -3,6 +3,7 @@ use crate::handler::pipewire::components::audio_filters::internal::pass_through:
 use crate::handler::pipewire::components::audio_filters::internal::volume::VolumeFilter;
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::node::NodeManagement;
+use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use anyhow::{Result, anyhow, bail};
@@ -287,9 +288,14 @@ impl FilterManagement for PipewireManager {
                         }
                     }
                     NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                        // We need reload the routing for this node..
+                        self.routing_clear_target(&target).await?;
+
+                        // Set our routing target
                         self.target_filter_start.insert(device_id, pass_id);
 
-                        // This one is more complicated, we need to link in all the expected routes
+                        // Now reload the routing :)
+                        self.routing_load_target(&target).await?;
                     }
                 }
 
