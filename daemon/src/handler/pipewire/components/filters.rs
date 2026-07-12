@@ -7,12 +7,12 @@ use crate::handler::pipewire::components::routing::RoutingManagement;
 use crate::handler::pipewire::manager::PipewireManager;
 use crate::{APP_ID, APP_NAME, APP_NAME_ID};
 use anyhow::{Result, anyhow, bail};
-use log::warn;
+use log::{debug, warn};
 use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{FilterProperties, MediaClass, PipewireMessage};
 use pipeweaver_profile::{Filter, FilterType};
 use pipeweaver_shared::{FilterConfig, FilterState, FilterValue, Mix, NodeType};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use ulid::Ulid;
 
@@ -44,7 +44,7 @@ pub(crate) trait FilterManagement {
     async fn filter_custom_remove(&mut self, id: Ulid) -> Result<()>;
     async fn filter_custom_move(&mut self, id: Ulid, new_index: usize) -> Result<()>;
 
-    fn filter_custom_get_running(&mut self, id: Ulid) -> Vec<Ulid>;
+    fn filter_custom_get_running(&mut self, device: Ulid) -> Vec<Ulid>;
     async fn filter_custom_tree_teardown(&mut self, id: Ulid) -> Result<()>;
     async fn filter_custom_get_last(&mut self, id: Ulid) -> Option<Ulid>;
 
@@ -382,6 +382,10 @@ impl FilterManagement for PipewireManager {
     }
 
     async fn filter_custom_remove(&mut self, id: Ulid) -> Result<()> {
+        // Get the device, and the previous and next running filters
+        let (device_id, node_type) = self.get_device_id_by_filter(id)?;
+        let (prev, next) = self.find_running_neighbours(device_id, id)?;
+
         let err = anyhow!("Filter not found in config");
         let Some(filter) = self.filter_config.remove(&id) else {
             // We need to make sure this is cleared from the profile, otherwise we'll get a stuck
@@ -394,10 +398,6 @@ impl FilterManagement for PipewireManager {
         if filter.state != FilterState::Running {
             return Ok(());
         }
-
-        // Get the device, and the previous and next running filters
-        let (device_id, node_type) = self.get_device_id_by_filter(id)?;
-        let (prev, next) = self.find_running_neighbours(id)?;
 
         // Remove it from the profile now we have everything we need
         self.remove_filter_from_profile(id)?;
@@ -496,9 +496,6 @@ impl FilterManagement for PipewireManager {
                     self.link_create_filter_to_node(pass, device_id).await?;
                 }
             },
-            _ => {
-                bail!("Unexpected filter chain");
-            }
         }
 
         // Remove the filter from pipewire
@@ -519,7 +516,7 @@ impl FilterManagement for PipewireManager {
         let (device_id, node_type) = self.get_device_id_by_filter(id)?;
 
         // Grab neighbours before the move
-        let (old_prev, old_next) = self.find_running_neighbours(id)?;
+        let (old_prev, old_next) = self.find_running_neighbours(device_id, id)?;
 
         // Reorder the vec
         {
@@ -527,7 +524,7 @@ impl FilterManagement for PipewireManager {
             let old_index = device_filters
                 .iter()
                 .position(|f| f.id == id)
-                .ok_or_else(|| anyhow!("Filter {id} not found in device chain"))?;
+                .ok_or_else(|| anyhow!("Move: Filter {id} not found in device chain"))?;
 
             let filter = device_filters.remove(old_index);
             let clamped = new_index.min(device_filters.len());
@@ -539,7 +536,7 @@ impl FilterManagement for PipewireManager {
         }
 
         // Grab neighbours after the move
-        let (new_prev, new_next) = self.find_running_neighbours(id)?;
+        let (new_prev, new_next) = self.find_running_neighbours(device_id, id)?;
 
         // If nothing changed in terms of running neighbours, no relink needed
         if old_prev == new_prev && old_next == new_next {
@@ -715,14 +712,15 @@ impl FilterManagement for PipewireManager {
         Ok(())
     }
 
-    fn filter_custom_get_running(&mut self, id: Ulid) -> Vec<Ulid> {
-        let running: HashSet<Ulid> = self
+    fn filter_custom_get_running(&mut self, device: Ulid) -> Vec<Ulid> {
+        let running: Vec<Ulid> = self
             .filter_config
             .iter()
             .filter_map(|(&fid, cfg)| (cfg.state == FilterState::Running).then_some(fid))
             .collect();
 
-        let Ok(device_filters) = self.get_device_filters(id) else {
+        let Ok(device_filters) = self.get_device_filters(device) else {
+            debug!("Failed to get device filters for {device}");
             return vec![];
         };
 
@@ -867,7 +865,11 @@ trait FilterManagementLocal {
     fn get_device_filters_mut(&mut self, target: Ulid) -> Result<&mut Vec<Filter>>;
     fn get_device_by_filter_mut(&mut self, filter: Ulid) -> Result<&mut Vec<Filter>>;
     fn get_device_id_by_filter(&self, filter: Ulid) -> Result<(Ulid, NodeType)>;
-    fn find_running_neighbours(&mut self, id: Ulid) -> Result<(Option<Ulid>, Option<Ulid>)>;
+    fn find_running_neighbours(
+        &mut self,
+        dev: Ulid,
+        id: Ulid,
+    ) -> Result<(Option<Ulid>, Option<Ulid>)>;
 
     async fn filter_create_custom(
         &mut self,
@@ -1098,13 +1100,18 @@ impl FilterManagementLocal for PipewireManager {
         ))
     }
 
-    fn find_running_neighbours(&mut self, id: Ulid) -> Result<(Option<Ulid>, Option<Ulid>)> {
-        let active_filters = self.filter_custom_get_running(id);
+    fn find_running_neighbours(
+        &mut self,
+        dev: Ulid,
+        id: Ulid,
+    ) -> Result<(Option<Ulid>, Option<Ulid>)> {
+        let active_filters = self.filter_custom_get_running(dev);
+        debug!("Active filters: {:?}", active_filters);
 
         let idx = active_filters
             .iter()
             .position(|f| f == &id)
-            .ok_or_else(|| anyhow!("Filter {id} not found in device chain"))?;
+            .ok_or_else(|| anyhow!("Neighbours: Filter {:?} not found in device chain", id))?;
 
         let prev = active_filters[..idx].last().copied();
         let next = active_filters[idx + 1..].first().copied();

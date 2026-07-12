@@ -16,8 +16,7 @@ use pipeweaver_profile::{
     DeviceDescription, PhysicalSourceDevice, PhysicalTargetDevice, VirtualSourceDevice,
     VirtualTargetDevice,
 };
-use pipeweaver_shared::{Colour, FilterState, Mix, NodeType, OrderGroup};
-use std::collections::HashSet;
+use pipeweaver_shared::{Colour, Mix, NodeType, OrderGroup};
 use strum::IntoEnumIterator;
 use ulid::Ulid;
 
@@ -210,9 +209,16 @@ impl NodeManagement for PipewireManager {
         let description = self.get_device_description(id)?;
         description.name = name;
 
-        // Create a local version of this description, create the node tree and load volumes
+        // Create a local version of this description
         let local_desc = description.clone();
+
+        // First, re-load the filter tree before creating the new node.
+        self.channel_load_filters(id).await?;
+
+        // Create the nodes
         self.node_create(node_type, &local_desc).await?;
+
+        // Load volumes, and sync with pipewire
         self.load_initial_volume(id).await?;
         self.sync_pipewire_volume(id).await;
 
@@ -375,6 +381,12 @@ impl NodeManagementLocal for PipewireManager {
 
         let (mix_a, mix_b) = self.node_create_a_b_volumes(desc).await?;
 
+        let source = self
+            .source_filter_end
+            .get(&desc.id)
+            .copied()
+            .unwrap_or(desc.id);
+
         let source = if let Some(id) = self.source_filter_end.get(&desc.id) {
             id
         } else {
@@ -523,8 +535,6 @@ impl NodeManagementLocal for PipewireManager {
 
         Ok(())
     }
-
-    // TODO: TEAR DOWN THE FILTER TREE
 
     async fn node_remove_physical_source(&mut self, id: Ulid, profile_remove: bool) -> Result<()> {
         // So this ID represents the filter attached to one or more physical nodes, so
