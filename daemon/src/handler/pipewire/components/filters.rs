@@ -42,6 +42,7 @@ pub(crate) trait FilterManagement {
     async fn filter_custom_create(&mut self, target: Ulid, filter: Filter) -> Result<()>;
     async fn filter_custom_remove(&mut self, id: Ulid) -> Result<()>;
     async fn filter_custom_move(&mut self, id: Ulid, new_index: usize) -> Result<()>;
+    async fn filter_custom_get_last(&mut self, id: Ulid) -> Option<Ulid>;
 
     async fn filter_set_value(&mut self, filter: Ulid, id: u32, value: FilterValue) -> Result<()>;
 }
@@ -219,21 +220,7 @@ impl FilterManagement for PipewireManager {
         let defaults = HashMap::new();
 
         // Find the last running filter in this tree
-        let last_running = {
-            let running: HashSet<Ulid> = self
-                .filter_config
-                .iter()
-                .filter_map(|(&fid, cfg)| (cfg.state == FilterState::Running).then_some(fid))
-                .collect();
-
-            let device_filters = self.get_device_filters(target)?;
-
-            device_filters
-                .iter()
-                .rev()
-                .find(|f| running.contains(&f.id))
-                .map(|f| f.id)
-        };
+        let last_running = self.filter_custom_get_last(target).await;
 
         // Create the new filter
         self.filter_create_custom(target, filter.clone(), id, defaults)
@@ -717,6 +704,24 @@ impl FilterManagement for PipewireManager {
         }
 
         Ok(())
+    }
+
+    async fn filter_custom_get_last(&mut self, id: Ulid) -> Option<Ulid> {
+        let running: HashSet<Ulid> = self
+            .filter_config
+            .iter()
+            .filter_map(|(&fid, cfg)| (cfg.state == FilterState::Running).then_some(fid))
+            .collect();
+
+        let Ok(device_filters) = self.get_device_filters(id) else {
+            return None;
+        };
+
+        device_filters
+            .iter()
+            .rev()
+            .find(|f| running.contains(&f.id))
+            .map(|f| f.id)
     }
 
     async fn filter_set_value(&mut self, filter: Ulid, id: u32, value: FilterValue) -> Result<()> {

@@ -16,7 +16,8 @@ use pipeweaver_profile::{
     DeviceDescription, PhysicalSourceDevice, PhysicalTargetDevice, VirtualSourceDevice,
     VirtualTargetDevice,
 };
-use pipeweaver_shared::{Colour, Mix, NodeType, OrderGroup};
+use pipeweaver_shared::{Colour, FilterState, Mix, NodeType, OrderGroup};
+use std::collections::HashSet;
 use strum::IntoEnumIterator;
 use ulid::Ulid;
 
@@ -472,6 +473,12 @@ impl NodeManagementLocal for PipewireManager {
         }
         self.meter_map.insert(desc.id, meter);
 
+        // Ok, before we finish off, we need to find the last active filter (if applicable) and
+        // connect it up to us.
+        if let Some(last) = self.filter_custom_get_last(desc.id).await {
+            self.link_create_filter_to_filter(last, desc.id).await?;
+        }
+
         Ok(())
     }
 
@@ -487,6 +494,10 @@ impl NodeManagementLocal for PipewireManager {
             self.link_create_node_to_filter(desc.id, meter).await?;
         }
         self.meter_map.insert(desc.id, meter);
+
+        if let Some(last) = self.filter_custom_get_last(desc.id).await {
+            self.link_create_filter_to_node(last, desc.id).await?;
+        }
 
         Ok(())
     }
