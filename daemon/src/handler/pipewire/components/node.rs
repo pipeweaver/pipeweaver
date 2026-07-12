@@ -572,7 +572,7 @@ impl NodeManagementLocal for PipewireManager {
         }
 
         // After this point, the entire filter tree is isolated, so remove it
-        self.filter_custom_tree_teardown(src).await?;
+        self.filter_custom_tree_teardown(id).await?;
 
         // Remove the Base pass through filter from the tree
         self.filter_remove(id).await?;
