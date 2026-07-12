@@ -38,6 +38,6 @@ impl UridMapper {
 }
 
 pub unsafe extern "C" fn urid_map_callback(handle: *mut c_void, uri: *const i8) -> u32 {
-    let mapper = &*(handle as *const UridMapper);
+    let mapper = unsafe { &*(handle as *const UridMapper) };
     mapper.map_uri(uri)
 }
