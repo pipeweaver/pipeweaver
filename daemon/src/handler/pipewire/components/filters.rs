@@ -334,9 +334,12 @@ impl FilterManagement for PipewireManager {
                 NodeType::VirtualSource => {
                     self.link_remove_node_to_filter(device_id, pass_id).await?
                 }
-                NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                NodeType::PhysicalTarget => {
                     self.link_remove_filter_to_filter(pass_id, device_id)
                         .await?
+                }
+                NodeType::VirtualTarget => {
+                    self.link_remove_filter_to_node(pass_id, device_id).await?
                 }
             },
         }
