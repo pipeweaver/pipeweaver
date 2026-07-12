@@ -1,7 +1,8 @@
 <template>
   <div v-show=is_visible class="modal-mask">
     <div class="modal-wrapper" @click.self="$emit('backdrop-click')">
-      <div ref="dialog" class="modal-container" role="dialog" @keyup.esc.prevent="closeModalEsc">
+      <div ref="dialog" class="modal-container" :style="dialogStyle" role="dialog"
+           @keyup.esc.prevent="closeModalEsc">
         <div class="modal-header" tabindex="0">
           <div :id="`${id}_label`" role="heading">
             <b>
@@ -41,7 +42,9 @@ export default {
     prevent_esc: {type: Boolean, default: false},
 
     bodyPadding: {type: String, default: "20px"},
-    width: {type: String, default: "500px"}
+    width: {type: String, default: "500px"},
+    fullWindow: {type: Boolean, default: false},
+    windowPadding: {type: String, default: "20px"},
   },
 
   data() {
@@ -101,6 +104,22 @@ export default {
     isOpen() {
       return this.is_visible;
     }
+  },
+  computed: {
+    dialogStyle() {
+      if (this.fullWindow) {
+        return {
+          width: `calc(100vw - (${this.windowPadding} * 2))`,
+          height: `calc(100vh - (${this.windowPadding} * 2))`,
+          overflow: "hidden"
+        };
+      }
+
+      return {
+        minWidth: this.width,
+        maxWidth: "min-content"
+      };
+    }
   }
 }
 
@@ -117,28 +136,32 @@ export default {
   width: 100%;
   height: 100%;
   background-color: rgba(0, 0, 0, 0.6);
-  display: table;
-  transition: opacity 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Positions the Modal in the Middle of the Screen */
 .modal-wrapper {
-  display: table-cell;
-  vertical-align: middle;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* The Actual Border / Setup of the Modal */
 .modal-container {
   border: 1px solid #000;
+  margin: v-bind(windowPadding) auto;
 
-  min-width: v-bind(width);
-  max-width: min-content;
-  margin: 0 auto;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.33);
-  transition: all 0.3s ease;
 
   overflow: hidden;
+
+  display: flex;
+  flex-direction: column;
 }
 
 /* Header Styling.. */
@@ -172,6 +195,9 @@ export default {
   background-color: #2d3230;
   color: #fff;
   padding: v-bind(bodyPadding);
+
+  flex: 1;
+  overflow: auto;
 }
 
 .modal-footer {
