@@ -10,7 +10,7 @@ use log::warn;
 use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{FilterProperties, MediaClass, PipewireMessage};
 use pipeweaver_profile::{Filter, FilterType};
-use pipeweaver_shared::{FilterConfig, FilterState, FilterValue, NodeType};
+use pipeweaver_shared::{FilterConfig, FilterState, FilterValue, Mix, NodeType};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use ulid::Ulid;
@@ -248,6 +248,43 @@ impl FilterManagement for PipewireManager {
             None => {
                 let pass_id = self.filter_pass_create(String::from("FilterTree")).await?;
                 self.source_filter_end.insert(device_id, pass_id);
+
+                match node_type {
+                    NodeType::PhysicalSource | NodeType::VirtualSource => {
+                        // We need to attach the pass-through to the volume / meter ports..
+                        let meter = self.meter_map[&target];
+
+                        if self.meter_enabled {
+                            self.link_create_filter_to_filter(pass_id, meter).await?;
+                        }
+
+                        // Now we need to link our node to the Mixes
+                        let mix_a = self.source_map[&target][Mix::A];
+                        let mix_b = self.source_map[&target][Mix::B];
+
+                        self.link_create_filter_to_filter(pass_id, mix_a).await?;
+                        self.link_create_filter_to_filter(pass_id, mix_b).await?;
+
+                        // Now we need to drop the original links
+                        if node_type == NodeType::VirtualSource {
+                            if self.meter_enabled {
+                                self.link_remove_node_to_filter(device_id, meter).await?;
+                            }
+                            self.link_remove_node_to_filter(device_id, mix_a).await?;
+                            self.link_remove_node_to_filter(device_id, mix_b).await?;
+                        } else {
+                            if self.meter_enabled {
+                                self.link_remove_filter_to_filter(device_id, meter).await?;
+                            }
+                            self.link_remove_filter_to_filter(device_id, mix_a).await?;
+                            self.link_remove_filter_to_filter(device_id, mix_b).await?;
+                        }
+                    }
+                    _ => {
+                        // Not implemented yet
+                    }
+                }
+
                 pass_id
             }
         };
