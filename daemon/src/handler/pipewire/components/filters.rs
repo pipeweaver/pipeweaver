@@ -886,7 +886,9 @@ impl FilterManagementLocal for PipewireManager {
                     let node_desc = self.node_get_description(target).await?;
 
                     let name = format!("{}-{}-{}", node_desc.name, plugin_name, index);
-                    let create_filter = filter_lv2(uri.clone(), name.clone(), id, defaults.clone());
+                    let rate = self.clock_rate.unwrap_or(48000);
+                    let create_filter =
+                        filter_lv2(uri.clone(), name.clone(), id, defaults.clone(), rate);
 
                     // Ok, even if a filter fails to create, we still want to keep track of it in both
                     // the profile and filter config, this is so we can report to the user what is

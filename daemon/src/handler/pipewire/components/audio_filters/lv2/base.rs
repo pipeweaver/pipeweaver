@@ -1,10 +1,14 @@
+use crate::handler::pipewire::components::audio_filters::lv2::urid_mapper::{
+    UridMapper, urid_map_callback,
+};
 use lilv_sys::{
     LilvInstance, LilvNode, LilvPlugin, LilvPlugins, LilvWorld, lilv_instance_activate,
     lilv_instance_connect_port, lilv_instance_deactivate, lilv_instance_free, lilv_instance_run,
     lilv_new_uri, lilv_node_as_float, lilv_node_as_int, lilv_node_as_string, lilv_node_free,
     lilv_nodes_begin, lilv_nodes_free, lilv_nodes_get, lilv_nodes_get_first, lilv_nodes_is_end,
     lilv_nodes_next, lilv_nodes_size, lilv_plugin_get_name, lilv_plugin_get_num_ports,
-    lilv_plugin_get_num_ports_of_class, lilv_plugin_get_port_by_index, lilv_plugin_get_uri,
+    lilv_plugin_get_num_ports_of_class, lilv_plugin_get_port_by_index,
+    lilv_plugin_get_required_features, lilv_plugin_get_supported_features, lilv_plugin_get_uri,
     lilv_plugin_instantiate, lilv_plugins_begin, lilv_plugins_get, lilv_plugins_get_by_uri,
     lilv_plugins_is_end, lilv_plugins_next, lilv_port_get_name, lilv_port_get_range,
     lilv_port_get_symbol, lilv_port_get_value, lilv_port_has_property, lilv_port_is_a,
@@ -23,6 +27,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 // URI constants
 const LV2_AUDIO_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#AudioPort\0";
 const LV2_CONTROL_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#ControlPort\0";
+const LV2_ATOM_PORT_URI: &[u8] = b"http://lv2plug.in/ns/ext/atom#AtomPort\0";
 const LV2_INPUT_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#InputPort\0";
 const LV2_OUTPUT_PORT_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#OutputPort\0";
 const LV2_INTEGER_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#integer\0";
@@ -45,10 +50,24 @@ const LV2_IS_SIDECHAIN_URI: &[u8] = b"http://lv2plug.in/ns/lv2core#isSideChain\0
 const LV2_STEREO_GROUP_URI_STR: &str = "http://lv2plug.in/ns/ext/port-groups#StereoGroup";
 const LV2_SIDECHAIN_GROUP_URI_STR: &str = "http://lv2plug.in/ns/ext/port-groups#SideChainGroup";
 
+// Features which may be needed
+const LV2_URID_MAP_URI: &[u8] = b"http://lv2plug.in/ns/ext/urid#map\0";
+#[repr(C)]
+struct LV2URIDMap {
+    handle: *mut c_void,
+    map: unsafe extern "C" fn(handle: *mut c_void, uri: *const i8) -> u32,
+}
+
 // Shared LV2 world (initialized once, shared by all plugins)
 static LV2_WORLD: OnceLock<Arc<Mutex<LV2World>>> = OnceLock::new();
 fn get_world() -> &'static Arc<Mutex<LV2World>> {
     LV2_WORLD.get_or_init(|| Arc::new(Mutex::new(LV2World::new())))
+}
+
+#[repr(C)]
+struct LV2Feature {
+    uri: *const i8,
+    data: *mut c_void,
 }
 
 struct LV2World {
@@ -70,6 +89,7 @@ struct UriNodes {
     // Core port types
     audio_port: *mut LilvNode,
     control_port: *mut LilvNode,
+    atom_port: *mut LilvNode,
     input_port: *mut LilvNode,
     output_port: *mut LilvNode,
 
@@ -102,6 +122,7 @@ impl UriNodes {
             control_port: unsafe {
                 lilv_new_uri(world, LV2_CONTROL_PORT_URI.as_ptr() as *const i8)
             },
+            atom_port: unsafe { lilv_new_uri(world, LV2_ATOM_PORT_URI.as_ptr() as *const i8) },
             input_port: unsafe { lilv_new_uri(world, LV2_INPUT_PORT_URI.as_ptr() as *const i8) },
             output_port: unsafe { lilv_new_uri(world, LV2_OUTPUT_PORT_URI.as_ptr() as *const i8) },
             integer: unsafe { lilv_new_uri(world, LV2_INTEGER_URI.as_ptr() as *const i8) },
@@ -459,12 +480,11 @@ pub struct LV2PluginBase {
     pub plugin_uri: String,
     pub plugin_name: String,
     pub sample_rate: u32,
-    pub max_block_size: usize,
 }
 
 impl LV2PluginBase {
     /// Create a new LV2 plugin instance
-    pub fn new(plugin_uri: &str, rate: u32, max_block_size: usize) -> Result<Self, FilterState> {
+    pub fn new(plugin_uri: &str, rate: u32) -> Result<Self, FilterState> {
         unsafe {
             // Get shared world (initializes on first call)
             let world_guard = match get_world()
@@ -669,7 +689,66 @@ impl LV2PluginBase {
                 }
             };
 
-            let instance = lilv_plugin_instantiate(plugin, rate as f64, ptr::null());
+            let required_features = lilv_plugin_get_required_features(plugin);
+            if !required_features.is_null() {
+                let mut iter = lilv_nodes_begin(required_features);
+
+                while !lilv_nodes_is_end(required_features, iter) {
+                    let node = lilv_nodes_get(required_features, iter);
+
+                    if !node.is_null() {
+                        let uri = lilv_node_as_string(node);
+
+                        if !uri.is_null() {
+                            let uri = CStr::from_ptr(uri).to_string_lossy();
+                            debug!("LV2 required feature: {}", uri);
+                        }
+                    }
+
+                    iter = lilv_nodes_next(required_features, iter);
+                }
+
+                lilv_nodes_free(required_features);
+            }
+
+            let supported_features = lilv_plugin_get_supported_features(plugin);
+            if !supported_features.is_null() {
+                let mut iter = lilv_nodes_begin(supported_features);
+
+                while !lilv_nodes_is_end(supported_features, iter) {
+                    let node = lilv_nodes_get(supported_features, iter);
+
+                    if !node.is_null() {
+                        let uri = lilv_node_as_string(node);
+
+                        if !uri.is_null() {
+                            let uri = CStr::from_ptr(uri).to_string_lossy();
+                            debug!("LV2 supported feature: {}", uri);
+                        }
+                    }
+
+                    iter = lilv_nodes_next(supported_features, iter);
+                }
+
+                lilv_nodes_free(supported_features);
+            }
+
+            let urid_mapper = Box::new(UridMapper::new());
+
+            let urid_map = Box::new(LV2URIDMap {
+                handle: Box::into_raw(urid_mapper) as *mut c_void,
+                map: urid_map_callback,
+            });
+
+            let feature_urid_map = LV2Feature {
+                uri: LV2_URID_MAP_URI.as_ptr() as *const i8,
+                data: &*urid_map as *const LV2URIDMap as *mut c_void,
+            };
+
+            let features = [&feature_urid_map as *const LV2Feature, ptr::null()];
+
+            let instance =
+                lilv_plugin_instantiate(plugin, rate as f64, features.as_ptr() as *const _);
             if instance.is_null() {
                 lilv_node_free(uri_node);
                 return Err(FilterState::Error(
@@ -691,7 +770,6 @@ impl LV2PluginBase {
                 plugin_uri: plugin_uri.to_string(),
                 plugin_name,
                 sample_rate: rate,
-                max_block_size,
             };
 
             // Connect all control ports once during initialization (both inputs and outputs)
@@ -828,7 +906,7 @@ impl LV2PluginBase {
             .unwrap_or(0);
 
         // Validate sample count
-        if sample_count == 0 || sample_count > self.max_block_size {
+        if sample_count == 0 {
             return;
         }
 

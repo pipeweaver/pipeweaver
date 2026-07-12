@@ -144,10 +144,9 @@ impl GenericLV2Filter {
     pub fn new(
         plugin_uri: &str,
         rate: u32,
-        block_size: usize,
         defaults: HashMap<String, FilterValue>,
     ) -> Result<Self, FilterState> {
-        let plugin = LV2PluginBase::new(plugin_uri, rate, block_size)?;
+        let plugin = LV2PluginBase::new(plugin_uri, rate)?;
         let plugin_name = plugin.plugin_name.clone();
 
         let mut property_to_port = Vec::new();
@@ -193,6 +192,7 @@ pub fn filter_lv2(
     name: String,
     id: Ulid,
     defaults: HashMap<String, FilterValue>,
+    rate: u32,
 ) -> Result<(String, FilterProperties), FilterState> {
     let plugin_uri = plugin_uri.into();
     let description = name.to_lowercase().replace(" ", "-");
@@ -206,7 +206,7 @@ pub fn filter_lv2(
 
     debug!("Filter Name: {}", filter_name);
 
-    let callback = GenericLV2Filter::new(&plugin_uri, 96000, 1024, defaults)?;
+    let callback = GenericLV2Filter::new(&plugin_uri, rate, defaults)?;
     let name = callback.plugin_name.clone();
 
     let props = FilterProperties {
