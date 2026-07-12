@@ -132,6 +132,8 @@ impl FilterManagement for PipewireManager {
         }
 
         let mut previous_filter_id = None;
+        let mut first_filter_id = None;
+
         let device_filters = self.get_device_filters(id)?.clone();
         for (index, filter) in device_filters.into_iter().enumerate() {
             let filter_id = filter.id;
@@ -152,15 +154,25 @@ impl FilterManagement for PipewireManager {
                         .await?;
                 }
                 previous_filter_id = Some(filter_id);
+
+                if first_filter_id.is_none() {
+                    first_filter_id = Some(filter_id);
+                }
             }
         }
 
         // Link the last filter to the pass-through filter
-        if let Some(prev_filter_id) = previous_filter_id {
-            self.link_create_filter_to_filter(prev_filter_id, pass)
-                .await?;
+        match (previous_filter_id, first_filter_id, node_type) {
+            (Some(last), _, NodeType::VirtualSource | NodeType::PhysicalSource) => {
+                self.link_create_filter_to_filter(last, pass).await?;
+            }
+            (_, Some(first), NodeType::VirtualTarget | NodeType::PhysicalTarget) => {
+                self.link_create_filter_to_filter(pass, first).await?;
+            }
+            _ => {
+                warn!("Unexpected filter tree configuration");
+            }
         }
-
         Ok(())
     }
 

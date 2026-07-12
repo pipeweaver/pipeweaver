@@ -513,6 +513,8 @@ impl NodeManagementLocal for PipewireManager {
         Ok(())
     }
 
+    // TODO: TEAR DOWN THE FILTER TREE
+
     async fn node_remove_physical_source(&mut self, id: Ulid, profile_remove: bool) -> Result<()> {
         // So this ID represents the filter attached to one or more physical nodes, so
         // we need to first make sure nothing is connected, and if it is, remove it.

@@ -131,7 +131,7 @@ impl LoadProfileLocal for PipewireManager {
             physical_targets.push(device.description.clone());
         }
         for desc in &physical_targets {
-            //self.node_load_filters(desc.id).await?;
+            self.channel_load_filters(desc.id).await?;
             self.node_create(NodeType::PhysicalTarget, desc).await?;
             self.check_device_order_present(desc, false)?;
         }
@@ -141,7 +141,7 @@ impl LoadProfileLocal for PipewireManager {
             virtual_targets.push(device.description.clone());
         }
         for desc in &virtual_targets {
-            //self.node_load_filters(desc.id).await?;
+            self.channel_load_filters(desc.id).await?;
             self.node_create(NodeType::VirtualTarget, desc).await?;
             self.check_device_order_present(desc, false)?;
         }
