@@ -111,7 +111,8 @@ export default {
         return {
           width: `calc(100vw - (${this.windowPadding} * 2))`,
           height: `calc(100vh - (${this.windowPadding} * 2))`,
-          overflow: "hidden"
+          overflow: "hidden",
+          display: "flex",
         };
       }
 
@@ -197,7 +198,8 @@ export default {
   padding: v-bind(bodyPadding);
 
   flex: 1;
-  overflow: auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .modal-footer {
