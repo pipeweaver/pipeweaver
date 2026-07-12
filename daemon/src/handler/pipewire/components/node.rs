@@ -535,10 +535,13 @@ impl NodeManagementLocal for PipewireManager {
             }
         }
 
+        // Get the filter chain sauce if needed
+        let src = self.source_filter_end.get(&id).copied().unwrap_or(id);
+
         // Detach and destroy the Meter
         if let Some(&meter) = self.meter_map.get(&id) {
             if self.meter_enabled {
-                self.link_remove_filter_to_filter(id, meter).await?;
+                self.link_remove_filter_to_filter(src, meter).await?;
             }
             self.filter_remove(meter).await?;
             self.meter_map.remove(&id);
@@ -548,15 +551,28 @@ impl NodeManagementLocal for PipewireManager {
         if let Some(mix_map) = self.source_map.get(&id) {
             let mix_map = *mix_map;
             for mix in Mix::iter() {
-                self.link_remove_filter_to_filter(id, mix_map[mix]).await?;
+                self.link_remove_filter_to_filter(src, mix_map[mix]).await?;
 
                 // Remove all links from this Mix to all defined outputs
-                self.remove_routes(id, mix_map[mix]).await?;
+                self.remove_routes(src, mix_map[mix]).await?;
 
                 // Should be fully detached, remove the Mix filter
                 self.filter_remove(mix_map[mix]).await?
             }
         }
+
+        // Check whether we have to detach a filter tree
+        if src != id {
+            // Get the first running filter, of if there isn't one, the passthrough
+            let running = self.filter_custom_get_running(src);
+            let first = running.first().copied().unwrap_or(src);
+
+            // Detach it.
+            self.link_remove_filter_to_filter(id, first).await?;
+        }
+
+        // After this point, the entire filter tree is isolated, so remove it
+        self.filter_custom_tree_teardown(src).await?;
 
         // Remove the Base pass through filter from the tree
         self.filter_remove(id).await?;
@@ -589,10 +605,13 @@ impl NodeManagementLocal for PipewireManager {
         // Virtual Sources are a little easier, still a bit of a repeat from the above
         // in places, but we don't have to deal with Unmanaged sources, and our node
         // connects directly to the Mix A / B volume filters
+
+        let src = self.source_filter_end.get(&id).copied().unwrap_or(id);
+
         if let Some(mix_map) = self.source_map.get(&id) {
             let mix_map = *mix_map;
             for mix in Mix::iter() {
-                self.link_remove_node_to_filter(id, mix_map[mix]).await?;
+                self.link_remove_node_to_filter(src, mix_map[mix]).await?;
 
                 // Remove all links from this Mix to all defined outputs
                 self.remove_routes(id, mix_map[mix]).await?;
@@ -605,11 +624,22 @@ impl NodeManagementLocal for PipewireManager {
         // Detach and destroy the Meter
         if let Some(&meter) = self.meter_map.get(&id) {
             if self.meter_enabled {
-                self.link_remove_node_to_filter(id, meter).await?;
+                self.link_remove_node_to_filter(src, meter).await?;
             }
             self.filter_remove(meter).await?;
             self.meter_map.remove(&id);
         }
+
+        // Check whether we have to detach a passthrough node
+        if src != id {
+            let running = self.filter_custom_get_running(src);
+            let first = running.first().copied().unwrap_or(src);
+
+            self.link_remove_node_to_filter(id, first).await?;
+        }
+
+        // After this point, the entire filter tree is isolated
+        self.filter_custom_tree_teardown(id).await?;
 
         // Remove the Node from the Pipewire tree
         self.node_pw_remove(id).await?;
@@ -647,6 +677,8 @@ impl NodeManagementLocal for PipewireManager {
             }
         }
 
+        let src = self.target_filter_start.get(&id).copied().unwrap_or(id);
+
         // Detach and destroy the Meter
         if let Some(&meter) = self.meter_map.get(&id) {
             if self.meter_enabled {
@@ -666,7 +698,7 @@ impl NodeManagementLocal for PipewireManager {
                     // Drop our Link on All Mixes
                     for mix in Mix::iter() {
                         // Flag this for removal, this gets done slightly later
-                        self.link_remove_filter_to_filter(mix_map[mix], id).await?;
+                        self.link_remove_filter_to_filter(mix_map[mix], src).await?;
                     }
                 }
             }
@@ -680,6 +712,17 @@ impl NodeManagementLocal for PipewireManager {
                 }
             }
         }
+
+        // Finally, disconnect the last filter (if applicable) from the end
+        if src != id {
+            let running = self.filter_custom_get_running(src);
+            let last = running.last().copied().unwrap_or(src);
+
+            self.link_remove_filter_to_filter(last, id).await?;
+        }
+
+        // Remove the entire filter tree
+        self.filter_custom_tree_teardown(id).await?;
 
         // Now we can destroy our 'Volume' filter
         self.filter_remove(id).await?;
@@ -707,6 +750,8 @@ impl NodeManagementLocal for PipewireManager {
         // Again, similar to physical targets, but we need to check the target map to
         // find our volume filter then un-route and remove it
 
+        let src = self.target_filter_start.get(&id).copied().unwrap_or(id);
+
         // Detach and destroy the Meter
         if let Some(&meter) = self.meter_map.get(&id) {
             if self.meter_enabled {
@@ -732,11 +777,21 @@ impl NodeManagementLocal for PipewireManager {
                 if let Some(mix_map) = self.source_map.get(&source) {
                     let mix_map = *mix_map;
                     for mix in Mix::iter() {
-                        self.link_remove_filter_to_node(mix_map[mix], id).await?;
+                        self.link_remove_filter_to_node(mix_map[mix], src).await?;
                     }
                 }
             }
         }
+
+        if src != id {
+            let running = self.filter_custom_get_running(src);
+            let last = running.last().copied().unwrap_or(src);
+
+            self.link_remove_filter_to_node(last, id).await?;
+        }
+
+        // Remove the entire filter tree
+        self.filter_custom_tree_teardown(id).await?;
 
         // Now we can drop the node
         self.node_pw_remove(id).await?;
@@ -771,7 +826,8 @@ impl NodeManagementLocal for PipewireManager {
         if let Some(route) = self.profile.routes.get(&source) {
             let route = route.clone();
             for route in route {
-                self.link_remove_filter_to_filter(target, route).await?;
+                let route = self.target_filter_start.get(&route).unwrap_or(&route);
+                self.link_remove_filter_to_filter(target, *route).await?;
             }
         }
         Ok(())

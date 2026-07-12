@@ -43,6 +43,9 @@ pub(crate) trait FilterManagement {
     async fn filter_custom_create(&mut self, target: Ulid, filter: Filter) -> Result<()>;
     async fn filter_custom_remove(&mut self, id: Ulid) -> Result<()>;
     async fn filter_custom_move(&mut self, id: Ulid, new_index: usize) -> Result<()>;
+
+    fn filter_custom_get_running(&mut self, id: Ulid) -> Vec<Ulid>;
+    async fn filter_custom_tree_teardown(&mut self, id: Ulid) -> Result<()>;
     async fn filter_custom_get_last(&mut self, id: Ulid) -> Option<Ulid>;
 
     async fn filter_set_value(&mut self, filter: Ulid, id: u32, value: FilterValue) -> Result<()>;
@@ -712,7 +715,7 @@ impl FilterManagement for PipewireManager {
         Ok(())
     }
 
-    async fn filter_custom_get_last(&mut self, id: Ulid) -> Option<Ulid> {
+    fn filter_custom_get_running(&mut self, id: Ulid) -> Vec<Ulid> {
         let running: HashSet<Ulid> = self
             .filter_config
             .iter()
@@ -720,14 +723,101 @@ impl FilterManagement for PipewireManager {
             .collect();
 
         let Ok(device_filters) = self.get_device_filters(id) else {
-            return None;
+            return vec![];
         };
 
         device_filters
             .iter()
-            .rev()
-            .find(|f| running.contains(&f.id))
+            .filter(|f| running.contains(&f.id))
             .map(|f| f.id)
+            .collect()
+    }
+
+    async fn filter_custom_tree_teardown(&mut self, id: Ulid) -> Result<()> {
+        // This should be called *AFTER* the filter tree has been disconnected from in / out
+        // nodes, so all we need to do is remove the links between the filters and remove them.
+
+        let filters = self.filter_custom_get_running(id);
+        let Some(node_type) = self.get_node_type(id) else {
+            bail!("Failed to find node type");
+        };
+
+        // Only do stuff if we actually have running filters. We can't use filters.is_empty because
+        // there may also be a pass-through in play.
+        match node_type {
+            NodeType::PhysicalSource | NodeType::VirtualSource => {
+                if !self.source_filter_end.contains_key(&id) {
+                    return Ok(());
+                }
+            }
+            NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                if !self.target_filter_start.contains_key(&id) {
+                    return Ok(());
+                }
+            }
+        }
+
+        // Firstly, drop all the links between the filters
+        for pair in filters.windows(2) {
+            let &[a, b] = pair else { unreachable!() };
+            self.link_remove_filter_to_filter(a, b).await?;
+        }
+
+        // Detach the pass-through adjacent filter
+        if !filters.is_empty() {
+            match node_type {
+                NodeType::PhysicalSource | NodeType::VirtualSource => {
+                    // We need to detach the last filter from the pass-through
+                    let Some(pass) = self.source_filter_end.get(&id) else {
+                        unreachable!()
+                    };
+                    let Some(first) = filters.first() else {
+                        unreachable!()
+                    };
+
+                    self.link_remove_filter_to_filter(*pass, *first).await?;
+                }
+                NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                    let Some(pass) = self.target_filter_start.get(&id) else {
+                        unreachable!()
+                    };
+                    let Some(last) = filters.last() else {
+                        unreachable!()
+                    };
+
+                    self.link_remove_filter_to_filter(*last, *pass).await?;
+                }
+            }
+        }
+
+        // When we get here, we're completely detached, so start dropping the filters.
+        for filter in filters {
+            self.filter_pw_remove(filter).await?;
+        }
+
+        // Remove the pass through
+        match node_type {
+            NodeType::PhysicalSource | NodeType::VirtualSource => {
+                let Some(pass) = self.source_filter_end.get(&id) else {
+                    unreachable!()
+                };
+                self.filter_pw_remove(*pass).await?;
+                self.source_filter_end.remove(&id);
+            }
+            NodeType::PhysicalTarget | NodeType::VirtualTarget => {
+                let Some(pass) = self.target_filter_start.get(&id) else {
+                    unreachable!()
+                };
+                self.filter_pw_remove(*pass).await?;
+                self.target_filter_start.remove(&id);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn filter_custom_get_last(&mut self, id: Ulid) -> Option<Ulid> {
+        self.filter_custom_get_running(id).last().copied()
     }
 
     async fn filter_set_value(&mut self, filter: Ulid, id: u32, value: FilterValue) -> Result<()> {
@@ -1009,29 +1099,15 @@ impl FilterManagementLocal for PipewireManager {
     }
 
     fn find_running_neighbours(&mut self, id: Ulid) -> Result<(Option<Ulid>, Option<Ulid>)> {
-        let running: HashSet<Ulid> = self
-            .filter_config
-            .iter()
-            .filter_map(|(&fid, cfg)| (cfg.state == FilterState::Running).then_some(fid))
-            .collect();
+        let active_filters = self.filter_custom_get_running(id);
 
-        let device_filters = self.get_device_by_filter_mut(id)?;
-
-        let idx = device_filters
+        let idx = active_filters
             .iter()
-            .position(|f| f.id == id)
+            .position(|f| f == &id)
             .ok_or_else(|| anyhow!("Filter {id} not found in device chain"))?;
 
-        let prev = device_filters[..idx]
-            .iter()
-            .rev()
-            .find(|f| running.contains(&f.id))
-            .map(|f| f.id);
-
-        let next = device_filters[idx + 1..]
-            .iter()
-            .find(|f| running.contains(&f.id))
-            .map(|f| f.id);
+        let prev = active_filters[..idx].last().copied();
+        let next = active_filters[idx + 1..].first().copied();
 
         Ok((prev, next))
     }
