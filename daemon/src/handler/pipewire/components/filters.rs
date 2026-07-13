@@ -382,6 +382,18 @@ impl FilterManagement for PipewireManager {
     }
 
     async fn filter_custom_remove(&mut self, id: Ulid) -> Result<()> {
+        // Firstly, check whether this filter is Running, if it's not, there's nothing to really
+        // do here outside clean-up.
+        if let Some(filter) = self.filter_config.get(&id)
+            && filter.state != FilterState::Running
+        {
+            // Clear everything
+            self.filter_config.remove(&id);
+            self.remove_filter_from_profile(id)?;
+
+            return Ok(());
+        }
+
         // Get the device, and the previous and next running filters
         let (device_id, node_type) = self.get_device_id_by_filter(id)?;
         let (prev, next) = self.find_running_neighbours(device_id, id)?;
@@ -393,11 +405,6 @@ impl FilterManagement for PipewireManager {
             self.remove_filter_from_profile(id)?;
             bail!(err);
         };
-
-        // If this filter isn't running, we just need to remove it from the profile
-        if filter.state != FilterState::Running {
-            return Ok(());
-        }
 
         // Remove it from the profile now we have everything we need
         self.remove_filter_from_profile(id)?;
@@ -1146,7 +1153,7 @@ impl FilterManagementLocal for PipewireManager {
                 #[cfg(feature = "lv2")]
                 {
                     use log::warn;
-                    use crate::handler::pipewire::components::audio_filters::lv2::filters::generic::filter_lv2;
+                        use crate::handler::pipewire::components::audio_filters::lv2::filters::generic::filter_lv2;
                     let node_desc = self.node_get_description(target).await?;
 
                     let name = format!("{}-{}-{}", node_desc.name, plugin_name, index);
