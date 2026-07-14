@@ -153,7 +153,7 @@ export default {
 
 /* The Actual Border / Setup of the Modal */
 .modal-container {
-  border: 1px solid #000;
+  border: var(--border);
   margin: v-bind(windowPadding) auto;
 
   border-radius: 8px;
@@ -169,11 +169,13 @@ export default {
 .modal-header {
   text-transform: uppercase;
   font-family: LeagueMono, sans-serif;
-  background-color: #3b413f;
+  background: var(--panel);
   text-align: center;
   color: #fff;
   overflow: hidden;
   outline: none;
+
+  border-bottom: 1px solid #3b403f;
 }
 
 .modal-header div {
@@ -193,9 +195,10 @@ export default {
 }
 
 .modal-body {
-  background-color: #2d3230;
+  background: var(--mix-background);
   color: #fff;
   padding: v-bind(bodyPadding);
+  border-bottom: 1px solid #3b403f;
 
   flex: 1;
   min-height: 0;
@@ -203,8 +206,9 @@ export default {
 }
 
 .modal-footer {
-  background-color: #2d3230;
+  background: var(--panel);
   text-align: right;
+  padding-top: 10px;
   padding-right: 10px;
   padding-bottom: 10px;
 }
@@ -212,7 +216,6 @@ export default {
 .modal-footer button {
   background-color: #353937;
   color: #fff;
-  padding: 8px 30px;
   border: none;
 }
 
