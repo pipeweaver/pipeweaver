@@ -175,7 +175,7 @@ export default {
   overflow: hidden;
   outline: none;
 
-  border-bottom: 1px solid #3b403f;
+  border-bottom: 1px solid var(--border-subtle-colour);
 }
 
 .modal-header div {
@@ -198,7 +198,7 @@ export default {
   background: var(--mix-background);
   color: #fff;
   padding: v-bind(bodyPadding);
-  border-bottom: 1px solid #3b403f;
+  border-bottom: 1px solid var(--border-subtle-colour);
 
   flex: 1;
   min-height: 0;
