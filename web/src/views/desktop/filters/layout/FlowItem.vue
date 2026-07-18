@@ -39,7 +39,7 @@ export default {
 .flow-item {
   box-sizing: border-box;
   border: 1px solid #ccc;
-  padding: 10px;
+  padding: 15px;
   border-radius: 10px;
   background-color: #222222;
 
