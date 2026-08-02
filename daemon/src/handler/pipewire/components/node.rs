@@ -93,7 +93,7 @@ impl NodeManagement for PipewireManager {
         }
 
         // This is relatively simple, firstly generate the ID, and build the description
-        let id = Ulid::new();
+        let id = Ulid::generate();
         let description = DeviceDescription {
             id,
             name: name.clone(),

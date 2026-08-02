@@ -645,7 +645,7 @@ impl PipewireManager {
         let mut group = self.prepare_links(source, dest, sender)?;
 
         // Create a Parent ID for this link set
-        let parent_id = Ulid::new();
+        let parent_id = Ulid::generate();
 
         // Find the first portmap and begin creation
         for port in PortLocation::iter() {
@@ -708,7 +708,7 @@ impl PipewireManager {
         // Now create the links
         for port in PortLocation::iter() {
             // Firstly, create an id for this list
-            let link_id = Ulid::new();
+            let link_id = Ulid::generate();
 
             // Next, obtain the source and destination port indexes
             let (src_id, src_index) = self.get_port(&source, Direction::Out, port)?;

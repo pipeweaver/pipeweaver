@@ -58,7 +58,7 @@ json-patch = "4.2.0"
 interprocess = { version = "2.4.2" }
 
 ### Device Identification ###
-ulid = { version = "1.2.1", features = ["serde"] }
+ulid = { version = "3.0", features = ["serde"] }
 
 ### TokIO
 tokio = { version = "1.51.1", features = ["rt-multi-thread", "sync", "macros"] }
