@@ -2,7 +2,15 @@ use crate::client::Client;
 use anyhow::{Result, anyhow};
 
 use crate::commands::{DaemonRequest, DaemonResponse, DaemonStatus};
-use async_trait::async_trait;
+
+// reqwest's blocking and async clients are unrelated types (not just an async/await
+// difference), so this is the one spot maybe_async can't help with directly. Alias
+// whichever one matches our feature under a single name and the rest of the body
+// below is identical for both builds.
+#[cfg(not(feature = "sync"))]
+use reqwest::Client as HttpClient;
+#[cfg(feature = "sync")]
+use reqwest::blocking::Client as HttpClient;
 
 #[derive(Debug)]
 #[allow(unused)]
@@ -24,10 +32,10 @@ impl WebClient {
     }
 }
 
-#[async_trait]
+#[maybe_async::maybe_async]
 impl Client for WebClient {
     async fn send(&mut self, request: &DaemonRequest) -> Result<DaemonResponse> {
-        reqwest::Client::new()
+        HttpClient::new()
             .post(&self.url)
             .json(&request)
             .send()
