@@ -3,14 +3,9 @@ mod cli;
 use anyhow::{Error, Result, bail};
 use clap::Parser;
 use directories::BaseDirs;
-use interprocess::local_socket::GenericFilePath;
-use interprocess::local_socket::ToFsName;
-use interprocess::local_socket::tokio::prelude::LocalSocketStream;
-use interprocess::local_socket::traits::tokio::Stream;
 use pipeweaver_ipc::client::Client;
-use pipeweaver_ipc::clients::ipc::ipc_client::IPCClient;
-use pipeweaver_ipc::clients::ipc::ipc_socket::Socket;
-use pipeweaver_ipc::clients::web::web_client::WebClient;
+use pipeweaver_ipc::clients::ipc::IPCClient;
+use pipeweaver_ipc::clients::web::WebClient;
 use pipeweaver_ipc::commands::{
     APICommand, DaemonCommand, DaemonRequest, DaemonResponse, PWCommandResponse,
 };
@@ -31,9 +26,7 @@ async fn main() -> Result<()> {
     } else {
         let path = get_socket_path()?;
 
-        let connection = LocalSocketStream::connect(path.to_fs_name::<GenericFilePath>()?).await?;
-        let socket: Socket<DaemonResponse, DaemonRequest> = Socket::new(connection);
-        Box::new(IPCClient::new(socket))
+        Box::new(IPCClient::connect(path).await?)
     };
 
     // Poll the Status
