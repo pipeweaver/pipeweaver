@@ -41,12 +41,12 @@ ulid = { workspace = true }
 
 enum-map = { workspace = true }
 
-maybe-async = "0.2.11"
-async-trait = { version = "0.1.89", optional = true }
-futures = { version = "0.3.32", optional = true }
-tokio-util = { version = "0.7.18", optional = true, features = ["codec", "compat"] }
-tokio-serde = { version = "0.9.0", optional = true, features = ["bincode", "json"] }
+maybe-async = "0.2"
+async-trait = { version = "0.1", optional = true }
+futures = { version = "0.3", optional = true }
+tokio-util = { version = "0.7", optional = true, features = ["codec", "compat"] }
+tokio-serde = { version = "0.9", optional = true, features = ["bincode", "json"] }
 
 # Used for Web Requests. Async client works on wasm32 out of the box (uses fetch());
 # `blocking` is native-only and only pulled in by the `sync` feature above.
-reqwest = { version = "0.13.4", default-features = false, features = ["json"] }
+reqwest = { version = "0.13", default-features = false, features = ["json"] }

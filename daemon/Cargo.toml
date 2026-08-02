@@ -30,22 +30,22 @@ pipeweaver-pipewire = { path = "../pipewire" }
 pipeweaver-shared = { path = "../shared", features = ["strum"] }
 
 ### Portal / Autostart Handling
-ashpd = { version = "0.13.12", features = ["background"] }
-rust-ini = "0.21.3"
+ashpd = { version = "0.13", features = ["background"] }
+rust-ini = "0.21"
 
 ### Logging
-file-rotate = "0.8.0"
-log-panics = "2.1.0"
+file-rotate = "0.8"
+log-panics = "2.1"
 
 ### Enum Handling
 enum-map = { workspace = true }
 strum = { workspace = true }
 
 ### Project Paths
-directories = "6.0.0"
+directories = "6.0"
 
 ### Log Writing ###
-simplelog = "0.12.2"
+simplelog = "0.12"
 
 ### Async Runtime ###
 tokio = { workspace = true }
@@ -54,21 +54,21 @@ tokio = { workspace = true }
 clap = { workspace = true }
 
 ### HTTP Server ###
-actix-web = { version = "4.14.0", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "ws"] }
-actix-ws = "0.4.0"
-actix-cors = "0.7.1"
-futures-lite = "2.6.1"
-mime_guess = "2.0.5"
-include_dir = "0.7.4"
+actix-web = { version = "4.14", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "ws"] }
+actix-ws = "0.4"
+actix-cors = "0.7"
+futures-lite = "2.6"
+mime_guess = "2.0"
+include_dir = "0.7"
 
 ### Tray Handling
 # We use a custom fork of ksni. If the tray service isn't available at startup, the tray icon will never spawn. This
 # fork fixes that, and allows cleaner fallthrough, allowing it to retry when the service appears.
-ksni = "0.3.5"
+ksni = "0.3"
 
-image = { version = "0.25.10", default-features = false, features = ["png"] }
-open = "5.3.6"
-which = "8.0.4"
+image = { version = "0.25", default-features = false, features = ["png"] }
+open = "5.3"
+which = "8.0"
 
 ## Ok, Build Stuff Time :D
 [package.metadata.deb]
