@@ -32,7 +32,7 @@ impl WebClient {
     }
 }
 
-#[maybe_async::maybe_async]
+#[maybe_async::maybe_async(?Send)]
 impl Client for WebClient {
     async fn send(&mut self, request: &DaemonRequest) -> Result<DaemonResponse> {
         HttpClient::new()

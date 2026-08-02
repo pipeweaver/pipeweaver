@@ -40,7 +40,7 @@ impl IPCClient {
         Self { socket }
     }
 
-    #[maybe_async::maybe_async]
+    #[maybe_async::maybe_async(?Send)]
     pub async fn connect(path: impl AsRef<Path>) -> Result<Self> {
         let name = path.as_ref().to_fs_name::<GenericFilePath>()?;
         let stream = LocalSocketStream::connect(name).await?;
