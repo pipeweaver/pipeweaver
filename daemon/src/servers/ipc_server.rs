@@ -7,7 +7,7 @@ use interprocess::local_socket::tokio::prelude::{LocalSocketListener, LocalSocke
 use interprocess::local_socket::traits::tokio::{Listener, Stream};
 use interprocess::local_socket::{GenericFilePath, ListenerOptions, ToFsName};
 use log::{debug, info, warn};
-use pipeweaver_ipc::clients::ipc::ipc_socket::Socket;
+use pipeweaver_ipc::clients::ipc::Socket;
 use pipeweaver_ipc::commands::{DaemonCommand, DaemonRequest, DaemonResponse};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
