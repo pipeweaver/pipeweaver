@@ -55,7 +55,7 @@ enum-map = { version = "2.7.3", features = ["serde"] }
 json-patch = "4.2.0"
 
 ### IPC Communication ###
-interprocess = { version = "2.4.2", features = ["tokio"] }
+interprocess = { version = "2.4.2" }
 
 ### Device Identification ###
 ulid = { version = "1.2.1", features = ["serde"] }

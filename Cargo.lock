@@ -1995,6 +1995,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybe-async"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "746873a384ad60adc5db74471dfaba74bd278afbdcfd81db93fafcdfc8b5ca0c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2269,7 +2280,6 @@ dependencies = [
  "anyhow",
  "clap",
  "directories",
- "interprocess",
  "pipeweaver-ipc",
  "pipeweaver-shared",
  "serde_json",
@@ -2323,10 +2333,12 @@ dependencies = [
  "futures",
  "interprocess",
  "json-patch",
+ "maybe-async",
  "pipeweaver-profile",
  "pipeweaver-shared",
  "reqwest",
  "serde",
+ "serde_json",
  "tokio-serde",
  "tokio-util",
  "ulid",
@@ -2675,7 +2687,9 @@ checksum = "219c5811de6525e5416c7d5d53bb656d3afdbc6c5af816e0802bcfa42dbdc1c3"
 dependencies = [
  "base64",
  "bytes",
+ "futures-channel",
  "futures-core",
+ "futures-util",
  "http 1.4.0",
  "http-body",
  "http-body-util",
