@@ -7,7 +7,7 @@ export default {
 
   data() {
     return {
-      hexString: "#000000",
+      hexString: "#FFFFFF",
       canvasContext: undefined,
       hoverContainer: undefined,
 
@@ -172,7 +172,7 @@ export default {
     },
 
     clearColour() {
-      this.updateText("#000000");
+      this.updateText("#FFFFFF");
     },
 
     onClosed(e) {
