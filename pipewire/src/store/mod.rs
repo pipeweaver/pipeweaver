@@ -152,6 +152,7 @@ impl Store {
         self.factories.insert(id, factory);
     }
 
+    #[allow(unused)]
     pub fn factory_get(&self, id: u32) -> Option<&RegistryFactory> {
         self.factories.get(&id)
     }

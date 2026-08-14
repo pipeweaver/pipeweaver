@@ -399,7 +399,7 @@ impl PrimaryWorker {
 
         debug!(
             "Creating Temporary Save File: {:?}",
-            &tmp_file_name
+            tmp_file_name
                 .file_name()
                 .and_then(|s| s.to_str())
                 .unwrap_or("UNKNOWN")

@@ -4,7 +4,7 @@
 
 use super::{FilterStore, Store};
 use crate::{FilterProperty, FilterValue, LinkType};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use log::debug;
 use ulid::Ulid;
 
@@ -22,7 +22,7 @@ impl Store {
     }
 
     pub fn managed_filter_add(&mut self, filter: FilterStore) {
-        debug!("[{}] Filter Added to Store", &filter.id);
+        debug!("[{}] Filter Added to Store", filter.id);
         self.managed_filters.insert(filter.id, filter);
     }
 

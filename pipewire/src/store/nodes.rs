@@ -5,11 +5,11 @@
 
 use super::{NodeStore, NodeStoreState, PortLocation, Store};
 use crate::PipewireReceiver;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use log::{debug, error};
 use pipewire::spa::param::ParamType;
 use pipewire::spa::pod::serialize::PodSerializer;
-use pipewire::spa::pod::{object, Pod, Property, Value, ValueArray};
+use pipewire::spa::pod::{Pod, Property, Value, ValueArray, object};
 use pipewire::spa::sys::{SPA_PROP_channelVolumes, SPA_PROP_mute};
 use pipewire::spa::utils;
 use std::io::Cursor;
@@ -26,7 +26,7 @@ impl Store {
     }
 
     pub fn managed_node_add(&mut self, node: NodeStore) {
-        debug!("[{}] Device Added to Store, waiting for data", &node.id);
+        debug!("[{}] Device Added to Store, waiting for data", node.id);
         self.managed_nodes.insert(node.id, node);
     }
 
@@ -133,7 +133,7 @@ impl Store {
             )
             && let Some(sender) = node.ready_sender.take()
         {
-            debug!("[{}] Device Ready, sending callback", &id);
+            debug!("[{}] Device Ready, sending callback", id);
             if let Some(sender) = sender {
                 let _ = sender.send(());
             }

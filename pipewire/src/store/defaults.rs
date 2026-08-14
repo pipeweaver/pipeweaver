@@ -5,7 +5,7 @@
 use super::Store;
 use crate::default_device::{DefaultDefinition, DefaultDevice};
 use crate::{MediaClass, NodeTarget, PipewireReceiver};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use log::debug;
 use pipewire::keys::MEDIA_CLASS;
 

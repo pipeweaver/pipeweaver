@@ -5,7 +5,7 @@
 
 use crate::manager::FilterData;
 use crate::{Direction, LinkType};
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use enum_map::{Enum, EnumMap};
 use oneshot::Sender;
 use parking_lot::RwLock;

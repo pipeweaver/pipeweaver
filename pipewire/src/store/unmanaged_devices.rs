@@ -9,7 +9,7 @@ use crate::registry::device::{ActiveRoute, RegistryDevice};
 use crate::registry::device_node::RegistryDeviceNode;
 use crate::registry::port::RegistryPort;
 use crate::{DeviceNode, Direction, MediaClass, NodePort, PipewireReceiver};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use enum_map::EnumMap;
 use log::{debug, warn};
 use strum::IntoEnumIterator;
@@ -392,7 +392,7 @@ impl Store {
 
         let mut ports: EnumMap<Direction, Vec<NodePort>> = Default::default();
         for direction in Direction::iter() {
-            for (_, port) in node.ports[direction].iter() {
+            for port in node.ports[direction].values() {
                 // Don't send Monitor ports
                 if !port.is_monitor {
                     ports[direction].push(NodePort {
