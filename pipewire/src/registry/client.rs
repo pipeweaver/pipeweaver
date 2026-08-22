@@ -6,21 +6,21 @@ use pipewire::keys::{
     ACCESS, APP_NAME, APP_PROCESS_BINARY, MODULE_ID, OBJECT_SERIAL, PROTOCOL, SEC_GID, SEC_PID,
     SEC_UID,
 };
-use pipewire::registry::{GlobalObject, Registry};
+use pipewire::registry::{GlobalObject, RegistryRc};
 use pipewire::spa::utils::dict::DictRef;
 use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use std::rc::Weak;
 
 pub fn handle_client(
     id: u32,
     global: &GlobalObject<&DictRef>,
-    registry: Rc<RefCell<Registry>>,
+    registry: RegistryRc,
     store: &mut Store,
     listener_store: Weak<RefCell<Store>>,
 ) {
     if let Some(props) = global.props {
         if let Ok(mut client) = RegistryClient::try_from(props) {
-            let proxy: Option<Client> = registry.borrow().bind(global).ok();
+            let proxy: Option<Client> = registry.bind(global).ok();
             if let Some(client_proxy) = proxy {
                 let info_local = listener_store.clone();
                 let listener = client_proxy

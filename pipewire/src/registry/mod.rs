@@ -18,10 +18,9 @@ use crate::registry::port::handle_port;
 use crate::store::Store;
 
 use log::debug;
-use pipewire::core::Core;
+use pipewire::core::CoreRc;
 
-use pipewire::registry::Listener;
-use pipewire::registry::Registry;
+use pipewire::registry::{Listener, RegistryRc};
 
 use pipewire::keys::{MEDIA_CLASS, OBJECT_SERIAL};
 use pipewire::types::ObjectType;
@@ -29,9 +28,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 pub(crate) struct PipewireRegistry {
-    registry: Rc<RefCell<Registry>>,
+    registry: RegistryRc,
     store: Rc<RefCell<Store>>,
-    core: Rc<Core>,
+    core: CoreRc,
 
     // These two need to exist, if the Listeners are dropped they simply stop working.
     registry_listener: Option<Listener>,
@@ -39,9 +38,9 @@ pub(crate) struct PipewireRegistry {
 }
 
 impl PipewireRegistry {
-    pub fn new(registry: Registry, store: Rc<RefCell<Store>>, core: Rc<Core>) -> Self {
+    pub fn new(registry: RegistryRc, store: Rc<RefCell<Store>>, core: CoreRc) -> Self {
         let mut registry = Self {
-            registry: Rc::new(RefCell::new(registry)),
+            registry,
             store,
             core,
             registry_listener: None,
@@ -61,7 +60,6 @@ impl PipewireRegistry {
         let core = self.core.clone();
 
         self.registry
-            .borrow()
             .add_listener_local()
             .global(move |global| {
                 let id = global.id;
@@ -135,7 +133,6 @@ impl PipewireRegistry {
     pub fn registry_removal_listener(&self) -> Listener {
         let store = Rc::downgrade(&self.store);
         self.registry
-            .borrow()
             .add_listener_local()
             .global_remove(move |id| {
                 if let Some(store) = store.upgrade() {
@@ -146,7 +143,7 @@ impl PipewireRegistry {
     }
 
     pub fn destroy_global(&self, id: u32) {
-        self.registry.borrow().destroy_global(id);
+        self.registry.destroy_global(id);
     }
 }
 

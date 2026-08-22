@@ -10,8 +10,8 @@ use crate::{MediaClass, PWReceiver};
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use log::{debug, error, info};
-use pipewire::core::{Core, Listener};
-use pipewire::filter::{Filter, FilterFlags, FilterState, PortFlags};
+use pipewire::core::{CoreRc, Listener};
+use pipewire::filter::{FilterFlags, FilterRc, FilterState, PortFlags};
 use pipewire::keys::{
     APP_ICON_NAME, APP_ID, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME,
     FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT,
@@ -23,7 +23,7 @@ use pipewire::link::{Link, LinkChangeMask, LinkState};
 use pipewire::node::NodeChangeMask;
 use pipewire::properties::properties;
 use pipewire::proxy::ProxyT;
-use pipewire::registry::Registry;
+use pipewire::registry::RegistryRc;
 use pipewire::spa::pod::builder::Builder;
 use pipewire::spa::pod::deserialize::PodDeserializer;
 use pipewire::spa::pod::{Pod, Property, Value, ValueArray, object};
@@ -41,8 +41,8 @@ use pipewire::spa::param::ParamType;
 use pipewire::spa::pod::serialize::PodSerializer;
 use pipewire::spa::utils;
 
-use pipewire::main_loop::MainLoop;
-use pipewire::{context, main_loop};
+use pipewire::context;
+use pipewire::main_loop::MainLoopRc;
 use std::cell::{Cell, RefCell};
 use std::io::Cursor;
 use std::rc::Rc;
@@ -57,24 +57,24 @@ pub(crate) struct FilterData {
 }
 
 struct PipewireManager {
-    core: Core,
+    core: CoreRc,
     registry: PipewireRegistry,
 
     store: Rc<RefCell<Store>>,
-    mainloop: Rc<MainLoop>,
+    mainloop: MainLoopRc,
 
     _core_listener: Option<Listener>,
 }
 
 impl PipewireManager {
     pub fn new(
-        core: Core,
-        mainloop: Rc<MainLoop>,
-        registry: Registry,
+        core: CoreRc,
+        mainloop: MainLoopRc,
+        registry: RegistryRc,
         callback_tx: mpsc::Sender<PipewireReceiver>,
     ) -> Self {
         let store = Rc::new(RefCell::new(Store::new(callback_tx.clone())));
-        let registry = PipewireRegistry::new(registry, store.clone(), Rc::new(core.clone()));
+        let registry = PipewireRegistry::new(registry, store.clone(), core.clone());
 
         Self {
             core,
@@ -99,7 +99,7 @@ impl PipewireManager {
         };
 
         let done_store = Rc::downgrade(&store);
-        let done_mainloop = Rc::downgrade(&mainloop);
+        let done_mainloop = mainloop.downgrade();
 
         let core_listener = core
             .add_listener_local()
@@ -453,7 +453,7 @@ impl PipewireManager {
             "[{}] Attempting to Create Filter '{}'",
             props.filter_id, props.filter_name
         );
-        let filter = Filter::new(&self.core, &props.filter_name, properties)
+        let filter = FilterRc::new(self.core.clone(), &props.filter_name, properties)
             .map_err(|e| anyhow!("Unable to Create Filter: {}", e))?;
         let mut params = [];
 
@@ -1004,29 +1004,26 @@ impl Drop for PipewireManager {
 
 pub fn run_pw_main_loop(
     pw_rx: PWReceiver,
-    start_tx: oneshot::Sender<anyhow::Result<()>>,
+    start_tx: oneshot::Sender<Result<()>>,
     callback_tx: mpsc::Sender<PipewireReceiver>,
 ) {
     debug!("Initialising Pipewire..");
 
-    let Ok(mainloop) = main_loop::MainLoop::new(None) else {
+    let Ok(mainloop) = MainLoopRc::new(None) else {
         start_tx
             .send(Err(anyhow!("Unable to create MainLoop")))
             .expect("OneShot Channel is broken!");
         return;
     };
-    let Ok(context) = context::Context::new(&mainloop) else {
+    let Ok(context) = context::ContextRc::new(&mainloop, None) else {
         start_tx
             .send(Err(anyhow!("Unable to create Context")))
             .expect("OneShot Channel is broken!");
         return;
     };
 
-    // Wrap the mainloop so we shuffle it around
-    let mainloop = Rc::new(mainloop);
-
     // Now we create a core, and flag it as a manager
-    let Ok(core) = context.connect(Some(properties!(
+    let Ok(core) = context.connect_rc(Some(properties!(
         *MEDIA_CATEGORY => "Manager",
     ))) else {
         start_tx
@@ -1063,7 +1060,7 @@ pub fn run_pw_main_loop(
         })
         .register();
 
-    let Ok(registry) = core.get_registry() else {
+    let Ok(registry) = core.get_registry_rc() else {
         start_tx
             .send(Err(anyhow!("Unable to Fetch Registry from Core")))
             .expect("OneShot Channel is broken!");

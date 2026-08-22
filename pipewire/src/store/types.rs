@@ -9,10 +9,10 @@ use anyhow::{Result, bail};
 use enum_map::{Enum, EnumMap};
 use oneshot::Sender;
 use parking_lot::RwLock;
-use pipewire::filter::{Filter, FilterListener, FilterPort};
+use pipewire::filter::{FilterListener, FilterPort, FilterRc};
 use pipewire::link::{Link, LinkListener};
 use pipewire::node::{Node, NodeListener, NodeState};
-use pipewire::properties::Properties;
+use pipewire::properties::PropertiesBox;
 use pipewire::proxy::ProxyListener;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -34,7 +34,7 @@ pub(crate) struct NodeStore {
     pub(crate) object_serial: Option<u32>,
 
     pub(crate) id: Ulid,
-    pub(crate) props: Properties,
+    pub(crate) props: PropertiesBox,
 
     pub(crate) proxy: Node,
     pub(crate) _proxy_listener: ProxyListener,
@@ -88,7 +88,7 @@ pub struct FilterStore {
 
     /// These two fields need to exist purely to prevent the filter and the listener from
     /// being dropped, they're never directly accessed, they're just a store.
-    pub(crate) _filter: Filter,
+    pub(crate) _filter: FilterRc,
 
     /// The 'Ready Sender' is called once the filter is setup and ready-to-go
     pub(crate) ready_sender: Option<Option<Sender<()>>>,

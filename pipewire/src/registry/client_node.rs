@@ -6,7 +6,7 @@ use enum_map::EnumMap;
 use pipewire::keys::{CLIENT_ID, MEDIA_CLASS, MEDIA_NAME, NODE_NAME, OBJECT_SERIAL};
 use pipewire::metadata::Metadata;
 use pipewire::node::{Node, NodeChangeMask, NodeListener};
-use pipewire::registry::{GlobalObject, Registry};
+use pipewire::registry::{GlobalObject, RegistryRc};
 use pipewire::spa::param::ParamType;
 use pipewire::spa::pod::Value::Bool;
 use pipewire::spa::pod::deserialize::PodDeserializer;
@@ -16,12 +16,12 @@ use pipewire::spa::utils::dict::DictRef;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::rc::{Rc, Weak};
+use std::rc::Weak;
 
 pub fn handle_client_node(
     id: u32,
     global: &GlobalObject<&DictRef>,
-    registry: Rc<RefCell<Registry>>,
+    registry: RegistryRc,
     store: &mut Store,
     listener_store: Weak<RefCell<Store>>,
 ) {
@@ -29,7 +29,7 @@ pub fn handle_client_node(
         && let Ok(mut node) = RegistryClientNode::try_from(props)
         && let Some(client) = store.unmanaged_client_get(node.parent_id)
     {
-        let bound: Option<Node> = registry.borrow().bind(global).ok();
+        let bound: Option<Node> = registry.bind(global).ok();
         if let Some(proxy) = bound {
             let param_local = listener_store.clone();
             let info_local = listener_store.clone();

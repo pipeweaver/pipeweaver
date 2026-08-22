@@ -4,12 +4,12 @@ use crate::store::Store;
 use anyhow::{anyhow, bail};
 use enum_map::EnumMap;
 use log::debug;
-use pipewire::core::Core;
+use pipewire::core::CoreRc;
 use pipewire::keys::{
     DEVICE_ID, MEDIA_CLASS, NODE_DESCRIPTION, NODE_NAME, NODE_NICK, OBJECT_PATH, OBJECT_SERIAL,
 };
 use pipewire::node::{Node, NodeListener};
-use pipewire::registry::{GlobalObject, Registry};
+use pipewire::registry::{GlobalObject, RegistryRc};
 use pipewire::spa::param::ParamType;
 use pipewire::spa::pod::serialize::PodSerializer;
 use pipewire::spa::pod::{Pod, Property, Value, ValueArray, object};
@@ -20,13 +20,13 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::Cursor;
-use std::rc::{Rc, Weak};
+use std::rc::Weak;
 
 pub fn handle_device_node(
     id: u32,
-    core: Rc<Core>,
+    core: CoreRc,
     global: &GlobalObject<&DictRef>,
-    registry: Rc<RefCell<Registry>>,
+    registry: RegistryRc,
     store: &mut Store,
     listener_store: Weak<RefCell<Store>>,
 ) {
@@ -39,7 +39,7 @@ pub fn handle_device_node(
             device.add_node(id);
         }
 
-        let bound: Option<Node> = registry.borrow().bind(global).ok();
+        let bound: Option<Node> = registry.bind(global).ok();
         let info_local = listener_store.clone();
         let core_local = core.clone();
         if let Some(proxy) = bound {

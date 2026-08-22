@@ -3,7 +3,7 @@ use anyhow::{Result, bail};
 use crate::store::Store;
 use pipewire::device::{Device, DeviceChangeMask, DeviceListener};
 use pipewire::keys::{DEVICE_DESCRIPTION, DEVICE_NAME, DEVICE_NICK, OBJECT_SERIAL};
-use pipewire::registry::{GlobalObject, Registry};
+use pipewire::registry::{GlobalObject, RegistryRc};
 use pipewire::spa::param::ParamType;
 use pipewire::spa::pod::deserialize::PodDeserializer;
 use pipewire::spa::pod::serialize::PodSerializer;
@@ -17,7 +17,7 @@ use pipewire::spa::utils::dict::DictRef;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Cursor;
-use std::rc::{Rc, Weak};
+use std::rc::Weak;
 
 #[allow(unused)]
 pub(crate) struct RegistryDevice {
@@ -132,13 +132,13 @@ impl RegistryDevice {
 pub fn handle_device(
     id: u32,
     global: &GlobalObject<&DictRef>,
-    registry: Rc<RefCell<Registry>>,
+    registry: RegistryRc,
     store: &mut Store,
     listener_store: Weak<RefCell<Store>>,
 ) {
     if let Some(props) = global.props {
         let mut device = RegistryDevice::from(props);
-        let bound: Option<Device> = registry.borrow().bind(global).ok();
+        let bound: Option<Device> = registry.bind(global).ok();
 
         if let Some(proxy) = bound {
             let info_local = listener_store.clone();
