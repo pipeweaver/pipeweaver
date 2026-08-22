@@ -123,28 +123,13 @@ impl PipewireManager {
                     return;
                 }
 
-                // Pending Filters
-                if let Some(id) = store_ref.pending_filter_syncs.remove(&seq.raw()) {
-                    if let Some(mainloop) = done_mainloop.upgrade() {
-                        let timer_store = Rc::downgrade(&store_rc);
-                        let timer = mainloop.loop_().add_timer(move |_| {
-                            if let Some(store) = timer_store.upgrade() {
-                                let mut store = store.borrow_mut();
-                                store.resolve_pending_filter_sync(id);
-                            }
-                        });
-
-                        timer.update_timer(Some(Duration::from_millis(50)), None);
-                        std::mem::forget(timer);
-                    }
-
-                    return;
-                }
-
                 // --- Device sync ---
                 if let Some(node_id) = store_ref.pending_device_syncs.remove(&seq.raw()) {
                     drop(store_ref);
 
+                    // While in theory hitting this point, we SHOULD be completely ready and settled.
+                    // In practice if we start linking up too quickly, we can experience some badness
+                    // on the link. So provide a moment to settle.
                     if let Some(mainloop) = done_mainloop.upgrade() {
                         let timer_store = Rc::downgrade(&store_rc);
                         let timer = mainloop.loop_().add_timer(move |_| {
@@ -438,6 +423,8 @@ impl PipewireManager {
             *NODE_NAME => &*props.filter_name,
             *NODE_NICK => &*props.filter_nick,
             *NODE_DESCRIPTION => &*props.filter_description,
+
+            // READ NOTE IN state_changed BEFORE CHANGING THIS VALUE!
             *NODE_ALWAYS_PROCESS => "true",
 
             *NODE_GROUP => "pipeweaver-nodes",
@@ -525,15 +512,20 @@ impl PipewireManager {
         let listener_id = props.filter_id;
         let listener = filter
             .add_local_listener_with_user_data(data_inner)
-            .state_changed(move |filter, _data, old, _new| {
-                if old == FilterState::Connecting {
-                    debug!("[{}] Filter Connected", listener_id);
+            .state_changed(move |filter, _data, _old, new| {
+                // Note, this ONLY works because NODE_ALWAYS_PROCESS is true. There's no way via
+                // the filter API to know when the ports have appeared, meaning it would have to
+                // be tracked in the global registry handler, however, because we're always process
+                // we enter a streaming state once all our ports arrive, meaning that we don't have
+                // to track them directly.
+                //
+                // TODO: We should probably track the ports in the global registry handler anyway.
+                if new == FilterState::Streaming {
+                    debug!("[{}] Filter Connected and Ready", listener_id);
                     if let Some(listener_state_store) = listener_state_store.upgrade() {
                         let mut store = listener_state_store.borrow_mut();
                         store.managed_filter_set_pw_id(listener_id, filter.node_id());
-
-                        let seq = listener_core.sync(0).expect("core sync failed");
-                        store.add_pending_filter(seq.raw(), listener_id)
+                        store.managed_filter_send(listener_id);
                     }
                 }
             })

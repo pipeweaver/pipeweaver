@@ -9,21 +9,16 @@ use log::debug;
 use ulid::Ulid;
 
 impl Store {
-    // ----- MANAGED FILTERS -----
-    pub fn add_pending_filter(&mut self, seq: i32, id: Ulid) {
-        self.pending_filter_syncs.insert(seq, id);
+    pub fn managed_filter_add(&mut self, filter: ManagedFilter) {
+        debug!("[{}] Filter Added to Store", filter.id);
+        self.managed_filters.insert(filter.id, filter);
     }
 
-    pub fn resolve_pending_filter_sync(&mut self, id: Ulid) {
+    pub fn managed_filter_send(&mut self, id: Ulid) {
         let filter = self.managed_filters.get_mut(&id).expect("Broke");
         if let Some(Some(sender)) = filter.ready_sender.take() {
             let _ = sender.send(());
         }
-    }
-
-    pub fn managed_filter_add(&mut self, filter: ManagedFilter) {
-        debug!("[{}] Filter Added to Store", filter.id);
-        self.managed_filters.insert(filter.id, filter);
     }
 
     pub fn managed_filter_get(&self, id: Ulid) -> Option<&ManagedFilter> {

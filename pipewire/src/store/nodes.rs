@@ -66,7 +66,6 @@ impl Store {
                 self.send_default_source();
             }
         }
-
         self.managed_node_check_ready(id);
     }
 
