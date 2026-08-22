@@ -30,8 +30,8 @@ mod unmanaged;
 pub(crate) mod utils;
 
 pub(crate) use types::TargetType;
-pub use types::{FilterStore, LinkStore, LinkStoreMap, NodeStoreState, PendingLinkSync};
-pub(crate) use types::{NodeStore, PortLocation};
+pub use types::{ManagedFilter, ManagedLink, ManagedLinkMap, NodeStoreState, PendingLinkSync};
+pub(crate) use types::{ManagedNode, PortLocation};
 
 use crate::PipewireReceiver;
 use crate::default_device::DefaultDevice;
@@ -60,9 +60,9 @@ pub(crate) struct Store {
     default_source: DefaultDevice, // (eg pipeweaver_chat_mic)
 
     // These are nodes, filters and links created by us
-    managed_nodes: HashMap<Ulid, NodeStore>,
-    managed_filters: HashMap<Ulid, FilterStore>,
-    managed_links: HashMap<Ulid, LinkStore>,
+    managed_nodes: HashMap<Ulid, ManagedNode>,
+    managed_filters: HashMap<Ulid, ManagedFilter>,
+    managed_links: HashMap<Ulid, ManagedLink>,
 
     // These are devices and device nodes not created by us
     pub(crate) unmanaged_devices: HashMap<u32, RegistryDevice>,

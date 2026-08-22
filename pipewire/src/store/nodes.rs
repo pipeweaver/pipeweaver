@@ -3,7 +3,7 @@
 //! assign an id and ports, state tracking, and volume/mute control for both
 //! our own nodes and unmanaged client (application) nodes.
 
-use super::{NodeStore, NodeStoreState, PortLocation, Store};
+use super::{ManagedNode, NodeStoreState, PortLocation, Store};
 use crate::PipewireReceiver;
 use anyhow::{Result, anyhow};
 use log::{debug, error};
@@ -25,12 +25,12 @@ impl Store {
             .any(|node| node.pw_id == Some(id))
     }
 
-    pub fn managed_node_add(&mut self, node: NodeStore) {
+    pub fn managed_node_add(&mut self, node: ManagedNode) {
         debug!("[{}] Device Added to Store, waiting for data", node.id);
         self.managed_nodes.insert(node.id, node);
     }
 
-    pub fn managed_node_get(&self, id: Ulid) -> Option<&NodeStore> {
+    pub fn managed_node_get(&self, id: Ulid) -> Option<&ManagedNode> {
         self.managed_nodes.get(&id)
     }
 

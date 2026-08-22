@@ -29,7 +29,7 @@ pub(crate) enum TargetType {
     Serial(Option<u32>),
 }
 
-pub(crate) struct NodeStore {
+pub(crate) struct ManagedNode {
     pub(crate) pw_id: Option<u32>,
     pub(crate) object_serial: Option<u32>,
 
@@ -70,7 +70,7 @@ impl From<NodeState<'_>> for NodeStoreState {
     }
 }
 
-pub struct FilterStore {
+pub struct ManagedFilter {
     /// The Pipewire Node ID for this Filter
     pub(crate) pw_id: Option<u32>,
 
@@ -97,16 +97,16 @@ pub struct FilterStore {
     pub data: Rc<RwLock<FilterData>>,
 }
 
-pub struct LinkStore {
+pub struct ManagedLink {
     pub(crate) source: LinkType,
     pub(crate) destination: LinkType,
 
-    pub(crate) links: EnumMap<PortLocation, Option<LinkStoreMap>>,
+    pub(crate) links: EnumMap<PortLocation, Option<ManagedLinkMap>>,
 
     pub(crate) ready_sender: Option<Sender<()>>,
 }
 
-pub struct LinkStoreMap {
+pub struct ManagedLinkMap {
     pub(crate) pw_id: Option<u32>,
 
     /// An internal ID so we can find this link
@@ -152,6 +152,6 @@ impl FromStr for PortLocation {
 
 pub struct PendingLinkSync {
     pub parent_id: Ulid,
-    pub group: LinkStore,
+    pub group: ManagedLink,
     pub bound_ids: HashMap<Ulid, u32>, // link_id -> pw_id collected during sync wait
 }

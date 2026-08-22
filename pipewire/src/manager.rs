@@ -1,6 +1,6 @@
 use crate::registry::PipewireRegistry;
 use crate::store::{
-    FilterStore, LinkStore, LinkStoreMap, NodeStore, NodeStoreState, PortLocation, Store,
+    ManagedFilter, ManagedLink, ManagedLinkMap, ManagedNode, NodeStoreState, PortLocation, Store,
 };
 use crate::{
     Direction, FilterHandler, FilterProperties, FilterProperty, FilterValue, LinkType,
@@ -404,7 +404,7 @@ impl PipewireManager {
             .register();
         proxy.subscribe_params(&[ParamType::Props]);
 
-        let store = NodeStore {
+        let store = ManagedNode {
             pw_id: None,
             object_serial: None,
             id: properties.node_id,
@@ -595,7 +595,7 @@ impl PipewireManager {
             .connect(FilterFlags::RT_PROCESS, &mut params)
             .map_err(|e| anyhow!("Unable to Connect Filter: {}", e))?;
 
-        let store = FilterStore {
+        let store = ManagedFilter {
             pw_id: None,
             data,
 
@@ -666,10 +666,10 @@ impl PipewireManager {
         source: LinkType,
         dest: LinkType,
         sender: Sender<()>,
-    ) -> Result<LinkStore> {
+    ) -> Result<ManagedLink> {
         // First, check if a managed link already exists and remove it
         self.store.borrow_mut().managed_link_remove(&source, &dest);
-        let mut port_map: EnumMap<PortLocation, Option<LinkStoreMap>> = Default::default();
+        let mut port_map: EnumMap<PortLocation, Option<ManagedLinkMap>> = Default::default();
 
         // Collect all the port pairs we're going to link
         let mut port_pairs = Vec::new();
@@ -715,7 +715,7 @@ impl PipewireManager {
             let (tgt_id, tgt_index) = self.get_port(&dest, Direction::In, port)?;
 
             // Create the LinkStore Mapping for this link
-            let store = LinkStoreMap {
+            let store = ManagedLinkMap {
                 pw_id: None,
                 internal_id: link_id,
 
@@ -732,7 +732,7 @@ impl PipewireManager {
         }
 
         // Ok, we're done here, create the main store object
-        let group = LinkStore {
+        let group = ManagedLink {
             source: source.clone(),
             destination: dest.clone(),
             links: port_map,
@@ -831,7 +831,7 @@ impl PipewireManager {
         }
     }
 
-    fn create_port_link(&self, parent_id: Ulid, map: &mut LinkStoreMap) -> Result<()> {
+    fn create_port_link(&self, parent_id: Ulid, map: &mut ManagedLinkMap) -> Result<()> {
         let id = map.internal_id;
         let (src_node, src_port) = map.source_port;
         let (dest_node, dest_port) = map.destination_port;

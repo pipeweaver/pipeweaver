@@ -2,7 +2,7 @@
 //! implemented as pipewire filters rather than plain nodes), and access to
 //! their runtime parameters.
 
-use super::{FilterStore, Store};
+use super::{ManagedFilter, Store};
 use crate::{FilterProperty, FilterValue, LinkType};
 use anyhow::{Result, anyhow};
 use log::debug;
@@ -21,12 +21,12 @@ impl Store {
         }
     }
 
-    pub fn managed_filter_add(&mut self, filter: FilterStore) {
+    pub fn managed_filter_add(&mut self, filter: ManagedFilter) {
         debug!("[{}] Filter Added to Store", filter.id);
         self.managed_filters.insert(filter.id, filter);
     }
 
-    pub fn managed_filter_get(&self, id: Ulid) -> Option<&FilterStore> {
+    pub fn managed_filter_get(&self, id: Ulid) -> Option<&ManagedFilter> {
         self.managed_filters.get(&id)
     }
 

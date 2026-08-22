@@ -4,7 +4,7 @@
 //! the managed link ready, so most of this module is bookkeeping around
 //! `pending_link_syncs` until that's true.
 
-use super::{LinkStore, LinkStoreMap, PendingLinkSync, PortLocation, Store};
+use super::{ManagedLink, ManagedLinkMap, PendingLinkSync, PortLocation, Store};
 use crate::{LinkType, PipewireReceiver};
 use log::{debug, error, warn};
 use std::collections::HashMap;
@@ -27,11 +27,11 @@ impl Store {
             .copied()
     }
 
-    pub fn managed_link_add(&mut self, id: Ulid, group: LinkStore) {
+    pub fn managed_link_add(&mut self, id: Ulid, group: ManagedLink) {
         self.managed_links.insert(id, group);
     }
 
-    pub fn add_pending_link(&mut self, parent_id: Ulid, group: LinkStore) {
+    pub fn add_pending_link(&mut self, parent_id: Ulid, group: ManagedLink) {
         self.pending_link_syncs.push(PendingLinkSync {
             parent_id,
             group,
@@ -39,7 +39,7 @@ impl Store {
         });
     }
 
-    pub fn get_next_pending_link(&mut self, seq: i32) -> Option<&mut LinkStoreMap> {
+    pub fn get_next_pending_link(&mut self, seq: i32) -> Option<&mut ManagedLinkMap> {
         let idx = self.get_pending_link_index_by_seq(seq)?;
 
         // Scope to limit the mutable borrow
