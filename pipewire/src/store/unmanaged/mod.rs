@@ -1,9 +1,9 @@
-//! Links pipewire told us about that aren't between two of our own managed
-//! targets, and that aren't a leftover of a link we're still syncing.
-
-use super::Store;
 use crate::registry::link::RegistryLink;
+use crate::store::Store;
 use std::collections::HashMap;
+
+pub(super) mod client;
+pub(super) mod device;
 
 impl Store {
     // ----- UNMANAGED LINKS -----

@@ -10,9 +10,7 @@
 //! - [`nodes`] - lifecycle of nodes we manage (create -> ready -> remove), volume/mute
 //! - [`filters`] - lifecycle of filters we manage
 //! - [`links`] - lifecycle of links we manage, including the pending-sync dance
-//! - [`unmanaged_devices`] - devices/device-nodes pipewire owns
-//! - [`unmanaged_clients`] - clients/client-nodes pipewire owns
-//! - [`unmanaged_links`] - links between objects we don't own
+//! - [`unmanaged`] - lifecycle of devices/clients/links we don't manage
 //! - [`remove`] - the generic "something with this id went away" dispatcher
 //! - [`utils`] - small helpers shared by more than one submodule
 //!
@@ -27,9 +25,7 @@ mod links;
 mod nodes;
 mod remove;
 mod types;
-mod unmanaged_clients;
-mod unmanaged_devices;
-mod unmanaged_links;
+mod unmanaged;
 mod utils;
 
 pub(crate) use types::TargetType;
