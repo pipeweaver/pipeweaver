@@ -1,4 +1,5 @@
 use crate::registry::client_node::RegistryClientNode;
+use crate::store::utils::get_media_class;
 use crate::store::{Store, TargetType};
 use crate::{ApplicationNode, Direction, MediaClass, NodeTarget, PipewireReceiver};
 use log::{debug, error, warn};
@@ -231,7 +232,7 @@ impl Store {
             }
 
             // Return the Specific MediaClass based on Channel Count
-            return self.get_media_class(in_count, out_count);
+            return get_media_class(in_count, out_count);
         }
 
         None

@@ -1,6 +1,7 @@
-use crate::Direction;
 use crate::registry::port::RegistryPort;
 use crate::store::Store;
+use crate::store::utils::get_media_class;
+use crate::{DeviceNode, Direction, MediaClass, NodePort};
 use anyhow::{anyhow, bail};
 use enum_map::EnumMap;
 use log::debug;
@@ -21,6 +22,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::Cursor;
 use std::rc::Weak;
+use strum::IntoEnumIterator;
 
 pub fn handle_device_node(
     id: u32,
@@ -176,6 +178,92 @@ impl RegistryDeviceNode {
         let path = self.object_path.as_deref()?;
         let mut parts = path.split(':');
         parts.nth(3)?.parse().ok()
+    }
+
+    pub(crate) fn ports_desynced(&self) -> bool {
+        for direction in Direction::iter() {
+            let Some(expected) = self.port_count[direction] else {
+                return true;
+            };
+            if self.ports[direction].len() as u32 != expected {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub(crate) fn usable_media_class(&self) -> Option<MediaClass> {
+        // If we don't have a name or description, we can't use this node
+        if self.name.is_none() && self.description.is_none() {
+            return None;
+        }
+
+        let mut in_count = 0;
+        let mut out_count = 0;
+
+        for (direction, ports) in &self.ports {
+            let non_monitor: Vec<_> = ports.values().filter(|p| !p.is_monitor).collect();
+            let count = if non_monitor.len() > 2 {
+                // We should consider things like 5.1 devices valid, so long as there's a FL / FR
+                let has_left = non_monitor
+                    .iter()
+                    .any(|p| p.channel == "FL" || p.channel == "AUX0");
+                let has_right = non_monitor
+                    .iter()
+                    .any(|p| p.channel == "FR" || p.channel == "AUX1");
+
+                // If we have them, force this count to 2, which will pass classify_media_class
+                if has_left && has_right {
+                    2
+                } else {
+                    non_monitor.len()
+                }
+            } else {
+                non_monitor.len()
+            };
+
+            match direction {
+                Direction::In => in_count += count,
+                Direction::Out => out_count += count,
+            }
+        }
+
+        get_media_class(in_count, out_count)
+    }
+
+    /// Build the public `DeviceNode` representation of this node, ready to send upstream.
+    pub(crate) fn to_device_node(
+        &self,
+        id: u32,
+        node_class: MediaClass,
+        is_usable: bool,
+    ) -> DeviceNode {
+        let mut ports: EnumMap<Direction, Vec<NodePort>> = Default::default();
+        for direction in Direction::iter() {
+            for port in self.ports[direction].values() {
+                // Don't send Monitor ports
+                if !port.is_monitor {
+                    ports[direction].push(NodePort {
+                        name: port.name.clone(),
+                        channel: port.channel.clone(),
+                    });
+                }
+            }
+        }
+
+        DeviceNode {
+            node_id: id,
+            node_class,
+            is_usable,
+            name: self.name.clone(),
+            nickname: self.nickname.clone(),
+            description: self.description.clone(),
+
+            volume: self.volume,
+            muted: self.muted,
+
+            ports,
+        }
     }
 
     pub fn set_volume(&self, volume: u8) {

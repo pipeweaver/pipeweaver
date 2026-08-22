@@ -26,7 +26,8 @@ mod nodes;
 mod remove;
 mod types;
 mod unmanaged;
-mod utils;
+
+pub(crate) mod utils;
 
 pub(crate) use types::TargetType;
 pub use types::{FilterStore, LinkStore, LinkStoreMap, NodeStoreState, PendingLinkSync};

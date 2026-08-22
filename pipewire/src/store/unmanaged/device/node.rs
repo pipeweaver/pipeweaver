@@ -1,11 +1,9 @@
 use crate::registry::device_node::RegistryDeviceNode;
 use crate::registry::port::RegistryPort;
 use crate::store::Store;
-use crate::{DeviceNode, Direction, MediaClass, NodePort, PipewireReceiver};
+use crate::{Direction, MediaClass, PipewireReceiver};
 use anyhow::{anyhow, bail};
-use enum_map::EnumMap;
 use log::{debug, warn};
-use strum::IntoEnumIterator;
 
 impl Store {
     pub fn unmanaged_device_node_add(&mut self, id: u32, node: RegistryDeviceNode) {
@@ -54,16 +52,6 @@ impl Store {
         self.pending_device_syncs.insert(seq, id);
     }
 
-    // pub fn resolve_pending_device_sync(&mut self, seq: i32) {
-    //     if let Some(id) = self.pending_device_syncs.remove(&seq)
-    //         && let Some(node) = self.unmanaged_device_nodes.get_mut(&id)
-    //     {
-    //         debug!("Device Synced, Checking.. {}", id);
-    //         node.is_synced = true;
-    //         self.unmanaged_node_port_check(id);
-    //     }
-    // }
-
     pub fn unmanaged_node_port_count_update(&mut self, id: u32, in_count: u32, out_count: u32) {
         let node = match self.unmanaged_device_nodes.get_mut(&id) {
             Some(node) => node,
@@ -104,13 +92,12 @@ impl Store {
     }
 
     fn unmanaged_node_reconcile(&mut self, id: u32) {
-        let (is_desynced, was_sent_upstream) = match self.unmanaged_device_nodes.get(&id) {
-            Some(node) => (self.unmanaged_node_is_desynced(id), node.sent_upstream),
-            None => return,
+        let Some(node) = self.unmanaged_device_nodes.get(&id) else {
+            return;
         };
 
-        if is_desynced {
-            if was_sent_upstream {
+        if node.ports_desynced() {
+            if node.sent_upstream {
                 let _ = self.callback_tx.send(PipewireReceiver::DeviceRemoved(id));
 
                 if let Some(node) = self.unmanaged_device_nodes.get_mut(&id) {
@@ -123,24 +110,6 @@ impl Store {
 
         // If we're synced, try progressing state
         self.unmanaged_node_port_check(id);
-    }
-
-    pub fn unmanaged_node_is_desynced(&self, node_id: u32) -> bool {
-        if let Some(node) = self.unmanaged_device_nodes.get(&node_id) {
-            for direction in Direction::iter() {
-                if node.port_count[direction].is_none() {
-                    return true;
-                }
-
-                if Some(node.ports[direction].len() as u32) != node.port_count[direction] {
-                    return true;
-                }
-            }
-        } else {
-            return true;
-        }
-
-        false
     }
 
     pub fn unmanaged_node_set_clock_ready(&mut self, id: u32) -> bool {
@@ -176,26 +145,7 @@ impl Store {
             return;
         }
 
-        // Check if we have port count expectations for both directions
-        let has_port_count_info =
-            node.port_count[Direction::In].is_some() && node.port_count[Direction::Out].is_some();
-
-        if !has_port_count_info {
-            debug!("Node {} missing port count info, waiting...", id);
-            return;
-        }
-
-        // Check if received port count matches expected count
-        let mut is_complete = true;
-        for direction in Direction::iter() {
-            let count = node.ports[direction].len();
-            if node.port_count[direction] != Some(count as u32) {
-                is_complete = false;
-                break;
-            }
-        }
-
-        if !is_complete {
+        if node.ports_desynced() {
             debug!(
                 "Node {} ports incomplete (In: {} of {:?}, Out: {} of {:?}), waiting...",
                 id,
@@ -210,7 +160,7 @@ impl Store {
         // Ports are complete - either send initial or update
         if node.sent_upstream {
             // Already sent, check if usability changed
-            let new_usability = self.is_usable_unmanaged_device_node(id).is_some();
+            let new_usability = node.usable_media_class().is_some();
             debug!(
                 "Node {} port configuration complete, updating usability: {}",
                 id, new_usability
@@ -256,35 +206,8 @@ impl Store {
             return;
         };
 
-        let is_usable = self.is_usable_unmanaged_device_node(id).is_some();
-
-        let mut ports: EnumMap<Direction, Vec<NodePort>> = Default::default();
-        for direction in Direction::iter() {
-            for port in node.ports[direction].values() {
-                // Don't send Monitor ports
-                if !port.is_monitor {
-                    ports[direction].push(NodePort {
-                        name: port.name.clone(),
-                        channel: port.channel.clone(),
-                    });
-                }
-            }
-        }
-
-        // Create the virtual node and send it upstream
-        let device_node = DeviceNode {
-            node_id: id,
-            node_class: media_class,
-            is_usable,
-            name: node.name.clone(),
-            nickname: node.nickname.clone(),
-            description: node.description.clone(),
-
-            volume: node.volume,
-            muted: node.muted,
-
-            ports,
-        };
+        let is_usable = node.usable_media_class().is_some();
+        let device_node = node.to_device_node(id, media_class, is_usable);
 
         // Mark as sent BEFORE sending to prevent race conditions
         if let Some(node) = self.unmanaged_device_nodes.get_mut(&id) {
@@ -294,48 +217,6 @@ impl Store {
         let _ = self
             .callback_tx
             .send(PipewireReceiver::DeviceAdded(device_node));
-    }
-
-    pub fn is_usable_unmanaged_device_node(&self, id: u32) -> Option<MediaClass> {
-        if let Some(node) = self.unmanaged_device_nodes.get(&id) {
-            // If we don't have a name or description, we can't use this node
-            if node.name.is_none() && node.description.is_none() {
-                return None;
-            }
-
-            let mut in_count = 0;
-            let mut out_count = 0;
-
-            for (direction, ports) in &node.ports {
-                let non_monitor: Vec<_> = ports.values().filter(|p| !p.is_monitor).collect();
-                let count = if non_monitor.len() > 2 {
-                    // We should consider things like 5.1 devices valid, so long as there's a FL / FR
-                    let has_left = non_monitor
-                        .iter()
-                        .any(|p| p.channel == "FL" || p.channel == "AUX0");
-                    let has_right = non_monitor
-                        .iter()
-                        .any(|p| p.channel == "FR" || p.channel == "AUX1");
-
-                    // If we have them, force this count to 2, which will pass get_media_class
-                    if has_left && has_right {
-                        2
-                    } else {
-                        non_monitor.len()
-                    }
-                } else {
-                    non_monitor.len()
-                };
-
-                match direction {
-                    Direction::In => in_count += count,
-                    Direction::Out => out_count += count,
-                }
-            }
-
-            return self.get_media_class(in_count, out_count);
-        }
-        None
     }
 
     pub fn unmanaged_node_set_volume(&mut self, id: u32, volume: u8) -> anyhow::Result<()> {
