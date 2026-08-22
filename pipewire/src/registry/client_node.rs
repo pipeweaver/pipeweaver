@@ -1,6 +1,8 @@
+use crate::registry::client::RegistryClient;
 use crate::registry::port::RegistryPort;
 use crate::store::Store;
-use crate::{Direction, NodeTarget};
+use crate::store::utils::get_media_class;
+use crate::{ApplicationNode, Direction, MediaClass, NodeTarget};
 use anyhow::anyhow;
 use enum_map::EnumMap;
 use pipewire::keys::{CLIENT_ID, MEDIA_CLASS, MEDIA_NAME, NODE_NAME, OBJECT_SERIAL};
@@ -219,5 +221,55 @@ impl TryFrom<&DictRef> for RegistryClientNode {
 impl RegistryClientNode {
     pub(crate) fn add_port(&mut self, id: u32, direction: Direction, port: RegistryPort) {
         self.ports[direction].insert(id, port);
+    }
+
+    pub(crate) fn is_usable_unmanaged_client_node(&self, parent: &RegistryClient) -> Option<MediaClass> {
+        if self.node_name.is_empty()
+            || self.application_name.is_empty()
+            || self.is_running.is_none()
+            || self.is_running == Some(false)
+        {
+            return None;
+        }
+
+        // We need the parent to have an application binary
+        parent.application_binary.as_ref()?;
+
+        let mut in_count = 0;
+        let mut out_count = 0;
+        for (direction, ports) in &self.ports {
+            let count = ports.values().filter(|port| !port.is_monitor).count();
+
+            match direction {
+                Direction::In => in_count += count,
+                Direction::Out => out_count += count,
+            }
+        }
+
+        // Return the Specific MediaClass based on Channel Count
+        get_media_class(in_count, out_count)
+    }
+
+    pub(crate) fn to_application_node(
+        &self,
+        id: u32,
+        node_class: MediaClass,
+        parent: &RegistryClient,
+    ) -> ApplicationNode {
+        ApplicationNode {
+            node_id: id,
+            node_class,
+            media_target: self.media_target,
+
+            volume: self.volume,
+            muted: self.is_muted,
+
+            title: self.media_title.clone(),
+
+            name: self.application_name.clone(),
+
+            // We can safely panic! here, is_usable_unamanged_client_node checks this.
+            process_name: parent.application_binary.clone().expect("NO BINARY"),
+        }
     }
 }

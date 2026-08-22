@@ -13,7 +13,6 @@ use pipewire::spa::pod::{Pod, Property, Value, ValueArray, object};
 use pipewire::spa::sys::{SPA_PROP_channelVolumes, SPA_PROP_mute};
 use pipewire::spa::utils;
 use std::io::Cursor;
-use strum::IntoEnumIterator;
 use ulid::Ulid;
 
 impl Store {
@@ -100,16 +99,11 @@ impl Store {
 
     pub fn managed_node_add_port(&mut self, id: Ulid, location: PortLocation, port_id: u32) {
         let node = self.managed_nodes.get_mut(&id).expect("Broke");
-        node.port_map[location] = Some(port_id);
-
-        for location in PortLocation::iter() {
-            if node.port_map[location].is_none() {
-                return;
-            }
-        }
 
         // If we get here, all our ports have been set, trigger the ready event
-        self.managed_node_ports_ready(id);
+        if node.add_port(location, port_id) {
+            self.managed_node_ports_ready(id);
+        }
     }
 
     pub fn managed_node_ports_ready(&mut self, id: Ulid) {
@@ -124,12 +118,7 @@ impl Store {
             .get_mut(&id)
             .expect("Attempted to lookup non-existing node!");
 
-        if node.ports_ready
-            && node.pw_id.is_some()
-            && !matches!(
-                node.node_state,
-                NodeStoreState::Creating | NodeStoreState::Error(_)
-            )
+        if node.is_ready()
             && let Some(sender) = node.ready_sender.take()
         {
             debug!("[{}] Device Ready, sending callback", id);

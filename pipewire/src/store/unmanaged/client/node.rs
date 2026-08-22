@@ -1,7 +1,6 @@
 use crate::registry::client_node::RegistryClientNode;
-use crate::store::utils::get_media_class;
 use crate::store::{Store, TargetType};
-use crate::{ApplicationNode, Direction, MediaClass, NodeTarget, PipewireReceiver};
+use crate::{NodeTarget, PipewireReceiver};
 use log::{debug, error, warn};
 use pipewire::node::NodeState;
 use std::mem::discriminant;
@@ -179,62 +178,15 @@ impl Store {
         }
 
         if let Some(node) = self.unmanaged_client_nodes.get(&id)
-            && let Some(media_type) = self.is_usable_unmanaged_client_node(id)
             && let Some(parent) = self.unmanaged_clients.get(&node.parent_id)
+            && let Some(media_type) = node.is_usable_unmanaged_client_node(parent)
             && !self.usable_client_nodes.contains(&id)
         {
             self.usable_client_nodes.push(id);
-            let node = ApplicationNode {
-                node_id: id,
-                node_class: media_type,
-                media_target: node.media_target,
-
-                volume: node.volume,
-                muted: node.is_muted,
-
-                title: node.media_title.clone(),
-
-                name: node.application_name.clone(),
-
-                // We can safely panic! here, is_usable_unamanged_client_node checks this.
-                process_name: parent.application_binary.clone().expect("NO BINARY"),
-            };
+            let node = node.to_application_node(id, media_type, parent);
 
             let message = PipewireReceiver::ApplicationAdded(node);
             let _ = self.callback_tx.send(message);
         }
-    }
-
-    pub fn is_usable_unmanaged_client_node(&self, id: u32) -> Option<MediaClass> {
-        if let Some(node) = self.unmanaged_client_nodes.get(&id) {
-            if node.node_name.is_empty()
-                || node.application_name.is_empty()
-                || node.is_running.is_none()
-                || node.is_running == Some(false)
-            {
-                return None;
-            }
-
-            // We need the parent to have an application binary
-            if let Some(parent) = self.unmanaged_clients.get(&id) {
-                parent.application_binary.as_ref()?;
-            }
-
-            let mut in_count = 0;
-            let mut out_count = 0;
-            for (direction, ports) in &node.ports {
-                let count = ports.values().filter(|port| !port.is_monitor).count();
-
-                match direction {
-                    Direction::In => in_count += count,
-                    Direction::Out => out_count += count,
-                }
-            }
-
-            // Return the Specific MediaClass based on Channel Count
-            return get_media_class(in_count, out_count);
-        }
-
-        None
     }
 }

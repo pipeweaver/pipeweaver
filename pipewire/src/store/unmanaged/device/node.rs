@@ -2,7 +2,7 @@ use crate::registry::device_node::RegistryDeviceNode;
 use crate::registry::port::RegistryPort;
 use crate::store::Store;
 use crate::{Direction, MediaClass, PipewireReceiver};
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use log::{debug, warn};
 
 impl Store {
@@ -224,23 +224,13 @@ impl Store {
             bail!("Node not found")
         };
 
-        let Some(parent) = self
-            .unmanaged_devices
-            .values()
-            .find(|d| d.nodes.contains(&id))
-        else {
+        let Some(parent) = node.parent_id.and_then(|pid| self.unmanaged_devices.get(&pid)) else {
             // No parent, set directly on the node
             node.set_volume(volume);
             return Ok(());
         };
 
-        let node_port = self
-            .unmanaged_device_nodes
-            .get(&id)
-            .ok_or_else(|| anyhow!("Node not found"))?
-            .profile_port();
-
-        let Some(node_profile_port) = node_port else {
+        let Some(node_profile_port) = node.profile_port() else {
             return Ok(());
         };
 
@@ -259,23 +249,13 @@ impl Store {
             bail!("Node not found")
         };
 
-        let Some(parent) = self
-            .unmanaged_devices
-            .values()
-            .find(|d| d.nodes.contains(&id))
-        else {
+        let Some(parent) = node.parent_id.and_then(|pid| self.unmanaged_devices.get(&pid)) else {
             // No parent, set directly on the node
             node.set_mute(muted);
             return Ok(());
         };
 
-        let node_port = self
-            .unmanaged_device_nodes
-            .get(&id)
-            .ok_or_else(|| anyhow!("Node not found"))?
-            .profile_port();
-
-        let Some(node_profile_port) = node_port else {
+        let Some(node_profile_port) = node.profile_port() else {
             return Ok(());
         };
 

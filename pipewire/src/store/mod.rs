@@ -81,7 +81,6 @@ pub(crate) struct Store {
     // Pending Stuff
     pub(crate) pending_link_syncs: Vec<PendingLinkSync>,
     pub(crate) pending_device_syncs: HashMap<i32, u32>,
-    pub(crate) pending_filter_syncs: HashMap<i32, Ulid>,
 
     callback_tx: mpsc::Sender<PipewireReceiver>,
 }
@@ -111,7 +110,6 @@ impl Store {
 
             pending_link_syncs: vec![],
             pending_device_syncs: HashMap::new(),
-            pending_filter_syncs: HashMap::new(),
 
             usable_client_nodes: vec![],
 

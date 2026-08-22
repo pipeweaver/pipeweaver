@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 use std::str::FromStr;
+use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use ulid::Ulid;
 
@@ -47,6 +48,22 @@ pub(crate) struct ManagedNode {
     pub(crate) node_state: NodeStoreState,
 
     pub(crate) ready_sender: Option<Option<Sender<()>>>,
+}
+
+impl ManagedNode {
+    pub(crate) fn add_port(&mut self, location: PortLocation, port_id: u32) -> bool {
+        self.port_map[location] = Some(port_id);
+        PortLocation::iter().all(|location| self.port_map[location].is_some())
+    }
+
+    pub(crate) fn is_ready(&self) -> bool {
+        self.ports_ready
+            && self.pw_id.is_some()
+            && !matches!(
+                self.node_state,
+                NodeStoreState::Creating | NodeStoreState::Error(_)
+            )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -97,6 +114,12 @@ pub struct ManagedFilter {
     pub data: Rc<RwLock<FilterData>>,
 }
 
+impl ManagedFilter {
+    pub(crate) fn take_ready_sender(&mut self) -> Option<Sender<()>> {
+        self.ready_sender.take().flatten()
+    }
+}
+
 pub struct ManagedLink {
     pub(crate) source: LinkType,
     pub(crate) destination: LinkType,
@@ -104,6 +127,17 @@ pub struct ManagedLink {
     pub(crate) links: EnumMap<PortLocation, Option<ManagedLinkMap>>,
 
     pub(crate) ready_sender: Option<Sender<()>>,
+}
+
+impl ManagedLink {
+    pub(crate) fn ports_configured(&self) -> bool {
+        PortLocation::iter().all(|port| self.links[port].is_some())
+    }
+
+    pub(crate) fn all_bound(&self) -> bool {
+        PortLocation::iter()
+            .all(|port| self.links[port].as_ref().is_some_and(|link| link.pw_id.is_some()))
+    }
 }
 
 pub struct ManagedLinkMap {

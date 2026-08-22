@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 
+use crate::registry::device_node::RegistryDeviceNode;
 use crate::store::Store;
 use pipewire::device::{Device, DeviceChangeMask, DeviceListener};
 use pipewire::keys::{DEVICE_DESCRIPTION, DEVICE_NAME, DEVICE_NICK, OBJECT_SERIAL};
@@ -67,6 +68,27 @@ impl From<&DictRef> for RegistryDevice {
 impl RegistryDevice {
     pub fn add_node(&mut self, id: u32) {
         self.nodes.push(id);
+    }
+
+    /// Resolve which of this device's nodes a route-parameter change
+    pub(crate) fn resolve_route(
+        &self,
+        route_device: u32,
+        nodes: &HashMap<u32, RegistryDeviceNode>,
+    ) -> Option<u32> {
+        for &node_id in &self.nodes {
+            if let Some(node) = nodes.get(&node_id)
+                && node.profile_port() == Some(route_device)
+            {
+                return Some(node_id);
+            }
+        }
+
+        if self.nodes.len() == 1 {
+            return Some(self.nodes[0]);
+        }
+
+        None
     }
 
     pub fn set_volume(

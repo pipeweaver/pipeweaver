@@ -508,7 +508,6 @@ impl PipewireManager {
         let listener_input_ports = input_ports.clone();
         let listener_output_ports = output_ports.clone();
         let listener_state_store = Rc::downgrade(&self.store);
-        let listener_core = self.core.clone();
         let listener_id = props.filter_id;
         let listener = filter
             .add_local_listener_with_user_data(data_inner)

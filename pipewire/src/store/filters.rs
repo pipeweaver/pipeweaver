@@ -16,7 +16,7 @@ impl Store {
 
     pub fn managed_filter_send(&mut self, id: Ulid) {
         let filter = self.managed_filters.get_mut(&id).expect("Broke");
-        if let Some(Some(sender)) = filter.ready_sender.take() {
+        if let Some(sender) = filter.take_ready_sender() {
             let _ = sender.send(());
         }
     }

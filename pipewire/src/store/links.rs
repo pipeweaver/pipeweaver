@@ -195,17 +195,14 @@ impl Store {
                 return;
             }
 
-            // Iterate over all the links, check if they all have a pw_id assigned
-            for port in PortLocation::iter() {
-                if let Some(port) = &link.links[port] {
-                    if port.pw_id.is_none() {
-                        return;
-                    }
-                } else {
-                    // This port isn't even configured (eh?)
-                    error!("Link Missing Port Configuration: {}", id);
-                    return;
-                }
+            if !link.ports_configured() {
+                // This port isn't even configured (eh?)
+                error!("Link Missing Port Configuration: {}", id);
+                return;
+            }
+
+            if !link.all_bound() {
+                return;
             }
 
             // Ok, we get here, we're ready
