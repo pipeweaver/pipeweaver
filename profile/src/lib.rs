@@ -249,5 +249,5 @@ pub struct LV2Filter {
 }
 
 fn generate_uid() -> Ulid {
-    Ulid::new()
+    Ulid::generate()
 }
