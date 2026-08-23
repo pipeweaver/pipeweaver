@@ -11,7 +11,7 @@ use log::{debug, warn};
 use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{FilterProperties, MediaClass, PipewireMessage};
 use pipeweaver_profile::{Filter, FilterType};
-use pipeweaver_shared::{FilterConfig, FilterState, FilterValue, Mix, NodeType};
+use pipeweaver_shared::{FilterConfig, FilterState, FilterValue, FilterValueSet, Mix, NodeType};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use ulid::Ulid;
@@ -49,6 +49,7 @@ pub(crate) trait FilterManagement {
     async fn filter_custom_get_last(&mut self, id: Ulid) -> Option<Ulid>;
 
     async fn filter_set_value(&mut self, filter: Ulid, id: u32, value: FilterValue) -> Result<()>;
+    async fn filter_set_values(&mut self, filter: Ulid, values: Vec<FilterValueSet>) -> Result<()>;
 }
 
 impl FilterManagement for PipewireManager {
@@ -847,6 +848,42 @@ impl FilterManagement for PipewireManager {
                 // Update the filter's parameters based on its type
                 match &mut found_filter.filter {
                     FilterType::LV2(lv2_filter) => {
+                        lv2_filter.values.insert(symbol, value);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn filter_set_values(&mut self, filter: Ulid, values: Vec<FilterValueSet>) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        let forward = values.iter().map(|f| (f.id, f.value.clone())).collect();
+
+        let message = PipewireMessage::SetFilterValues(filter, forward, tx);
+        self.pipewire().send_message(message)?;
+        rx.recv()??;
+
+        // Ok, we'll update the filter config first
+        let mut filter_updates = Vec::with_capacity(values.len());
+        if let Some(filter_conf) = self.filter_config.get_mut(&filter) {
+            for value in &values {
+                if let Some(param) = filter_conf.parameters.iter_mut().find(|p| p.id == value.id) {
+                    let symbol = param.symbol.clone();
+                    param.value = value.value.clone();
+
+                    filter_updates.push((symbol, value.value.clone()));
+                }
+            }
+        }
+
+        // Then we'll update the device config
+        let dev = self.get_device_by_filter_mut(filter)?;
+        if let Some(found_filter) = dev.iter_mut().find(|f| f.id == filter) {
+            match &mut found_filter.filter {
+                FilterType::LV2(lv2_filter) => {
+                    for (symbol, value) in filter_updates {
                         lv2_filter.values.insert(symbol, value);
                     }
                 }

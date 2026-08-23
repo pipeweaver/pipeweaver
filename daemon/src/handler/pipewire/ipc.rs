@@ -441,6 +441,10 @@ impl IPCHandler for PipewireManager {
                 .filter_set_value(filter, id, value)
                 .await
                 .map(|_| Resp::Ok),
+            Cmd::SetFilterValues(filter, values) => self
+                .filter_set_values(filter, values)
+                .await
+                .map(|_| Resp::Ok),
             Cmd::RemoveFilter(id) => self.filter_custom_remove(id).await.map(|_| Resp::Ok),
             Cmd::MoveFilter(id, position) => self
                 .filter_custom_move(id, position)

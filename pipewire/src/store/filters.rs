@@ -267,6 +267,21 @@ impl Store {
         filter.data.write().callback.set_property(key, value)
     }
 
+    pub fn managed_filter_set_parameters(
+        &mut self,
+        id: Ulid,
+        value: Vec<(u32, FilterValue)>,
+    ) -> Result<()> {
+        // Find the filter
+        let filter = self
+            .managed_filters
+            .get_mut(&id)
+            .ok_or(anyhow!("Filter Not Found"))?;
+
+        // Set the Property
+        filter.data.write().callback.set_properties(value)
+    }
+
     pub fn managed_filter_get_parameters(&self, id: Ulid) -> Result<Vec<FilterProperty>> {
         // Find the filter
         let filter = self

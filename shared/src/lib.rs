@@ -285,6 +285,12 @@ pub enum FilterValue {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilterValueSet {
+    pub id: u32,
+    pub value: FilterValue,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FilterProperty {
     pub id: u32,
     pub name: String,
