@@ -7,24 +7,30 @@ export default {
   components: {VerticalRange},
   data() {
     return {
-      localFieldValue: 0
+      localFieldValue: 0,
+      interacting: false,
     }
   },
 
   props: {
     id: {type: String, required: true},
-    height: {type: Number, required: false, default: 440},
+    height: {type: Number, required: false, default: null},
     currentValue: {type: Number, required: true},
     colour1: {type: String, default: '#00ffff'},
     colour2: {type: String, default: '#252927'}
   },
 
   methods: {
-    change(e) {
+    input(e) {
+      this.interacting = true;
       this.localFieldValue = parseInt(e.target.value)
     },
+    change(e) {
+      this.localFieldValue = parseInt(e.target.value)
+      this.interacting = false;
+    },
     getHeight() {
-      return this.height - 10;
+      return this.height !== null ? this.height - 10 : null;
     }
   },
 
@@ -34,8 +40,11 @@ export default {
      * elsewhere (Generally a value change in the Store), localFieldValue is used as a bind between them both.
      *
      * Here we watch for external changes, and update the local value to resync the slider to its new position.
+     * While the user is actively dragging (interacting), external updates are ignored - otherwise a reply for an
+     * earlier position landing mid-drag would jerk the displayed % backwards.
      */
     currentValue: function (newValue) {
+      if (this.interacting) return;
       this.localFieldValue = newValue
     }
   },
@@ -48,10 +57,9 @@ export default {
 
 <template>
   <div class="range">
-    <div>
+    <div class="slider-wrap">
       <VerticalRange
         :id="id"
-        :change="change"
         :current-value="localFieldValue"
         :deselected-colour="colour2"
         :height="getHeight()"
@@ -61,6 +69,7 @@ export default {
         aria-description=""
         aria-label=""
         aria-value=""
+        @input="input"
         @change="change"
       />
     </div>
@@ -72,10 +81,19 @@ export default {
 
 <style scoped>
 .range {
-
   display: flex;
   flex-direction: column;
   align-items: center;
+  flex: 1;
+  min-height: 0;
+}
+
+.slider-wrap {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 .range-label {

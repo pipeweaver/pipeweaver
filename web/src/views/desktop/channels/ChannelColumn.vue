@@ -36,29 +36,11 @@ export default {
       localValue: 50,
       update_locked: false,
 
-      slider_height: 100,
-
       color_timeout: null,
     }
   },
 
-  mounted() {
-    this.$nextTick(() => {
-      this.calculateHeight();
-      window.addEventListener('resize', this.onResize)
-    })
-  },
-
-  beforeUnmount() {
-    window.removeEventListener('resize', this.onResize)
-  },
-
   methods: {
-    onResize: function () {
-      if (!this.$refs.fader_container) return;
-      this.calculateHeight();
-    },
-
     getDevice: function () {
       return get_device_by_id(this.id);
     },
@@ -87,15 +69,6 @@ export default {
     getColourHex: function () {
       let color = this.getDevice().description.colour;
       return this.rgbToHex(color.red, color.green, color.blue);
-    },
-
-    calculateHeight: function () {
-      if (!this.$refs.fader_container) {  // catches both null and undefined
-        return;
-      }
-
-      let base_height = this.$refs.fader_container.clientHeight;
-      this.slider_height = base_height - 30;
     },
 
     getVolume: function () {
@@ -406,21 +379,19 @@ export default {
           :id="this.id"
           :colour1="getMixAColour()"
           :current-value="getVolume()"
-          :height="this.slider_height"
           :colour2="Theme.meter_base"
-          @change="event => volume_changed('A', false, event)"
-          @input="event => volume_changed('A', true, event)"
+          @change="event => volume_changed('A', true, event)"
+          @input="event => volume_changed('A', false, event)"
         />
         <ChannelColumnVolume
           v-if="hasMix()"
           :id="this.id"
           :current-value="getMixVolume()"
-          :height="this.slider_height"
           :colour1="Theme.orange"
           :colour2="Theme.meter_base"
 
-          @change="event => volume_changed('B', false, event)"
-          @input="event => volume_changed('B', true, event)"
+          @change="event => volume_changed('B', true, event)"
+          @input="event => volume_changed('B', false, event)"
         />
       </div>
     </div>
@@ -578,14 +549,11 @@ export default {
   position: relative;
   padding: 15px;
   flex: 1;
+  display: flex;
+  justify-content: center;
 }
 
 .fader_child {
-  position: absolute;
-
-  left: 50%;
-  transform: translate(-50%, 0);
-
   display: flex;
   flex-direction: row;
   justify-content: center;
