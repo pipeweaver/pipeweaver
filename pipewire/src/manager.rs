@@ -1,55 +1,26 @@
 use crate::registry::PipewireRegistry;
-use crate::store::{
-    ManagedFilter, ManagedLink, ManagedLinkMap, ManagedNode, NodeStoreState, PortLocation, Store,
-};
+use crate::store::{ManagedFilter, Store, create_port_link};
 use crate::{
-    Direction, FilterHandler, FilterProperties, FilterProperty, FilterValue, LinkType,
-    NodeProperties, NodeTarget, PipewireInternalMessage, PipewireReceiver,
+    FilterHandler, FilterProperties, FilterProperty, FilterValue, LinkType, NodeProperties,
+    NodeTarget, PipewireInternalMessage, PipewireReceiver,
 };
 use crate::{MediaClass, PWReceiver};
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use log::{debug, error, info};
 use pipewire::core::{CoreRc, Listener};
-use pipewire::filter::{FilterFlags, FilterRc, FilterState, PortFlags};
-use pipewire::keys::{
-    APP_ICON_NAME, APP_ID, AUDIO_CHANNEL, AUDIO_CHANNELS, DEVICE_ICON_NAME, FACTORY_NAME,
-    FORMAT_DSP, LINK_INPUT_NODE, LINK_INPUT_PORT, LINK_OUTPUT_NODE, LINK_OUTPUT_PORT,
-    MEDIA_CATEGORY, MEDIA_CLASS, MEDIA_ICON_NAME, MEDIA_ROLE, MEDIA_TYPE, NODE_ALWAYS_PROCESS,
-    NODE_DESCRIPTION, NODE_DRIVER, NODE_FORCE_QUANTUM, NODE_FORCE_RATE, NODE_GROUP, NODE_NAME,
-    NODE_NICK, NODE_PASSIVE, NODE_VIRTUAL, OBJECT_LINGER, PORT_MONITOR, PORT_NAME,
-};
-use pipewire::link::{Link, LinkChangeMask, LinkState};
-use pipewire::node::NodeChangeMask;
+use pipewire::keys::MEDIA_CATEGORY;
 use pipewire::properties::properties;
-use pipewire::proxy::ProxyT;
 use pipewire::registry::RegistryRc;
-use pipewire::spa::pod::builder::Builder;
-use pipewire::spa::pod::deserialize::PodDeserializer;
-use pipewire::spa::pod::{Pod, Property, Value, ValueArray, object};
-use pipewire::spa::sys::{
-    SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR, SPA_FORMAT_AUDIO_position,
-    SPA_PARAM_PORT_CONFIG_format, SPA_PARAM_PortConfig, SPA_PARAM_Props, SPA_PROP_channelVolumes,
-    SPA_PROP_mute, SPA_TYPE_OBJECT_ParamProcessLatency, spa_process_latency_build,
-    spa_process_latency_info,
-};
 
-use enum_map::{EnumMap, enum_map};
 use oneshot::Sender;
-use parking_lot::RwLock;
-use pipewire::spa::param::ParamType;
-use pipewire::spa::pod::serialize::PodSerializer;
-use pipewire::spa::utils;
 
 use pipewire::context;
 use pipewire::main_loop::MainLoopRc;
-use std::cell::{Cell, RefCell};
-use std::io::Cursor;
+use std::cell::RefCell;
 use std::rc::Rc;
-use std::str::FromStr;
 use std::sync::mpsc;
 use std::time::Duration;
-use strum::IntoEnumIterator;
 use ulid::Ulid;
 
 pub(crate) struct FilterData {
@@ -87,8 +58,6 @@ impl PipewireManager {
     }
 
     pub fn create_core_listener(this: &Rc<RefCell<Self>>) {
-        let weak_self = Rc::downgrade(this);
-
         let (core, store, mainloop) = {
             let this_ref = this.borrow();
             (
@@ -100,13 +69,12 @@ impl PipewireManager {
 
         let done_store = Rc::downgrade(&store);
         let done_mainloop = mainloop.downgrade();
+        let done_core = core.clone();
+        let done_link_store = Rc::downgrade(&store);
 
         let core_listener = core
             .add_listener_local()
             .done(move |_id, seq| {
-                let Some(this_rc) = weak_self.upgrade() else {
-                    return;
-                };
                 let Some(store_rc) = done_store.upgrade() else {
                     return;
                 };
@@ -117,9 +85,8 @@ impl PipewireManager {
                 if let Some(parent) = store_ref.get_pending_link_parent_id_by_seq(seq.raw())
                     && let Some(link_id) = store_ref.get_next_pending_link(seq.raw())
                 {
-                    let this = this_rc.borrow_mut();
                     debug!("Attempting to Create next Link: {}", parent);
-                    let _ = this.create_port_link(parent, link_id);
+                    let _ = create_port_link(&done_core, parent, link_id, done_link_store.clone());
                     return;
                 }
 
@@ -155,259 +122,10 @@ impl PipewireManager {
     }
 
     pub fn create_node(&mut self, properties: NodeProperties) -> Result<()> {
-        let node_properties = &mut properties! {
-            *FACTORY_NAME => "support.null-audio-sink",
-            *NODE_NAME => properties.node_name.clone(),
-            *NODE_NICK => properties.node_nick,
-            *NODE_DESCRIPTION => properties.node_description,
-
-            *NODE_ALWAYS_PROCESS => "true",
-            *NODE_VIRTUAL => "true",
-            *PORT_MONITOR => "false",
-
-            *APP_ICON_NAME => &*properties.app_id,
-            *MEDIA_ICON_NAME => &*properties.app_id,
-            *DEVICE_ICON_NAME => &*properties.app_id,
-
-            *NODE_GROUP => "pipeweaver-nodes",
-
-            //*APP_NAME => properties.app_name,
-            *OBJECT_LINGER => match properties.linger {
-                true => "true",
-                false => "false"
-            },
-            *MEDIA_CLASS => match properties.class {
-                MediaClass::Source => "Audio/Source/Virtual",
-                MediaClass::Duplex => "Audio/Duplex",
-                MediaClass::Sink => "Audio/Sink",
-            },
-
-            *AUDIO_CHANNELS => "2",
-
-            // Force the RATE to match the system rate
-            *NODE_FORCE_RATE => properties.rate.to_string(),
-
-            // We don't want to set a driver here. If creating a large number of nodes each of them
-            // will pick a different device while finding a clock source, resulting in the nodes
-            // being spread all over the place. When the node tree starts getting linked together
-            // pipewire needs to pull all the nodes / audio_filters / devices into a single clock source
-            // which can cause some pretty aggressive behaviours (I've seen it infinite loop as
-            // various nodes fight for clock control).
-            //
-            // Setting this to false means that the devices will fall under the 'Dummy' node until
-            // a physical device is attached, at which point it'll move everything together under
-            // that single clock.
-            *NODE_DRIVER => "false",
-
-            // https://gitlab.freedesktop.org/pipewire/pipewire/-/wikis/Virtual-Devices
-            "audio.position" => "FL,FR",
-
-            // If upstream is managing the volumes via a filter, we don't want Pipewire interfering
-            "monitor.channel-volumes" => match properties.managed_volume {
-                true => "false",
-                false => "true"
-            },
-        };
-
-        // If a quantum is provided, send it in to the props
-        if let Some(quantum) = properties.buffer {
-            node_properties.insert(*NODE_FORCE_QUANTUM, quantum.to_string());
-        }
-
-        debug!(
-            "[{}] Attempting to Create Device '{}'",
-            properties.node_id, properties.node_name
-        );
-
-        // Properties built, create the node.
-        let proxy = self
-            .core
-            .create_object::<pipewire::node::Node>("adapter", node_properties)
-            .map_err(|e| anyhow!("Unable to Create Node {}", e))?;
-
-        // Set the Initial volume
-        let volume = (properties.initial_volume as f32 / 100.0).powi(3);
-        let pod = Value::Object(object! {
-            utils::SpaTypes::ObjectParamProps,
-            ParamType::Props,
-            Property::new(SPA_PROP_channelVolumes, Value::ValueArray(ValueArray::Float(vec![volume, volume]))),
-        });
-
-        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod)?;
-        let bytes = cursor.into_inner();
-        if let Some(bytes) = Pod::from_bytes(&bytes) {
-            proxy.set_param(ParamType::Props, 0, bytes);
-        }
-
-        debug!("[{}] Registering Proxy Listener", properties.node_id);
-        let proxy_id = properties.node_id;
-        let proxy_store = Rc::downgrade(&self.store);
-        let proxy_listener = proxy
-            .upcast_ref()
-            .add_listener_local()
-            .bound(move |id| {
-                debug!("[{}] Pipewire NodeID assigned: {}", proxy_id, id);
-                if let Some(proxy_store) = proxy_store.upgrade() {
-                    proxy_store
-                        .borrow_mut()
-                        .managed_node_set_pw_id(proxy_id, id);
-                }
-            })
-            .removed(|| {
-                debug!("Removed..");
-            })
-            .register();
-
-        debug!("[{}] Registering Node Listener", properties.node_id);
-        let listener_id = properties.node_id;
-        let listener_info_store = Rc::downgrade(&self.store);
-        let listener_param_store = Rc::downgrade(&self.store);
-        let listener = proxy
-            .add_listener_local()
-            .info(move |info| {
-                // Check whether this is a PORT related message
-                if info.change_mask().contains(NodeChangeMask::INPUT_PORTS)
-                    || info.change_mask().contains(NodeChangeMask::OUTPUT_PORTS)
-                {
-                    // Now check whether our port count matches what's expected
-                    if info.n_input_ports() == 2 && info.n_output_ports() == 2 {
-                        debug!(
-                            "[{}] Ports have appeared, requesting configuration",
-                            listener_id
-                        );
-                        if let Some(store) = listener_info_store.upgrade() {
-                            store.borrow().managed_node_request_ports(listener_id);
-                        }
-                    }
-                }
-
-                if info.change_mask().contains(NodeChangeMask::STATE) {
-                    let new_state = NodeStoreState::from(info.state());
-
-                    if let Some(store) = listener_info_store.upgrade() {
-                        store
-                            .borrow_mut()
-                            .managed_node_state_changed(listener_id, new_state);
-                    }
-                }
-            })
-            .param(move |_seq, _type, _index, _next, param| {
-                if let Some(pod) = param {
-                    let pod = PodDeserializer::deserialize_any_from(pod.as_bytes()).map(|(_, v)| v);
-                    if let Ok(Value::Object(object)) = pod {
-                        if object.id == SPA_PARAM_PortConfig {
-                            debug!("[{}] Port configuration Received", listener_id);
-                            let prop = object
-                                .properties
-                                .iter()
-                                .find(|p| p.key == SPA_PARAM_PORT_CONFIG_format);
-
-                            // Format is optional
-                            if let Some(prop) = prop
-                                && let Value::Object(object) = &prop.value
-                            {
-                                // Value is of type SPA_TYPE_OBJECT_Format
-                                let prop = object
-                                    .properties
-                                    .iter()
-                                    .find(|p| p.key == SPA_FORMAT_AUDIO_position);
-
-                                if let Some(prop) = prop {
-                                    // Fucking hell, I hate how deep this is getting
-                                    if let Value::ValueArray(ValueArray::Id(array)) = &prop.value
-                                        && let Some(listener_param_store) =
-                                            listener_param_store.upgrade()
-                                    {
-                                        let mut store = listener_param_store.borrow_mut();
-                                        for (index, value) in array.iter().enumerate() {
-                                            let index = index as u32;
-                                            if value.0 == SPA_AUDIO_CHANNEL_FL {
-                                                store.managed_node_add_port(
-                                                    listener_id,
-                                                    PortLocation::Left,
-                                                    index,
-                                                );
-                                            }
-                                            if value.0 == SPA_AUDIO_CHANNEL_FR {
-                                                store.managed_node_add_port(
-                                                    listener_id,
-                                                    PortLocation::Right,
-                                                    index,
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } else if object.id == SPA_PARAM_Props {
-                            let prop = object
-                                .properties
-                                .iter()
-                                .find(|p| p.key == SPA_PROP_channelVolumes);
-
-                            // Get the Left / Right value
-                            if let Some(prop) = prop
-                                && let Value::ValueArray(ValueArray::Float(value)) = &prop.value
-                            {
-                                // OK, so KDE and pwvucontrol use the highest value for their reference
-                                let max = value
-                                    .iter()
-                                    .copied()
-                                    .max_by(|a, b| a.partial_cmp(b).unwrap())
-                                    .unwrap();
-
-                                let volume = (max.cbrt() * 100.0).round() as u8;
-                                if let Some(listener_param_store) = listener_param_store.upgrade() {
-                                    listener_param_store
-                                        .borrow_mut()
-                                        .on_volume_change(listener_id, volume);
-                                }
-                            }
-
-                            let prop = object.properties.iter().find(|p| p.key == SPA_PROP_mute);
-
-                            if let Some(prop) = prop
-                                && let Value::Bool(enabled) = &prop.value
-                                && let Some(listener_param_store) = listener_param_store.upgrade()
-                            {
-                                listener_param_store
-                                    .borrow_mut()
-                                    .on_mute_change(listener_id, *enabled);
-                            }
-                        } else {
-                            error!("Parameter Parse Error, Message was not of expected type");
-                            debug!("Object Id: {}", object.id);
-                            for property in object.properties {
-                                debug!("Key: {}, Value: {:?}", property.key, property.value);
-                            }
-                        }
-                    } else {
-                        error!("Unexpected Value Type");
-                    }
-                }
-            })
-            .register();
-        proxy.subscribe_params(&[ParamType::Props]);
-
-        let store = ManagedNode {
-            pw_id: None,
-            object_serial: None,
-            id: properties.node_id,
-            props: node_properties.clone(),
-            proxy,
-            _listener: listener,
-            _proxy_listener: proxy_listener,
-
-            port_map: Default::default(),
-            ports_ready: false,
-
-            node_state: NodeStoreState::Creating,
-            ready_sender: Some(properties.ready_sender),
-        };
-
-        self.store.borrow_mut().managed_node_add(store);
-
-        Ok(())
+        let listener_store = Rc::downgrade(&self.store);
+        self.store
+            .borrow_mut()
+            .create_node(&self.core, properties, listener_store)
     }
 
     pub fn remove_node(&mut self, id: Ulid) -> Result<()> {
@@ -416,198 +134,10 @@ impl PipewireManager {
     }
 
     pub fn create_filter(&mut self, props: FilterProperties) -> Result<()> {
-        // For now, we assume a mono implementation... We should separately support both varying
-        // input and output counts and have upstream handle it
-        let properties = properties!(
-            *APP_ID => &*props.app_id,
-            *NODE_NAME => &*props.filter_name,
-            *NODE_NICK => &*props.filter_nick,
-            *NODE_DESCRIPTION => &*props.filter_description,
-
-            // READ NOTE IN state_changed BEFORE CHANGING THIS VALUE!
-            *NODE_ALWAYS_PROCESS => "true",
-
-            *NODE_GROUP => "pipeweaver-nodes",
-
-            *MEDIA_TYPE => "Audio",
-            *MEDIA_CATEGORY => "Filter",
-            *MEDIA_ROLE => "DSP",
-
-            *OBJECT_LINGER => "false",
-        );
-
-        debug!(
-            "[{}] Attempting to Create Filter '{}'",
-            props.filter_id, props.filter_name
-        );
-        let filter = FilterRc::new(self.core.clone(), &props.filter_name, properties)
-            .map_err(|e| anyhow!("Unable to Create Filter: {}", e))?;
-        let mut params = [];
-
-        // Create port storage
-        let input_ports = Rc::new(RefCell::new(vec![]));
-        let output_ports = Rc::new(RefCell::new(vec![]));
-
-        let mut input_port_map = EnumMap::default();
-        let mut output_port_map = EnumMap::default();
-
-        if props.class == MediaClass::Source || props.class == MediaClass::Duplex {
-            debug!("[{}] Registering Input Ports", props.filter_id);
-            for (index, port) in PortLocation::iter().enumerate() {
-                input_ports.borrow_mut().push(
-                    filter
-                        .add_port(
-                            utils::Direction::Input,
-                            PortFlags::MAP_BUFFERS,
-                            properties! {
-                                *FORMAT_DSP => "32 bit float mono audio",
-                                *PORT_NAME => format!("input_{}", port),
-                                *AUDIO_CHANNEL => format!("{}", port)
-                            },
-                            &mut params,
-                        )
-                        .map_err(|e| anyhow!("Filter Input Creation Failed: {}", e))?,
-                );
-                input_port_map[port] = index as u32;
-            }
-        }
-
-        #[allow(clippy::collapsible_if)]
-        //if !props.receive_only {
-        if props.class == MediaClass::Sink || props.class == MediaClass::Duplex {
-            debug!("[{}] Registering Output Ports", props.filter_id);
-
-            for (index, port) in PortLocation::iter().enumerate() {
-                output_ports.borrow_mut().push(
-                    filter
-                        .add_port(
-                            utils::Direction::Output,
-                            PortFlags::MAP_BUFFERS,
-                            properties! {
-                                *FORMAT_DSP => "32 bit float mono audio",
-                                *PORT_NAME => format!("output_{}", port),
-                                *AUDIO_CHANNEL => format!("{}", port)
-                            },
-                            &mut params,
-                        )
-                        .map_err(|e| anyhow!("Filter Input Creation Failed: {:?}", e))?,
-                );
-                output_port_map[port] = index as u32;
-            }
-        }
-        //}
-
-        // Use a RWLock provided by parking-lot here, so we can safely grab the filter to change
-        // its settings on-the-fly
-        let data = Rc::new(RwLock::new(FilterData {
-            callback: props.callback,
-        }));
-        let data_inner = data.clone();
-
-        debug!("[{}] Registering Filter Listener", props.filter_id);
-        let listener_input_ports = input_ports.clone();
-        let listener_output_ports = output_ports.clone();
-        let listener_state_store = Rc::downgrade(&self.store);
-        let listener_id = props.filter_id;
-        let listener = filter
-            .add_local_listener_with_user_data(data_inner)
-            .state_changed(move |filter, _data, _old, new| {
-                // Note, this ONLY works because NODE_ALWAYS_PROCESS is true. There's no way via
-                // the filter API to know when the ports have appeared, meaning it would have to
-                // be tracked in the global registry handler, however, because we're always process
-                // we enter a streaming state once all our ports arrive, meaning that we don't have
-                // to track them directly.
-                //
-                // TODO: We should probably track the ports in the global registry handler anyway.
-                if new == FilterState::Streaming {
-                    debug!("[{}] Filter Connected and Ready", listener_id);
-                    if let Some(listener_state_store) = listener_state_store.upgrade() {
-                        let mut store = listener_state_store.borrow_mut();
-                        store.managed_filter_set_pw_id(listener_id, filter.node_id());
-                        store.managed_filter_send(listener_id);
-                    }
-                }
-            })
-            .process(move |filter, data, position| {
-                let samples = position.clock.duration as u32;
-                //debug!("Rate: {:?}", position.clock.rate.denom);
-
-                let mut input_list = vec![];
-                let mut output_list = vec![];
-
-                for input in listener_input_ports.borrow().iter() {
-                    let in_buffer = filter.get_dsp_buffer::<f32>(input, samples);
-                    input_list.push(in_buffer.unwrap());
-                }
-
-                for output in listener_output_ports.borrow().iter() {
-                    let out_buffer = filter.get_dsp_buffer::<f32>(output, samples);
-                    output_list.push(out_buffer.unwrap());
-                }
-
-                // Check for inputs, output only filters don't need this
-                if !input_list.is_empty() {
-                    // Iterate over all the output lists
-                    for (i, out_buf) in output_list.iter_mut().enumerate() {
-                        // Fetch the matching input, if it's empty and the output ISN'T..
-                        if !out_buf.is_empty() && input_list.get(i).is_none_or(|b| b.is_empty()) {
-                            // Clear the output buffer
-                            out_buf.fill(0.0);
-                        }
-                    }
-                }
-
-                data.write()
-                    .callback
-                    .process_samples(input_list, output_list);
-            })
-            .register()
-            .map_err(|e| anyhow!("Unable to Register Filter: {:?}", e))?;
-
-        let mut buffer = vec![];
-        let builder = Builder::new(&mut buffer);
-
-        let latency = spa_process_latency_info {
-            quantum: 0.,
-            rate: 0,
-            ns: 1,
-        };
-        let pod = unsafe {
-            Pod::from_raw(spa_process_latency_build(
-                builder.as_raw_ptr(),
-                SPA_TYPE_OBJECT_ParamProcessLatency,
-                &latency,
-            ))
-        };
-        let mut params = [pod];
-
-        debug!("[{}] Connecting Filter", props.filter_id);
-        filter
-            .connect(FilterFlags::RT_PROCESS, &mut params)
-            .map_err(|e| anyhow!("Unable to Connect Filter: {}", e))?;
-
-        let store = ManagedFilter {
-            pw_id: None,
-            data,
-
-            id: props.filter_id,
-            _listener: listener,
-            _filter: filter,
-
-            port_map: enum_map! {
-                Direction::In => input_port_map,
-                Direction::Out=> output_port_map,
-            },
-
-            _input_ports: input_ports,
-            _output_ports: output_ports,
-
-            ready_sender: Some(props.ready_sender),
-        };
-
-        self.store.borrow_mut().managed_filter_add(store);
-
-        Ok(())
+        let listener_store = Rc::downgrade(&self.store);
+        self.store
+            .borrow_mut()
+            .create_filter(&self.core, props, listener_store)
     }
 
     pub fn remove_filter(&mut self, id: Ulid) -> Result<()> {
@@ -632,105 +162,15 @@ impl PipewireManager {
         dest: LinkType,
         sender: Sender<()>,
     ) -> Result<()> {
-        // Fetch the details of the links that need creating
-        let mut group = self.prepare_links(source, dest, sender)?;
-
-        // Create a Parent ID for this link set
-        let parent_id = Ulid::generate();
-
-        // Find the first portmap and begin creation
-        for port in PortLocation::iter() {
-            let entry = &mut group.links[port];
-
-            if let Some(m) = entry.as_mut() {
-                // Ok, we have a LinkStoreMap, trigger the first creation.
-                self.create_port_link(parent_id, m)?;
-                break;
-            }
-        }
-        self.store.borrow_mut().add_pending_link(parent_id, group);
-        Ok(())
-    }
-
-    pub fn prepare_links(
-        &mut self,
-        source: LinkType,
-        dest: LinkType,
-        sender: Sender<()>,
-    ) -> Result<ManagedLink> {
-        // First, check if a managed link already exists and remove it
-        self.store.borrow_mut().managed_link_remove(&source, &dest);
-        let mut port_map: EnumMap<PortLocation, Option<ManagedLinkMap>> = Default::default();
-
-        // Collect all the port pairs we're going to link
-        let mut port_pairs = Vec::new();
-        for port in PortLocation::iter() {
-            let (_, src_index) = self.get_port(&source, Direction::Out, port)?;
-            let (_, tgt_index) = self.get_port(&dest, Direction::In, port)?;
-            port_pairs.push((src_index, tgt_index));
-        }
-
-        // Find and destroy any unmanaged links between these exact ports
-        let links_to_destroy: Vec<u32> = self
-            .store
-            .borrow()
-            .get_unmanaged_links()
-            .iter()
-            .filter_map(|(id, link)| {
-                let should_remove = port_pairs.iter().any(|(out_port, in_port)| {
-                    link.output_port == *out_port && link.input_port == *in_port
-                });
-                if should_remove { Some(*id) } else { None }
-            })
-            .collect();
-
-        if !links_to_destroy.is_empty() {
-            debug!(
-                "Destroying {} orphaned unmanaged links in PipeWire: {:?}",
-                links_to_destroy.len(),
-                links_to_destroy
-            );
-            for link_id in links_to_destroy {
-                self.registry.destroy_global(link_id);
-                self.store.borrow_mut().unmanaged_link_remove(link_id);
-            }
-        }
-
-        // Now create the links
-        for port in PortLocation::iter() {
-            // Firstly, create an id for this list
-            let link_id = Ulid::generate();
-
-            // Next, obtain the source and destination port indexes
-            let (src_id, src_index) = self.get_port(&source, Direction::Out, port)?;
-            let (tgt_id, tgt_index) = self.get_port(&dest, Direction::In, port)?;
-
-            // Create the LinkStore Mapping for this link
-            let store = ManagedLinkMap {
-                pw_id: None,
-                internal_id: link_id,
-
-                pending_seq_id: None,
-                _link: None,
-                _proxy_listener: None,
-                _info_listener: None,
-
-                source_port: (src_id, src_index),
-                destination_port: (tgt_id, tgt_index),
-            };
-
-            port_map[port] = Some(store);
-        }
-
-        // Ok, we're done here, create the main store object
-        let group = ManagedLink {
-            source: source.clone(),
-            destination: dest.clone(),
-            links: port_map,
-            ready_sender: Some(sender),
-        };
-
-        Ok(group)
+        let listener_store = Rc::downgrade(&self.store);
+        self.store.borrow_mut().create_link(
+            &self.core,
+            self.registry.raw(),
+            source,
+            dest,
+            sender,
+            listener_store,
+        )
     }
 
     pub fn remove_link(&mut self, source: LinkType, destination: LinkType) -> Result<()> {
@@ -746,158 +186,6 @@ impl PipewireManager {
                 self.registry.destroy_global(id);
             }
         }
-
-        Ok(())
-    }
-
-    fn get_port(
-        &mut self,
-        link: &LinkType,
-        direction: crate::Direction,
-        location: PortLocation,
-    ) -> Result<(u32, u32)> {
-        // Ok, simple enough, pull out the relevant type, and get the port at location
-        let mut store = self.store.borrow_mut();
-        match link {
-            LinkType::Node(id) => {
-                let Some(node) = store.managed_node_get(*id) else {
-                    bail!("Unable to Locate Node");
-                };
-
-                let id = node.pw_id.unwrap();
-                let port = node.port_map[location].unwrap();
-
-                Ok((id, port))
-            }
-            LinkType::Filter(id) => {
-                let filter = store.managed_filter_get(*id).unwrap();
-
-                let id = filter.pw_id.unwrap();
-                let port = filter.port_map[direction][location];
-
-                Ok((id, port))
-            }
-            LinkType::UnmanagedNode(id, port_map) => {
-                let node = store
-                    .unmanaged_device_node_get(*id)
-                    .ok_or_else(|| anyhow!("Unmanaged Device Node not Found"))?;
-
-                let ports = &node.ports[direction];
-
-                // Check whether the caller has explicitly told us which port to use
-                if let Some(link_ports) = port_map {
-                    let find = match location {
-                        PortLocation::Left => &link_ports.left,
-                        PortLocation::Right => &link_ports.right,
-                    };
-
-                    for (index, port) in ports.iter() {
-                        if port.channel == *find {
-                            return Ok((*id, *index));
-                        }
-                    }
-
-                    bail!("Unable to find channel");
-                }
-
-                // Check whether this is a mono device
-                if ports.iter().count() == 1
-                    && let Some(index) = ports.keys().next()
-                {
-                    return Ok((*id, *index));
-                }
-
-                // Iterate over the ports, try and find the location
-                for (index, port) in ports.iter() {
-                    if let Ok(port_location) = PortLocation::from_str(&port.channel)
-                        && port_location == location
-                    {
-                        return Ok((*id, *index));
-                    }
-                }
-
-                // If we get here, we didn't find anything, this shouldn't happen!
-                bail!("Requested Unmanaged Node is Neither Stereo or Mono");
-            }
-        }
-    }
-
-    fn create_port_link(&self, parent_id: Ulid, map: &mut ManagedLinkMap) -> Result<()> {
-        let id = map.internal_id;
-        let (src_node, src_port) = map.source_port;
-        let (dest_node, dest_port) = map.destination_port;
-
-        let listener_info_store = Rc::downgrade(&self.store);
-        let link = self
-            .core
-            .create_object::<Link>(
-                "link-factory",
-                &properties! {
-                    *LINK_OUTPUT_NODE => src_node.to_string(),
-                    *LINK_OUTPUT_PORT => src_port.to_string(),
-                    *LINK_INPUT_NODE => dest_node.to_string(),
-                    *LINK_INPUT_PORT => dest_port.to_string(),
-                    *OBJECT_LINGER => "false",
-                    *NODE_PASSIVE => "false",
-                },
-            )
-            .map_err(|e| anyhow!("Failed to create link: {}", e))?;
-
-        let listener_bound_store = listener_info_store.clone();
-        let listener_error_store = listener_info_store.clone();
-        let proxy_listener = link
-            .upcast_ref()
-            .add_listener_local()
-            .bound(move |pw_id| {
-                // The link is now bound and has an ID, notify the store
-                if let Some(store) = listener_bound_store.upgrade() {
-                    store.borrow_mut().managed_link_bound(parent_id, id, pw_id);
-                }
-            })
-            .error(move |seq, res, message| {
-                log::error!(
-                    "[Link {}:{}] Link proxy error! seq={}, res={}, message={}",
-                    parent_id,
-                    id,
-                    seq,
-                    res,
-                    message
-                );
-                // Notify the store about the error so the sender doesn't hang
-                if let Some(store) = listener_error_store.upgrade() {
-                    store.borrow_mut().managed_link_error(parent_id, id);
-                }
-            })
-            .register();
-
-        let listener_done_store = listener_info_store.clone();
-        let listener_done_core = self.core.clone();
-        let state_done = Cell::new(false);
-        let link_listener = link
-            .add_listener_local()
-            .info(move |info| {
-                if info.change_mask().contains(LinkChangeMask::STATE) {
-                    if state_done.get() {
-                        return;
-                    }
-                    if matches!(info.state(), LinkState::Active | LinkState::Paused) {
-                        state_done.set(true);
-
-                        if let Some(store) = listener_done_store.upgrade() {
-                            let seq = listener_done_core.sync(0).expect("core sync failed");
-                            store
-                                .borrow_mut()
-                                .set_pending_link_done(parent_id, id, seq.raw());
-                        }
-                    }
-                }
-                //if matches!(info.state(), LinkState::Error(e) | LinkState::Unlinked) {}
-            })
-            .register();
-
-        map._link = Some(link);
-        map._proxy_listener = Some(proxy_listener);
-        map._info_listener = Some(link_listener);
 
         Ok(())
     }
