@@ -145,6 +145,9 @@ impl PipewireRegistry {
     pub fn destroy_global(&self, id: u32) {
         self.registry.destroy_global(id);
     }
+    pub(crate) fn raw(&self) -> &RegistryRc {
+        &self.registry
+    }
 }
 
 // pipewire-rs doesn't seem to provide one of these, it does have from_str and to_str, but they're
