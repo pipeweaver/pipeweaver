@@ -16,8 +16,6 @@ import {
   setFilterValue,
   setFilterValues
 } from "@/app/filters.js";
-import {is_source} from "@/app/util.js";
-import {websocket} from "@/app/sockets.js";
 
 export default {
   name: "EqualiserFilter",
@@ -112,14 +110,19 @@ export default {
     },
 
     setBandParam(field, index, value) {
-      this.setParam(this.bandSymbol(field, index), value);
-      this.mirrorBandToRight(field, index);
+      return this.setValues(this.buildBandUpdates(field, index, value));
     },
 
     setBandDbParam(field, index, value) {
-      const promise = this.setDbParam(this.bandSymbol(field, index), value);
-      this.mirrorBandToRight(field, index);
-      return promise;
+      return this.setValues(this.buildBandUpdates(field, index, dbToLinear(value)));
+    },
+
+    buildBandUpdates(field, index, rawValue) {
+      const updates = [{symbol: this.bandSymbol(field, index), value: rawValue}];
+      if (this.channel === 'left' && this.getParam('clink').value.Bool) {
+        updates.push({symbol: `${this.prefix.right[field]}_${index}`, value: rawValue});
+      }
+      return updates;
     },
 
     bandGainDrag(index, e) {
@@ -139,15 +142,7 @@ export default {
       });
     },
 
-    mirrorBandToRight(field, index) {
-      if (this.channel !== 'left' || !this.getParam('clink').value.Bool) return;
-      const rightSymbol = `${this.prefix.right[field]}_${index}`;
-      const leftValue = this.getRawValue(this.bandSymbol(field, index));
-      if (this.getRawValue(rightSymbol) === leftValue) return; // already in sync
-      this.setParam(rightSymbol, leftValue);
-    },
-
-    syncAllBandsToRight() {
+    buildBandSyncUpdates() {
       const fields = ['type', 'mode', 'slope', 'solo', 'mute', 'freq', 'q', 'width', 'gain'];
       const updates = [];
       for (const index of this.bandIndices) {
@@ -159,16 +154,17 @@ export default {
           updates.push({symbol: rightSymbol, value: leftValue});
         }
       }
-      return this.setValues(updates);
+      return updates;
     },
 
     toggleLinkChannels() {
       const enabling = !this.getParam('clink').value.Bool;
-      this.setParam('clink', `${enabling}`);
+      const updates = [{symbol: 'clink', value: `${enabling}`}];
       if (enabling) {
         this.channel = 'left';
-        this.syncAllBandsToRight();
+        updates.push(...this.buildBandSyncUpdates());
       }
+      return this.setValues(updates);
     },
 
     boolOptions() {
@@ -316,7 +312,7 @@ export default {
         <div class="band-q">Q {{ getParam(bandSymbol('q', index)).value.Float32.toFixed(2) }}</div>
 
         <div class="band-gain-slider">
-          <VerticalRange :min-value="-36" :max-value="36" :step="0.01"
+          <VerticalRange :min-value="-36" :max-value="20" :step="0.01"
                          :current-value="getDb(bandSymbol('gain', index))"
                          :meter="false"
                          :aria-label="`Band ${index + 1} gain`"
