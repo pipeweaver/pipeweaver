@@ -20,137 +20,6 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::rc::Weak;
 
-#[allow(unused)]
-pub(crate) struct RegistryDevice {
-    object_serial: u32,
-
-    nickname: Option<String>,
-    description: Option<String>,
-    name: Option<String>,
-
-    pub(crate) _proxy: Option<Device>,
-    pub(crate) _listener: Option<DeviceListener>,
-
-    pub(crate) nodes: Vec<u32>,
-    pub(crate) active_routes: HashMap<u32, ActiveRoute>,
-}
-
-#[derive(Debug)]
-pub(crate) struct ActiveRoute {
-    pub index: u32,
-    pub n_channels: u32,
-}
-
-impl From<&DictRef> for RegistryDevice {
-    fn from(value: &DictRef) -> Self {
-        let object_serial = value
-            .get(*OBJECT_SERIAL)
-            .and_then(|s| s.parse::<u32>().ok())
-            .expect("OBJECT_SERIAL");
-        let nickname = value.get(*DEVICE_NICK).map(|s| s.to_string());
-        let description = value.get(*DEVICE_DESCRIPTION).map(|s| s.to_string());
-        let name = value.get(*DEVICE_NAME).map(|s| s.to_string());
-
-        Self {
-            object_serial,
-            nickname,
-            description,
-            name,
-            _proxy: None,
-            _listener: None,
-
-            nodes: vec![],
-            active_routes: HashMap::new(),
-        }
-    }
-}
-
-impl RegistryDevice {
-    pub fn add_node(&mut self, id: u32) {
-        self.nodes.push(id);
-    }
-
-    /// Resolve which of this device's nodes a route-parameter change
-    pub(crate) fn resolve_route(
-        &self,
-        route_device: u32,
-        nodes: &HashMap<u32, RegistryDeviceNode>,
-    ) -> Option<u32> {
-        for &node_id in &self.nodes {
-            if let Some(node) = nodes.get(&node_id)
-                && node.profile_port() == Some(route_device)
-            {
-                return Some(node_id);
-            }
-        }
-
-        if self.nodes.len() == 1 {
-            return Some(self.nodes[0]);
-        }
-
-        None
-    }
-
-    pub fn set_volume(
-        &self,
-        device_id: u32,
-        route_index: u32,
-        n_channels: u32,
-        volume: f32,
-    ) -> Result<()> {
-        let Some(ref proxy) = self._proxy else {
-            bail!("Proxy not found")
-        };
-
-        let pod = Value::Object(object! {
-            utils::SpaTypes::ObjectParamRoute,
-            ParamType::Route,
-            Property::new(SPA_PARAM_ROUTE_index,  Value::Int(route_index as i32)),
-            Property::new(SPA_PARAM_ROUTE_device, Value::Int(device_id as i32)),
-            Property::new(SPA_PARAM_ROUTE_props,  Value::Object(object! {
-                utils::SpaTypes::ObjectParamProps,
-                ParamType::Props,
-                Property::new(SPA_PROP_channelVolumes, Value::ValueArray(ValueArray::Float(vec![volume; n_channels as usize]))),
-            })),
-            Property::new(SPA_PARAM_ROUTE_save, Value::Bool(true)),
-        });
-
-        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod)?;
-        if let Some(pod) = Pod::from_bytes(&cursor.into_inner()) {
-            proxy.set_param(ParamType::Route, 0, pod);
-        }
-
-        Ok(())
-    }
-
-    #[allow(unused)]
-    pub fn set_mute(&self, device_id: u32, route_index: u32, mute: bool) -> Result<()> {
-        let Some(ref proxy) = self._proxy else {
-            bail!("Proxy not found")
-        };
-
-        let pod = Value::Object(object! {
-            utils::SpaTypes::ObjectParamRoute,
-            ParamType::Route,
-            Property::new(SPA_PARAM_ROUTE_index,  Value::Int(route_index as i32)),
-            Property::new(SPA_PARAM_ROUTE_device, Value::Int(device_id as i32)),
-            Property::new(SPA_PARAM_ROUTE_props,  Value::Object(object! {
-                utils::SpaTypes::ObjectParamProps,
-                ParamType::Props,
-                Property::new(SPA_PROP_mute, Value::Bool(mute)),
-            })),
-            Property::new(SPA_PARAM_ROUTE_save, Value::Bool(true)),
-        });
-
-        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod)?;
-        if let Some(pod) = Pod::from_bytes(&cursor.into_inner()) {
-            proxy.set_param(ParamType::Route, 0, pod);
-        }
-
-        Ok(())
-    }
-}
-
 pub fn handle_device(
     id: u32,
     global: &GlobalObject<&DictRef>,
@@ -270,5 +139,129 @@ pub fn handle_device(
         }
 
         store.unmanaged_device_add(id, device);
+    }
+}
+
+#[allow(unused)]
+pub(crate) struct RegistryDevice {
+    object_serial: u32,
+
+    nickname: Option<String>,
+    description: Option<String>,
+    name: Option<String>,
+
+    pub(crate) _proxy: Option<Device>,
+    pub(crate) _listener: Option<DeviceListener>,
+
+    pub(crate) nodes: Vec<u32>,
+    pub(crate) active_routes: HashMap<u32, ActiveRoute>,
+}
+
+#[derive(Debug)]
+pub(crate) struct ActiveRoute {
+    pub index: u32,
+    pub n_channels: u32,
+}
+
+impl From<&DictRef> for RegistryDevice {
+    fn from(value: &DictRef) -> Self {
+        let object_serial = value
+            .get(*OBJECT_SERIAL)
+            .and_then(|s| s.parse::<u32>().ok())
+            .expect("OBJECT_SERIAL");
+        let nickname = value.get(*DEVICE_NICK).map(|s| s.to_string());
+        let description = value.get(*DEVICE_DESCRIPTION).map(|s| s.to_string());
+        let name = value.get(*DEVICE_NAME).map(|s| s.to_string());
+
+        Self {
+            object_serial,
+            nickname,
+            description,
+            name,
+            _proxy: None,
+            _listener: None,
+
+            nodes: vec![],
+            active_routes: HashMap::new(),
+        }
+    }
+}
+
+type NodeList = HashMap<u32, RegistryDeviceNode>;
+impl RegistryDevice {
+    pub fn add_node(&mut self, id: u32) {
+        self.nodes.push(id);
+    }
+
+    /// Resolve which of this device's nodes a route-parameter change
+    pub(crate) fn resolve_route(&self, dev: u32, nodes: &NodeList) -> Option<u32> {
+        for &node_id in &self.nodes {
+            if let Some(node) = nodes.get(&node_id)
+                && node.profile_port() == Some(dev)
+            {
+                return Some(node_id);
+            }
+        }
+
+        if self.nodes.len() == 1 {
+            return Some(self.nodes[0]);
+        }
+
+        None
+    }
+
+    // Setting volumes on a device is more complicated than regular stuff because everything
+    // is expecting the volume to be set on the route itself, and not the device.
+    pub fn set_volume(&self, dev: u32, route: u32, n_ch: u32, volume: f32) -> Result<()> {
+        let Some(ref proxy) = self._proxy else {
+            bail!("Proxy not found")
+        };
+
+        let pod = Value::Object(object! {
+            utils::SpaTypes::ObjectParamRoute,
+            ParamType::Route,
+            Property::new(SPA_PARAM_ROUTE_index,  Value::Int(route as i32)),
+            Property::new(SPA_PARAM_ROUTE_device, Value::Int(dev as i32)),
+            Property::new(SPA_PARAM_ROUTE_props,  Value::Object(object! {
+                utils::SpaTypes::ObjectParamProps,
+                ParamType::Props,
+                Property::new(SPA_PROP_channelVolumes, Value::ValueArray(ValueArray::Float(vec![volume; n_ch as usize]))),
+            })),
+            Property::new(SPA_PARAM_ROUTE_save, Value::Bool(true)),
+        });
+
+        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod)?;
+        if let Some(pod) = Pod::from_bytes(&cursor.into_inner()) {
+            proxy.set_param(ParamType::Route, 0, pod);
+        }
+
+        Ok(())
+    }
+
+    #[allow(unused)]
+    pub fn set_mute(&self, device_id: u32, route_index: u32, mute: bool) -> Result<()> {
+        let Some(ref proxy) = self._proxy else {
+            bail!("Proxy not found")
+        };
+
+        let pod = Value::Object(object! {
+            utils::SpaTypes::ObjectParamRoute,
+            ParamType::Route,
+            Property::new(SPA_PARAM_ROUTE_index,  Value::Int(route_index as i32)),
+            Property::new(SPA_PARAM_ROUTE_device, Value::Int(device_id as i32)),
+            Property::new(SPA_PARAM_ROUTE_props,  Value::Object(object! {
+                utils::SpaTypes::ObjectParamProps,
+                ParamType::Props,
+                Property::new(SPA_PROP_mute, Value::Bool(mute)),
+            })),
+            Property::new(SPA_PARAM_ROUTE_save, Value::Bool(true)),
+        });
+
+        let (cursor, _) = PodSerializer::serialize(Cursor::new(Vec::new()), &pod)?;
+        if let Some(pod) = Pod::from_bytes(&cursor.into_inner()) {
+            proxy.set_param(ParamType::Route, 0, pod);
+        }
+
+        Ok(())
     }
 }
