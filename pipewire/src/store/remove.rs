@@ -36,24 +36,12 @@ impl Store {
 
         // Something may be trying to mess with a managed link, if so, completely drop our links
         // and report back to whatever is calling us that it's happened, so they can action it.
-        if let Some(id) = self.is_managed_link(id) {
-            debug!("Removing Managed Link: {}", id);
-            if let Some(link) = self.managed_links.remove(&id) {
-                debug!("Removed Links: {:?} -> {:?}", link.source, link.destination);
-                let _ = self.callback_tx.send(PipewireReceiver::ManagedLinkDropped(
-                    link.source,
-                    link.destination,
-                ));
-            }
-        }
-
         if let Some(id) = self.is_managed_link(id)
             && let Some(link) = self.managed_links.remove(&id)
         {
-            let _ = self.callback_tx.send(PipewireReceiver::ManagedLinkDropped(
-                link.source,
-                link.destination,
-            ));
+            debug!("Removed Links: {:?} -> {:?}", link.source, link.destination);
+            let msg = PipewireReceiver::ManagedLinkDropped(link.source, link.destination);
+            let _ = self.callback_tx.send(msg);
         }
 
         // This might be a port removal from an unmanaged node
