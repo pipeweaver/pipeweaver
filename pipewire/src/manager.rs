@@ -1,5 +1,5 @@
 use crate::registry::PipewireRegistry;
-use crate::store::{ManagedFilter, Store, create_port_link};
+use crate::store::{Store, create_port_link};
 use crate::{
     FilterHandler, FilterProperties, FilterProperty, FilterValue, LinkType, NodeProperties,
     NodeTarget, PipewireInternalMessage, PipewireReceiver,

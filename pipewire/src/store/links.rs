@@ -151,11 +151,6 @@ impl Store {
         Ok(group)
     }
 
-    pub fn remove_link(&mut self, source: LinkType, destination: LinkType) -> Result<()> {
-        self.managed_link_remove(&source, &destination);
-        Ok(())
-    }
-
     pub(crate) fn get_port(
         &mut self,
         link: &LinkType,
