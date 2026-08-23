@@ -61,7 +61,7 @@ export const store = reactive({
   },
 
   getProfile() {
-    return this.status.audio.profile
+    return this.status.audio.profile['classic']
   },
 
   getDevices() {

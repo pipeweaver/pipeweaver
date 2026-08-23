@@ -168,7 +168,7 @@ pub struct DaemonStatus {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AudioConfiguration {
-    pub profile: Profile,
+    pub profile: AudioProfile,
     pub devices: EnumMap<DeviceType, Vec<PhysicalDevice>>,
 
     // Default device assignments. The defaults field is legacy, and defaults_id should be used
@@ -179,6 +179,32 @@ pub struct AudioConfiguration {
 
     pub applications: EnumMap<DeviceType, HashMap<String, HashMap<String, Vec<Application>>>>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)]
+pub enum AudioProfile {
+    #[serde(rename = "link")]
+    Link(LinkProfile),
+
+    #[serde(rename = "classic")]
+    Classic(Profile),
+}
+
+impl Default for AudioProfile {
+    fn default() -> Self {
+        AudioProfile::Classic(Profile::default())
+    }
+}
+
+#[derive(Debug, Default, Copy, Clone, Serialize, Deserialize)]
+pub enum AudioMode {
+    Link,
+    #[default]
+    Classic,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct LinkProfile {}
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct DaemonConfig {
@@ -200,6 +226,8 @@ pub struct HttpSettings {
 pub struct GlobalSettings {
     #[serde(default)]
     pub use_browser: bool,
+    #[serde(default)]
+    pub audio_mode: AudioMode,
 }
 
 /// The API generally doesn't need to care about all the general minutia of how a Pipewire

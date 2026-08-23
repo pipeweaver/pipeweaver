@@ -15,14 +15,15 @@ use ini::Ini;
 use json_patch::diff;
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{
-    APICommand, AudioConfiguration, DaemonCommand, DaemonResponse, DaemonStatus, GlobalSettings,
-    PWCommandResponse,
+    APICommand, AudioConfiguration, AudioMode, AudioProfile, DaemonCommand, DaemonResponse,
+    DaemonStatus, GlobalSettings, LinkProfile, PWCommandResponse,
 };
 use pipeweaver_profile::Profile;
 use pipeweaver_shared::Quantum;
+use serde_json::Value;
 use std::collections::HashSet;
 use std::fs::{File, create_dir_all};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{env, fs};
@@ -69,7 +70,8 @@ impl PrimaryWorker {
         mut message_receiver: mpsc::Receiver<DaemonMessage>,
         config_path: PathBuf,
     ) {
-        let profile_path = config_path.join(format!("{}-profile.json", APP_NAME_ID));
+        //let profile_path = config_path.join(format!("{}-profile.json", APP_NAME_ID));
+        let profile_path = config_path;
         let mut first_run = true;
 
         'main: loop {
@@ -89,8 +91,9 @@ impl PrimaryWorker {
                 first_run = false;
             }
 
+            let mode = self.settings.read().await.audio_mode;
             info!("[PrimaryWorker] Starting Primary Worker");
-            let profile = self.load_profile(&profile_path);
+            let profile = self.load_profile(&profile_path, mode);
 
             // Used to pass messages into the Pipewire Manager
             let (command_sender, command_receiver) = mpsc::channel(32);
@@ -103,6 +106,11 @@ impl PrimaryWorker {
             let mut profile_tick = time::interval(Duration::from_secs(5));
 
             debug!("[PrimaryWorker] Spawning Pipewire Task..");
+            let AudioProfile::Classic(profile) = profile else {
+                error!("[PrimaryWorker] Failed to load profile");
+                return;
+            };
+
             let config = PipewireManagerConfig {
                 profile,
 
@@ -345,77 +353,89 @@ impl PrimaryWorker {
         self.last_status = Some(status);
     }
 
-    fn load_profile(&self, path: &PathBuf) -> Profile {
+    fn load_profile(&self, path: &Path, mode: AudioMode) -> AudioProfile {
+        let filename = match mode {
+            AudioMode::Link => format!("{}-link-profile.json", APP_NAME_ID),
+            AudioMode::Classic => format!("{}-profile.json", APP_NAME_ID),
+        };
+        let path = &path.join(filename);
+
         info!("[Profile] Loading from {:?}", path);
-        let mut profile = match File::open(path) {
-            Ok(reader) => {
-                let settings = serde_json::from_reader(reader);
-                settings.unwrap_or_else(|e| {
-                    warn!(
-                        "[Profile] Found, but unable to Load ({}), sending default",
-                        e
-                    );
-                    Profile::base_settings()
-                })
-            }
-            Err(_) => {
-                warn!("[Profile] Not Found, sending default");
-                Profile::base_settings()
-            }
+        let value: Option<Value> = match File::open(path) {
+            Ok(reader) => serde_json::from_reader(reader).unwrap_or(None),
+            Err(_) => None,
         };
 
-        // This section primarily fixes historical issues with the profile.
+        match mode {
+            AudioMode::Link => {
+                if let Some(value) = value {
+                    let link = serde_json::from_value(value).unwrap_or_else(|e| {
+                        warn!("[Profile] Failed to Load Profile ({}), sending default", e);
+                        LinkProfile::default()
+                    });
+                    AudioProfile::Link(link)
+                } else {
+                    AudioProfile::Link(LinkProfile::default())
+                }
+            }
+            AudioMode::Classic => {
+                if let Some(value) = value {
+                    let mut profile = serde_json::from_value(value).unwrap_or_else(|e| {
+                        warn!("[Profile] Failed to Load Profile ({}), sending default", e);
+                        Profile::default()
+                    });
 
-        // 1: Attached Physical Devices can be duplicated, clear duplicates.
-        for dev in &mut profile.devices.sources.physical_devices {
-            let mut seen = HashSet::new();
-            dev.attached_devices.retain(|i| seen.insert(i.clone()));
+                    // 1: Attached Physical Devices can be duplicated, clear duplicates.
+                    for dev in &mut profile.devices.sources.physical_devices {
+                        let mut seen = HashSet::new();
+                        dev.attached_devices.retain(|i| seen.insert(i.clone()));
+                    }
+
+                    for dev in &mut profile.devices.targets.physical_devices {
+                        let mut seen = HashSet::new();
+                        dev.attached_devices.retain(|i| seen.insert(i.clone()));
+                    }
+
+                    for dev in &mut profile.devices.targets.virtual_devices {
+                        let mut seen = HashSet::new();
+                        dev.attached_devices.retain(|i| seen.insert(i.clone()));
+                    }
+
+                    AudioProfile::Classic(profile)
+                } else {
+                    AudioProfile::Classic(Profile::default())
+                }
+            }
         }
-
-        for dev in &mut profile.devices.targets.physical_devices {
-            let mut seen = HashSet::new();
-            dev.attached_devices.retain(|i| seen.insert(i.clone()));
-        }
-
-        for dev in &mut profile.devices.targets.virtual_devices {
-            let mut seen = HashSet::new();
-            dev.attached_devices.retain(|i| seen.insert(i.clone()));
-        }
-
-        profile
     }
 
-    fn save_profile(&self, path: &PathBuf, profile: &Profile) -> Result<()> {
+    fn save_profile(&self, path: &Path, profile: &AudioProfile) -> Result<()> {
+        let filename = match profile {
+            AudioProfile::Link(_) => format!("{}-link-profile.json", APP_NAME_ID),
+            AudioProfile::Classic(_) => format!("{}-profile.json", APP_NAME_ID),
+        };
+
+        let path = &path.join(filename);
         info!("[Profile] Saving to {:?}", path);
 
         check_settings_path(path)?;
 
-        let mut tmp_file_name = path.to_path_buf();
+        // Ok, if there's an existing file, remove it
+        let mut tmp_file_name = path.clone();
         tmp_file_name.set_extension("tmp");
         if tmp_file_name.exists() {
-            debug!("Temporary file already exists? Removing.");
             fs::remove_file(&tmp_file_name)?;
         }
 
-        debug!(
-            "Creating Temporary Save File: {:?}",
-            tmp_file_name
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("UNKNOWN")
-        );
+        // Open the temp file, write the data, and sync it to disk..
         let temp_file = File::create(&tmp_file_name)?;
-        serde_json::to_writer_pretty(&temp_file, profile)?;
-
-        // Make sure the file is fully written before proceeding
+        let profile = match profile {
+            AudioProfile::Link(link) => serde_json::to_value(link),
+            AudioProfile::Classic(profile) => serde_json::to_value(profile),
+        }?;
+        serde_json::to_writer_pretty(&temp_file, &profile)?;
         temp_file.sync_all()?;
 
-        debug!(
-            "Save Complete and synced, renaming to {:?}",
-            path.file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("UNKNOWN")
-        );
         if path.exists() {
             fs::remove_file(path).unwrap_or_else(|e| {
                 warn!("Error Removing File: {}", e);

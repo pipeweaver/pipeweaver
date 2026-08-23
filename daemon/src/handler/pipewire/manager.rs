@@ -13,7 +13,8 @@ use crate::servers::http_server::MeterEvent;
 use enum_map::{EnumMap, enum_map};
 use log::{debug, error, info, warn};
 use pipeweaver_ipc::commands::{
-    Application, AudioConfiguration, PWCommandResponse, PhysicalDevice, PhysicalDevicePort,
+    Application, AudioConfiguration, AudioProfile, PWCommandResponse, PhysicalDevice,
+    PhysicalDevicePort,
 };
 use pipeweaver_pipewire::{
     ApplicationNode, DeviceNode, Direction, MediaClass, NodeTarget, PipewireMessage,
@@ -117,7 +118,7 @@ impl PipewireManager {
 
     async fn get_audio_config(&self) -> AudioConfiguration {
         AudioConfiguration {
-            profile: self.profile.clone(),
+            profile: AudioProfile::Classic(self.profile.clone()),
             devices: self.node_list.clone(),
             defaults: enum_map! {
                 DeviceType::Source => match &self.default_source {
