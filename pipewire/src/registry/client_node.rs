@@ -69,7 +69,7 @@ pub fn handle_client_node(
                                 if let Some(param_local) = param_local.upgrade() {
                                     param_local
                                         .borrow_mut()
-                                        .unmanaged_client_node_new_volume(id, volume);
+                                        .unmanaged_client_node_recv_volume(id, volume);
                                 }
                             }
 
@@ -80,7 +80,7 @@ pub fn handle_client_node(
                             {
                                 param_local
                                     .borrow_mut()
-                                    .unmanaged_client_node_new_mute_state(id, value);
+                                    .unmanaged_client_node_recv_mute(id, value);
                             }
                         }
                     }

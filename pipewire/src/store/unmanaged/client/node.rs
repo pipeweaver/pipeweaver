@@ -1,6 +1,8 @@
 use crate::registry::client_node::RegistryClientNode;
+use crate::registry::port::RegistryPort;
 use crate::store::{Store, TargetType};
-use crate::{NodeTarget, PipewireReceiver};
+use crate::{Direction, NodeTarget, PipewireReceiver};
+use anyhow::{Result, bail};
 use log::{debug, error, warn};
 use pipewire::node::NodeState;
 use std::mem::discriminant;
@@ -14,26 +16,51 @@ impl Store {
         self.unmanaged_client_nodes.get_mut(&id)
     }
 
-    pub fn unmanaged_client_node_set_volume(&mut self, id: u32, volume: u8) {
+    pub fn unmanaged_client_node_port_add(&mut self, id: u32, dir: Direction, port: RegistryPort) {
+        if let Some(node) = self.unmanaged_client_node_get(id) {
+            node.add_port(dir, port);
+            self.unmanaged_client_node_check(id);
+        }
+    }
+
+    // These are incoming from the User
+    pub fn set_application_volume(&mut self, id: u32, volume: u8) -> Result<()> {
+        let Some(node) = self.unmanaged_client_node_get(id) else {
+            bail!("Failed to find node");
+        };
+
+        node.set_volume(volume);
+        Ok(())
+    }
+    pub fn set_application_muted(&mut self, id: u32, muted: bool) -> Result<()> {
+        let Some(node) = self.unmanaged_client_node_get(id) else {
+            bail!("Failed to find node");
+        };
+
+        node.set_mute(muted);
+        Ok(())
+    }
+
+    // Received a Volume change from Pipewire
+    pub fn unmanaged_client_node_recv_volume(&mut self, id: u32, volume: u8) {
         if let Some(node) = self.unmanaged_client_node_get(id)
             && node.volume != volume
         {
             node.volume = volume;
 
-            let _ = self
-                .callback_tx
-                .send(PipewireReceiver::ApplicationVolumeChanged(id, volume));
+            let msg = PipewireReceiver::ApplicationVolumeChanged(id, volume);
+            let _ = self.callback_tx.send(msg);
         }
     }
 
-    // Naming here is terrible
-    pub fn unmanaged_client_node_set_mute(&mut self, id: u32, muted: bool) {
+    // Received a Mute state from Pipewire
+    pub fn unmanaged_client_node_recv_mute(&mut self, id: u32, muted: bool) {
         if let Some(node) = self.unmanaged_client_node_get(id) {
             if node.is_muted != muted {
                 node.is_muted = muted;
-                let _ = self
-                    .callback_tx
-                    .send(PipewireReceiver::ApplicationMuteChanged(id, muted));
+
+                let msg = PipewireReceiver::ApplicationMuteChanged(id, muted);
+                let _ = self.callback_tx.send(msg);
             }
         } else {
             error!("Failed to locate Application Node");
@@ -151,9 +178,8 @@ impl Store {
     pub fn unmanaged_client_node_remove(&mut self, id: u32) {
         // Need to flag upstream if the node has gone away
         if self.usable_client_nodes.contains(&id) {
-            let _ = self
-                .callback_tx
-                .send(PipewireReceiver::ApplicationRemoved(id));
+            let msg = PipewireReceiver::ApplicationRemoved(id);
+            let _ = self.callback_tx.send(msg);
             self.usable_client_nodes.retain(|v| v != &id);
         }
 
@@ -179,11 +205,10 @@ impl Store {
 
         if let Some(node) = self.unmanaged_client_nodes.get(&id)
             && let Some(parent) = self.unmanaged_clients.get(&node.parent_id)
-            && let Some(media_type) = node.is_usable_unmanaged_client_node(parent)
-            && !self.usable_client_nodes.contains(&id)
+            && let Some(media_type) = node.is_usable(parent)
         {
             self.usable_client_nodes.push(id);
-            let node = node.to_application_node(id, media_type, parent);
+            let node = node.to_node(id, media_type, parent);
 
             let message = PipewireReceiver::ApplicationAdded(node);
             let _ = self.callback_tx.send(message);
