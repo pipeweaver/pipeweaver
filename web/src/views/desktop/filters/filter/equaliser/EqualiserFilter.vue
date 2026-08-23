@@ -2,14 +2,20 @@
 import NumberInput from "@/views/desktop/filters/layout/inputs/NumberInput.vue";
 import Toggle from "@/views/desktop/filters/layout/inputs/Toggle.vue";
 import DropMenu from "@/views/desktop/filters/layout/inputs/DropMenu.vue";
-import VerticalSlider from "@/views/desktop/filters/layout/inputs/VerticalSlider.vue";
+import VerticalRange from "@/views/desktop/inputs/VerticalRange.vue";
 import FlowLayout from "@/views/desktop/filters/layout/FlowLayout.vue";
 import FlowItem from "@/views/desktop/filters/layout/FlowItem.vue";
 import Field from "@/views/desktop/filters/layout/Field.vue";
 import ActionBar from "@/views/desktop/filters/layout/ActionBar.vue";
 import ActionBarItem from "@/views/desktop/filters/layout/ActionBarItem.vue";
 import ModalOverlay from "@/views/desktop/components/ModalOverlay.vue";
-import {dbToLinear, getFilterConfig, linearToDb, setFilterValue} from "@/app/filters.js";
+import {
+  dbToLinear,
+  getFilterConfig,
+  linearToDb,
+  setFilterValue,
+  setFilterValues
+} from "@/app/filters.js";
 import {is_source} from "@/app/util.js";
 import {websocket} from "@/app/sockets.js";
 
@@ -22,7 +28,7 @@ export default {
     DropMenu,
     NumberInput,
     Toggle,
-    VerticalSlider,
+    VerticalRange,
     ActionBar,
     ActionBarItem,
     ModalOverlay
@@ -35,6 +41,7 @@ export default {
   data() {
     return {
       update_locked: false,
+      gainLocks: {},
 
       channel: 'left',
       menuBand: 0,
@@ -74,11 +81,19 @@ export default {
     },
 
     setParam(symbol, value) {
-      setFilterValue(this.filterId, symbol, value);
+      return setFilterValue(this.filterId, symbol, value);
+    },
+
+    // Batched form of setParam - takes an array of {symbol, value} pairs and
+    // sends them as a single SetFilterValues command, instead of one
+    // SetFilterValue round-trip per param.
+    setValues(pairs) {
+      if (pairs.length === 0) return Promise.resolve();
+      return setFilterValues(this.filterId, pairs);
     },
 
     setDbParam(symbol, value) {
-      this.setParam(symbol, dbToLinear(value));
+      return this.setParam(symbol, dbToLinear(value));
     },
 
     getDb(symbol) {
@@ -102,8 +117,26 @@ export default {
     },
 
     setBandDbParam(field, index, value) {
-      this.setDbParam(this.bandSymbol(field, index), value);
+      const promise = this.setDbParam(this.bandSymbol(field, index), value);
       this.mirrorBandToRight(field, index);
+      return promise;
+    },
+
+    bandGainDrag(index, e) {
+      if (this.gainLocks[index]) return;
+      this.commitBandGain(index, e);
+    },
+
+    bandGainCommit(index, e) {
+      this.commitBandGain(index, e);
+    },
+
+    commitBandGain(index, e) {
+      this.gainLocks = {...this.gainLocks, [index]: true};
+      const value = parseFloat(e.target.value);
+      Promise.resolve(this.setBandDbParam('gain', index, value)).then(() => {
+        this.gainLocks = {...this.gainLocks, [index]: false};
+      });
     },
 
     mirrorBandToRight(field, index) {
@@ -116,15 +149,17 @@ export default {
 
     syncAllBandsToRight() {
       const fields = ['type', 'mode', 'slope', 'solo', 'mute', 'freq', 'q', 'width', 'gain'];
+      const updates = [];
       for (const index of this.bandIndices) {
         for (const field of fields) {
           const leftSymbol = `${this.prefix.left[field]}_${index}`;
           const rightSymbol = `${this.prefix.right[field]}_${index}`;
           const leftValue = this.getRawValue(leftSymbol);
-          if (this.getRawValue(rightSymbol) === leftValue) continue;
-          this.setParam(rightSymbol, leftValue);
+          if (this.getRawValue(rightSymbol) === leftValue) continue; // already in sync
+          updates.push({symbol: rightSymbol, value: leftValue});
         }
       }
+      return this.setValues(updates);
     },
 
     toggleLinkChannels() {
@@ -217,10 +252,12 @@ export default {
     },
 
     flatResponse() {
+      const updates = [];
       for (const i of this.bandIndices) {
-        this.setDbParam(`gl_${i}`, 0);
-        this.setDbParam(`gr_${i}`, 0);
+        updates.push({symbol: `${this.prefix.left.gain}_${i}`, value: dbToLinear(0)});
+        updates.push({symbol: `${this.prefix.right.gain}_${i}`, value: dbToLinear(0)});
       }
+      return this.setValues(updates);
     },
   }
 }
@@ -278,9 +315,14 @@ export default {
         <div class="band-freq">{{ formattedFreq(index) }}</div>
         <div class="band-q">Q {{ getParam(bandSymbol('q', index)).value.Float32.toFixed(2) }}</div>
 
-        <VerticalSlider :min="-36" :max="36" :step="0.01"
-                        :value="getDb(bandSymbol('gain', index))"
-                        @input="setBandDbParam('gain', index, $event)"/>
+        <div class="band-gain-slider">
+          <VerticalRange :min-value="-36" :max-value="36" :step="0.01"
+                         :current-value="getDb(bandSymbol('gain', index))"
+                         :meter="false"
+                         :aria-label="`Band ${index + 1} gain`"
+                         @input="e => bandGainDrag(index, e)"
+                         @change="e => bandGainCommit(index, e)"/>
+        </div>
 
         <div class="band-gain-value">{{ getDb(bandSymbol('gain', index)).toFixed(2) }}</div>
       </div>
@@ -458,6 +500,15 @@ export default {
   white-space: nowrap;
 }
 
+.band-gain-slider {
+  width: 28px;
+  flex: 1;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .band-gain-value {
   font-weight: 600;
   opacity: 1;
@@ -487,4 +538,3 @@ export default {
   min-width: 0;
 }
 </style>
-
