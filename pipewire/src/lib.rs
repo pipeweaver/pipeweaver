@@ -36,7 +36,7 @@ pub enum PipewireMessage {
 
     GetFilterParameters(Ulid, oneshot::Sender<Result<Vec<FilterProperty>>>),
     SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<String>>),
-    SetFilterValues(Ulid, Vec<(u32, FilterValue)>, oneshot::Sender<Result<()>>),
+    SetFilterValues(Ulid, Vec<(u32, FilterValue)>),
 
     SetNodeVolume(Ulid, u8),
     SetNodeMute(Ulid, bool),
@@ -212,7 +212,7 @@ impl PipewireRunner {
             PipewireMessage::SetFilterValue(id, prop, value, tx) => {
                 PipewireInternalMessage::SetFilterValue(id, prop, value, tx)
             }
-            PipewireMessage::SetFilterValues(id, values, tx) => {
+            PipewireMessage::SetFilterValues(id, values) => {
                 PipewireInternalMessage::SetFilterValues(id, values, tx)
             }
             PipewireMessage::SetNodeVolume(id, volume) => {

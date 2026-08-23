@@ -858,12 +858,12 @@ impl FilterManagement for PipewireManager {
     }
 
     async fn filter_set_values(&mut self, filter: Ulid, values: Vec<FilterValueSet>) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
+        debug!("Setting filter values: {filter} {values:?}");
         let forward = values.iter().map(|f| (f.id, f.value.clone())).collect();
 
-        let message = PipewireMessage::SetFilterValues(filter, forward, tx);
+        debug!("Sending to Pipewire");
+        let message = PipewireMessage::SetFilterValues(filter, forward);
         self.pipewire().send_message(message)?;
-        rx.recv()??;
 
         // Ok, we'll update the filter config first
         let mut filter_updates = Vec::with_capacity(values.len());
