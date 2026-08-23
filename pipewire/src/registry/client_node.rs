@@ -69,7 +69,7 @@ pub fn handle_client_node(
                                 if let Some(param_local) = param_local.upgrade() {
                                     param_local
                                         .borrow_mut()
-                                        .unmanaged_client_node_set_volume(id, volume);
+                                        .unmanaged_client_node_new_volume(id, volume);
                                 }
                             }
 
@@ -80,7 +80,7 @@ pub fn handle_client_node(
                             {
                                 param_local
                                     .borrow_mut()
-                                    .unmanaged_client_node_set_mute(id, value);
+                                    .unmanaged_client_node_new_mute_state(id, value);
                             }
                         }
                     }
@@ -219,11 +219,23 @@ impl TryFrom<&DictRef> for RegistryClientNode {
 }
 
 impl RegistryClientNode {
-    pub(crate) fn add_port(&mut self, id: u32, direction: Direction, port: RegistryPort) {
-        self.ports[direction].insert(id, port);
+    pub(crate) fn add_port(&mut self, direction: Direction, port: RegistryPort) {
+        self.ports[direction].insert(port.global_id, port);
     }
 
-    pub(crate) fn is_usable_unmanaged_client_node(&self, parent: &RegistryClient) -> Option<MediaClass> {
+    pub(crate) fn set_volume(&self, volume: u8) {
+        if let Some(proxy) = &self.proxy {
+            crate::store::utils::send_volume(proxy, volume);
+        }
+    }
+
+    pub(crate) fn set_mute(&self, muted: bool) {
+        if let Some(proxy) = &self.proxy {
+            crate::store::utils::send_mute(proxy, muted);
+        }
+    }
+
+    pub(crate) fn is_usable(&self, parent: &RegistryClient) -> Option<MediaClass> {
         if self.node_name.is_empty()
             || self.application_name.is_empty()
             || self.is_running.is_none()
@@ -250,15 +262,15 @@ impl RegistryClientNode {
         get_media_class(in_count, out_count)
     }
 
-    pub(crate) fn to_application_node(
+    pub(crate) fn to_node(
         &self,
         id: u32,
-        node_class: MediaClass,
+        class: MediaClass,
         parent: &RegistryClient,
     ) -> ApplicationNode {
         ApplicationNode {
             node_id: id,
-            node_class,
+            node_class: class,
             media_target: self.media_target,
 
             volume: self.volume,
