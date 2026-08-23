@@ -383,7 +383,7 @@ impl PipewireManager {
 
                             // Create the 'Status' object
                             let physical_node = PhysicalDevice {
-                                id: Ulid::new(),
+                                id: Ulid::generate(),
 
                                 node_id: node.node_id,
                                 name: node.name.clone(),
@@ -498,7 +498,7 @@ impl PipewireManager {
 
                                 // Create physical node for attachment
                                 let physical_node = PhysicalDevice {
-                                    id: Ulid::new(),
+                                    id: Ulid::generate(),
 
                                     node_id: id,
                                     name: dev.name.clone(),

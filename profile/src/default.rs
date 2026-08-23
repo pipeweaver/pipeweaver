@@ -10,11 +10,11 @@ use ulid::Ulid;
 
 impl Profile {
     pub fn base_settings() -> Self {
-        let mic_id = Ulid::new();
-        let system_id = Ulid::new();
-        let browser_id = Ulid::new();
-        let headphones_id = Ulid::new();
-        let chat_mic_id = Ulid::new();
+        let mic_id = Ulid::generate();
+        let system_id = Ulid::generate();
+        let browser_id = Ulid::generate();
+        let headphones_id = Ulid::generate();
+        let chat_mic_id = Ulid::generate();
 
         Self {
             devices: Devices {

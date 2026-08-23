@@ -1,12 +1,14 @@
+use crate::registry::client::RegistryClient;
 use crate::registry::port::RegistryPort;
 use crate::store::Store;
-use crate::{Direction, NodeTarget};
+use crate::store::utils::get_media_class;
+use crate::{ApplicationNode, Direction, MediaClass, NodeTarget};
 use anyhow::anyhow;
 use enum_map::EnumMap;
 use pipewire::keys::{CLIENT_ID, MEDIA_CLASS, MEDIA_NAME, NODE_NAME, OBJECT_SERIAL};
 use pipewire::metadata::Metadata;
 use pipewire::node::{Node, NodeChangeMask, NodeListener};
-use pipewire::registry::{GlobalObject, Registry};
+use pipewire::registry::{GlobalObject, RegistryRc};
 use pipewire::spa::param::ParamType;
 use pipewire::spa::pod::Value::Bool;
 use pipewire::spa::pod::deserialize::PodDeserializer;
@@ -16,12 +18,12 @@ use pipewire::spa::utils::dict::DictRef;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::rc::{Rc, Weak};
+use std::rc::Weak;
 
 pub fn handle_client_node(
     id: u32,
     global: &GlobalObject<&DictRef>,
-    registry: Rc<RefCell<Registry>>,
+    registry: RegistryRc,
     store: &mut Store,
     listener_store: Weak<RefCell<Store>>,
 ) {
@@ -29,7 +31,7 @@ pub fn handle_client_node(
         && let Ok(mut node) = RegistryClientNode::try_from(props)
         && let Some(client) = store.unmanaged_client_get(node.parent_id)
     {
-        let bound: Option<Node> = registry.borrow().bind(global).ok();
+        let bound: Option<Node> = registry.bind(global).ok();
         if let Some(proxy) = bound {
             let param_local = listener_store.clone();
             let info_local = listener_store.clone();
@@ -67,7 +69,7 @@ pub fn handle_client_node(
                                 if let Some(param_local) = param_local.upgrade() {
                                     param_local
                                         .borrow_mut()
-                                        .unmanaged_client_node_set_volume(id, volume);
+                                        .unmanaged_client_node_recv_volume(id, volume);
                                 }
                             }
 
@@ -78,7 +80,7 @@ pub fn handle_client_node(
                             {
                                 param_local
                                     .borrow_mut()
-                                    .unmanaged_client_node_set_mute(id, value);
+                                    .unmanaged_client_node_recv_mute(id, value);
                             }
                         }
                     }
@@ -217,7 +219,69 @@ impl TryFrom<&DictRef> for RegistryClientNode {
 }
 
 impl RegistryClientNode {
-    pub(crate) fn add_port(&mut self, id: u32, direction: Direction, port: RegistryPort) {
-        self.ports[direction].insert(id, port);
+    pub(crate) fn add_port(&mut self, direction: Direction, port: RegistryPort) {
+        self.ports[direction].insert(port.global_id, port);
+    }
+
+    pub(crate) fn set_volume(&self, volume: u8) {
+        if let Some(proxy) = &self.proxy {
+            crate::store::utils::send_volume(proxy, volume);
+        }
+    }
+
+    pub(crate) fn set_mute(&self, muted: bool) {
+        if let Some(proxy) = &self.proxy {
+            crate::store::utils::send_mute(proxy, muted);
+        }
+    }
+
+    pub(crate) fn is_usable(&self, parent: &RegistryClient) -> Option<MediaClass> {
+        if self.node_name.is_empty()
+            || self.application_name.is_empty()
+            || self.is_running.is_none()
+            || self.is_running == Some(false)
+        {
+            return None;
+        }
+
+        // We need the parent to have an application binary
+        parent.application_binary.as_ref()?;
+
+        let mut in_count = 0;
+        let mut out_count = 0;
+        for (direction, ports) in &self.ports {
+            let count = ports.values().filter(|port| !port.is_monitor).count();
+
+            match direction {
+                Direction::In => in_count += count,
+                Direction::Out => out_count += count,
+            }
+        }
+
+        // Return the Specific MediaClass based on Channel Count
+        get_media_class(in_count, out_count)
+    }
+
+    pub(crate) fn to_node(
+        &self,
+        id: u32,
+        class: MediaClass,
+        parent: &RegistryClient,
+    ) -> ApplicationNode {
+        ApplicationNode {
+            node_id: id,
+            node_class: class,
+            media_target: self.media_target,
+
+            volume: self.volume,
+            muted: self.is_muted,
+
+            title: self.media_title.clone(),
+
+            name: self.application_name.clone(),
+
+            // We can safely panic! here, is_usable_unamanged_client_node checks this.
+            process_name: parent.application_binary.clone().expect("NO BINARY"),
+        }
     }
 }

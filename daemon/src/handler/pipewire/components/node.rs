@@ -95,7 +95,7 @@ impl NodeManagement for PipewireManager {
         }
 
         // This is relatively simple, firstly generate the ID, and build the description
-        let id = Ulid::new();
+        let id = Ulid::generate();
         let description = DeviceDescription {
             id,
             name: name.clone(),
@@ -710,7 +710,7 @@ impl NodeManagementLocal for PipewireManager {
 
         // We'll re-iterate the routes and make sure our node is removed from the Profile
         if profile_remove {
-            for (_, target) in self.profile.routes.iter_mut() {
+            for target in self.profile.routes.values_mut() {
                 if target.contains(&id) {
                     target.retain(|target_id| target_id != &id);
                 }

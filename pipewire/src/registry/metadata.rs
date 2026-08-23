@@ -1,14 +1,14 @@
 use crate::default_device::DefaultDefinition;
 use crate::store::{Store, TargetType};
 use pipewire::metadata::{Metadata, MetadataListener};
-use pipewire::registry::{GlobalObject, Registry};
+use pipewire::registry::{GlobalObject, RegistryRc};
 use pipewire::spa::utils::dict::DictRef;
 use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use std::rc::Weak;
 
 pub fn handle_metadata(
     global: &GlobalObject<&DictRef>,
-    registry: Rc<RefCell<Registry>>,
+    registry: RegistryRc,
     store: &mut Store,
     listener_store: Weak<RefCell<Store>>,
 ) {
@@ -16,7 +16,7 @@ pub fn handle_metadata(
         && let Some(name) = props.get("metadata.name")
     {
         if name == "default" {
-            let proxy: Option<Metadata> = registry.borrow().bind(global).ok();
+            let proxy: Option<Metadata> = registry.bind(global).ok();
             if let Some(metadata) = proxy {
                 let listen_store = listener_store.clone();
                 let listener = metadata
@@ -98,7 +98,7 @@ pub fn handle_metadata(
                 store.set_session_proxy(session);
             }
         } else if name == "settings" {
-            let proxy: Option<Metadata> = registry.borrow().bind(global).ok();
+            let proxy: Option<Metadata> = registry.bind(global).ok();
             if let Some(metadata) = proxy {
                 let listen_store = listener_store.clone();
                 let listener = metadata

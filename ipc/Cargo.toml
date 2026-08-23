@@ -7,24 +7,46 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+default = ["async", "ipc", "ipc-tokio"]
+
+# Runtime style. Controls maybe_async's is_sync toggle and which reqwest client the
+# web client uses. Does NOT by itself pull in anything IPC/tokio related, so `async`
+# alone is safe to build on wasm32 (reqwest talks to the browser's fetch API there).
+sync = ["maybe-async/is_sync", "reqwest/blocking"]
+async = ["dep:async-trait"]
+
+# Local-socket IPC transport. Meaningless on wasm32 (no filesystem, no unix sockets/
+# named pipes) so it's opt-out-able independently of `async`/`sync`.
+ipc = ["dep:interprocess"]
+
+# ipc's async backend specifically. Split out from `async` because this is the one
+# that actually pulls in tokio's "net" feature via interprocess/tokio, which is what
+# breaks wasm32 builds. Enable this alongside `ipc` + `async` on native targets; leave
+# it off (along with `ipc`) for wasm.
+ipc-tokio = ["ipc", "async", "interprocess/tokio", "dep:tokio-util", "dep:tokio-serde", "dep:futures"]
+
 [dependencies]
 # Local Dependencies
 pipeweaver-shared = { path = "../shared" }
 pipeweaver-profile = { path = "../profile" }
 
 ### Inherited Dependencies ###
+serde_json = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
 json-patch = { workspace = true }
-interprocess = { workspace = true }
+interprocess = { workspace = true, optional = true }
 ulid = { workspace = true }
 
 enum-map = { workspace = true }
 
-async-trait = "0.1.89"
-futures = "0.3.32"
-tokio-util = { version = "0.7.18", features = ["codec", "compat"] }
-tokio-serde = { version = "0.9.0", features = ["bincode", "json"] }
+maybe-async = "0.2"
+async-trait = { version = "0.1", optional = true }
+futures = { version = "0.3", optional = true }
+tokio-util = { version = "0.7", optional = true, features = ["codec", "compat"] }
+tokio-serde = { version = "0.9", optional = true, features = ["bincode", "json"] }
 
-# Used for Web Requests
-reqwest = { version = "0.13.4", default-features = false, features = ["json"] }
+# Used for Web Requests. Async client works on wasm32 out of the box (uses fetch());
+# `blocking` is native-only and only pulled in by the `sync` feature above.
+reqwest = { version = "0.13", default-features = false, features = ["json"] }

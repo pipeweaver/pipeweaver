@@ -1,9 +1,10 @@
 use crate::client::Client;
-use crate::clients::ipc::IPCClient;
+use crate::clients::ipc::{IPCClient, Socket};
 use crate::commands::{DaemonRequest, DaemonResponse, DaemonStatus};
 use anyhow::{Context, Result, anyhow};
+use async_trait::async_trait;
 
-#[maybe_async::maybe_async(?Send)]
+#[async_trait]
 impl Client for IPCClient {
     async fn send(&mut self, request: &DaemonRequest) -> Result<DaemonResponse> {
         self.socket

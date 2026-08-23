@@ -40,16 +40,13 @@ pub fn handle_port(id: u32, global: &GlobalObject<&DictRef>, store: &mut Store) 
         let port = RegistryPort::new(id, name, channel, is_monitor);
 
         if let Some(node_id) = node_id.and_then(|s| s.parse::<u32>().ok())
-            && let Some(port_id) = pid.and_then(|s| s.parse::<u32>().ok())
+            && pid.and_then(|s| s.parse::<u32>().ok()).is_some()
         {
             if store.unmanaged_device_node_get(node_id).is_some() {
                 store.unmanaged_node_port_add(node_id, direction, port);
                 return;
             }
-            if let Some(node) = store.unmanaged_client_node_get(node_id) {
-                node.add_port(port_id, direction, port);
-                store.unmanaged_client_node_check(node_id);
-            }
+            store.unmanaged_client_node_port_add(node_id, direction, port);
         }
     }
 }

@@ -24,6 +24,10 @@ jobs:
       - name: Install cargo-deb and cargo-generate-rpm
         run: cargo install --force cargo-deb cargo-generate-rpm
 
+      - name: "Grab Flatpak Ref"
+        run: |
+          curl -L https://raw.githubusercontent.com/pipeweaver/pipeweaver-repo/main/repo/flatpak/pipeweaver.flatpakref -o pipeweaver.flatpakref
+
       - name: "Build Packages"
         run: ./.github/ci/build-packages
         shell: bash
@@ -45,3 +49,9 @@ jobs:
         with:
           name: binary-artifact
           path: ./pipeweaver.zip
+
+      - name: "Upload Flatpak Ref"
+        uses: actions/upload-artifact@v5
+        with:
+          name: flatpak-artifact
+          path: ./pipeweaver.flatpakref

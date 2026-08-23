@@ -53,7 +53,7 @@ pub(crate) trait FilterManagement {
 
 impl FilterManagement for PipewireManager {
     async fn filter_pass_create(&mut self, name: String) -> Result<Ulid> {
-        let id = Ulid::new();
+        let id = Ulid::generate();
         self.filter_pass_create_id(name, id).await?;
 
         Ok(id)
@@ -64,7 +64,7 @@ impl FilterManagement for PipewireManager {
     }
 
     async fn filter_volume_create(&mut self, name: String) -> Result<Ulid> {
-        let id = Ulid::new();
+        let id = Ulid::generate();
         self.filter_volume_create_id(name, id).await?;
 
         Ok(id)
@@ -75,7 +75,7 @@ impl FilterManagement for PipewireManager {
     }
 
     async fn filter_meter_create(&mut self, node: Ulid, name: String) -> Result<Ulid> {
-        let id = Ulid::new();
+        let id = Ulid::generate();
         self.filter_meter_create_id(node, name, id).await?;
 
         Ok(id)

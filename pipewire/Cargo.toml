@@ -16,8 +16,8 @@ log = { workspace = true }
 # We need the shared structure so we can handle filter values
 pipeweaver-shared = { path = "../shared" }
 
-pipewire = { git = "https://gitlab.freedesktop.org/FrostyCoolSlug/pipewire-rs.git", features = ["v0_3_45"] }
-oneshot = { version = "0.2.1", features = ["std", "async"] }
+pipewire = { git = "https://github.com/FrostyCoolSlug/pipewire-rs.git", features = ["v0_3_45"] }
+oneshot = { version = "0.2", features = ["std", "async"] }
 
 enum-map = { workspace = true }
 strum = { workspace = true }
@@ -26,4 +26,4 @@ strum_macros = { workspace = true }
 # Needed for (de)serialization of Pipewire structs
 serde_json = { workspace = true }
 
-parking_lot = "0.12.5"
+parking_lot = "0.12"

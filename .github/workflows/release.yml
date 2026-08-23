@@ -42,4 +42,4 @@ jobs:
           files: |
             ./debian-artifact/pipeweaver_${{ needs.get_version.outputs.version }}-1_amd64.deb
             ./rpm-artifact/pipeweaver-${{ needs.get_version.outputs.version }}-1.x86_64.rpm
-#            ./flatpak-artifact/beacn-utility.flatpakref
+            ./flatpak-artifact/pipeweaver.flatpakref

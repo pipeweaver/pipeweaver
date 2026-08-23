@@ -17,8 +17,6 @@ serde_json = { workspace = true }
 ### Project Paths
 directories = { workspace = true }
 
-interprocess = { workspace = true }
-
 pipeweaver-shared = { path = "../shared", features = ["clap", "strum"] }
 pipeweaver-ipc = { path = "../ipc" }
 
