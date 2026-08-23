@@ -29,6 +29,7 @@ mod unmanaged;
 
 pub(crate) mod utils;
 
+pub(crate) use links::create_port_link;
 pub(crate) use types::TargetType;
 pub use types::{ManagedFilter, ManagedLink, ManagedLinkMap, NodeStoreState, PendingLinkSync};
 pub(crate) use types::{ManagedNode, PortLocation};
