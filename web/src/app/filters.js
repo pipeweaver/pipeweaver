@@ -31,6 +31,25 @@ export function setFilterValue(filterId, paramName, value) {
   websocket.send_command({"SetFilterValue": [filterId, id, send_value]});
 }
 
+export function setFilterValues(filterId, values) {
+  // For situations where we need to send more than one command at a time, expected
+  // format:
+  //
+  // "SetFilterValues":
+  //   [
+  //     filterId,
+  //     [
+  //       {
+  //         "id": 0,
+  //         "value": send_value (above)
+  //       },
+  //       ..
+  //     ]
+  //   ]
+  //
+
+}
+
 export function getFilterConfig(filterId) {
   return store.getAudio().filter_config[filterId];
 }
