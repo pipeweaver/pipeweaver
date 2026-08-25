@@ -92,8 +92,10 @@ export default {
 .add-filter-modal {
   display: flex;
   flex-direction: column;
+  overflow: scroll;
   height: 100%;
   min-height: 0;
+  max-height: 70vh;
 }
 
 .filter-search {
@@ -127,7 +129,7 @@ export default {
   text-align: left;
 
   background-color: #293a4f;
-  //background: #252a29;
+  /*background: #252a29*/;
   color: white;
 
   border: var(--border);
