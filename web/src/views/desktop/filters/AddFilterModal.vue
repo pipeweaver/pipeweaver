@@ -92,7 +92,6 @@ export default {
 .add-filter-modal {
   display: flex;
   flex-direction: column;
-  overflow: scroll;
   height: 100%;
   min-height: 0;
   max-height: 70vh;
