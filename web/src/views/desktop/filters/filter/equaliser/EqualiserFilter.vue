@@ -44,6 +44,8 @@ export default {
       channel: 'left',
       menuBand: 0,
       bandIndices: Array.from({length: 32}, (_, i) => i),
+
+      visibleBandCount: 8,
       prefix: {
         left: {
           type: 'ftl',
@@ -69,6 +71,24 @@ export default {
         },
       },
     };
+  },
+
+  created() {
+    // Minimum of 8 bands, work backwards from 32 to find highest active band
+    const minimum = this.visibleBandCount;
+    let highestActive = -1;
+    for (const index of this.bandIndices) {
+      const leftType = this.getParam(`${this.prefix.left.type}_${index}`)?.value?.Int32;
+      const rightType = this.getParam(`${this.prefix.right.type}_${index}`)?.value?.Int32;
+      if (leftType || rightType) highestActive = index;
+    }
+    this.visibleBandCount = Math.max(minimum, highestActive + 1);
+  },
+
+  computed: {
+    visibleBandIndices() {
+      return this.bandIndices.slice(0, this.visibleBandCount);
+    },
   },
 
   methods: {
@@ -255,6 +275,34 @@ export default {
       }
       return this.setValues(updates);
     },
+
+    canAddBand() {
+      return this.visibleBandCount < this.bandIndices.length;
+    },
+
+    canRemoveBand() {
+      return this.visibleBandCount > 1;
+    },
+
+    addBand() {
+      if (!this.canAddBand()) return;
+      this.visibleBandCount += 1;
+    },
+
+    removeBand() {
+      if (!this.canRemoveBand()) return;
+      const index = this.visibleBandCount - 1;
+      this.visibleBandCount -= 1;
+
+      // Force the band we just hid to 'Off' on BOTH channels - regardless
+      // of which tab is currently selected, or whether they're linked -
+      // so nothing keeps running silently off-screen on either side.
+      this.setValues([
+        {symbol: `${this.prefix.left.type}_${index}`, value: '0'},
+        {symbol: `${this.prefix.right.type}_${index}`, value: '0'},
+      ]);
+    },
+
   }
 }
 </script>
@@ -300,7 +348,7 @@ export default {
     </div>
 
     <div class="bands-scroll">
-      <div class="band-strip" v-for="index in bandIndices" :key="index"
+      <div class="band-strip" v-for="index in visibleBandIndices" :key="index"
            :class="{off: getParam(bandSymbol('type', index)).value.Int32 === 0}">
         <div class="band-index">{{ index + 1 }}</div>
 
@@ -312,7 +360,7 @@ export default {
         <div class="band-q">Q {{ getParam(bandSymbol('q', index)).value.Float32.toFixed(2) }}</div>
 
         <div class="band-gain-slider">
-          <VerticalRange :min-value="-36" :max-value="20" :step="0.01"
+          <VerticalRange :min-value="-36" :max-value="36" :step="0.01"
                          :current-value="getDb(bandSymbol('gain', index))"
                          :meter="false"
                          :aria-label="`Band ${index + 1} gain`"
@@ -328,6 +376,14 @@ export default {
       <ActionBarItem label="Link Channels" :active="getParam('clink').value.Bool"
                      @click="toggleLinkChannels"/>
       <ActionBarItem label="Flat Response" :toggle="false" @click="flatResponse"/>
+
+      <ActionBarItem label="−" :toggle="false" :disabled="!canRemoveBand()"
+                     @click="removeBand"/>
+      <span class="band-count">{{ visibleBandCount }} band{{
+          visibleBandCount === 1 ? '' : 's'
+        }}</span>
+      <ActionBarItem label="+" :toggle="false" :disabled="!canAddBand()"
+                     @click="addBand"/>
     </ActionBar>
 
     <ModalOverlay ref="bandModal" id="equaliserBandModal" width="360px">
@@ -445,6 +501,13 @@ export default {
   padding-bottom: 8px;
 }
 
+.band-count {
+  font-size: 0.9em;
+  opacity: 0.75;
+  min-width: 5.5em;
+  text-align: center;
+}
+
 .band-strip {
   box-sizing: border-box;
   display: flex;
@@ -521,16 +584,4 @@ export default {
   box-sizing: border-box;
 }
 
-.band-modal-footer {
-  display: flex;
-  flex-direction: row;
-  gap: 8px;
-  width: 100%;
-  padding: 10px 20px;
-}
-
-.band-modal-footer .field {
-  flex: 1;
-  min-width: 0;
-}
 </style>
