@@ -69,10 +69,6 @@ export default {
   },
 
   computed: {
-    filterState() {
-      return this.getFilterState(this.filterId);
-    },
-
     pluginName() {
       const config = store.getAudio().filter_config[this.filterId];
       return config?.name || 'Unknown Plugin';
