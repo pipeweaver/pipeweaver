@@ -311,9 +311,7 @@ export default {
   <div class="equaliser-root">
     <FlowLayout>
       <!-- Card: Equalizer global controls -->
-      <FlowItem width="200px">
-        <div class="title">Equalizer</div>
-
+      <FlowItem width="200px" title="Equalizer">
         <Field label="Mode">
           <DropMenu :values="modeOptions()" :selected="`${getParam('mode').value.Int32}`"
                     @valueClicked="setParam('mode', $event)"/>
@@ -462,12 +460,6 @@ export default {
 
 .equaliser-root > .flow-layout {
   flex: 0 0 auto;
-}
-
-.title {
-  font-size: 1.1em;
-  font-weight: 600;
-  margin-bottom: 0.6em;
 }
 
 .channel-tabs {

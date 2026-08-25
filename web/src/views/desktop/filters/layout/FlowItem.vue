@@ -1,6 +1,9 @@
 <template>
   <div class="flow-item" :style="styleObject">
-    <slot/>
+    <div class="title" v-if="title">{{ title }}</div>
+    <div class="content">
+      <slot/>
+    </div>
   </div>
 </template>
 
@@ -9,18 +12,10 @@ export default {
   name: "FlowItem",
 
   props: {
-    width: {
-      type: String,
-      default: "auto"
-    },
-    minWidth: {
-      type: String,
-      default: "auto"
-    },
-    maxWidth: {
-      type: String,
-      default: "none"
-    }
+    title: {type: String, optional: true},
+    width: {type: String, default: "auto"},
+    minWidth: {type: String, default: "auto"},
+    maxWidth: {type: String, default: "none"}
   },
 
   computed: {
@@ -38,14 +33,25 @@ export default {
 <style scoped>
 .flow-item {
   box-sizing: border-box;
-  border: 1px solid #ccc;
-  padding: 15px;
+  border: 1px solid var(--border-subtle-colour);
   border-radius: 10px;
-  background-color: #222222;
+  background-color: var(--bg);
+  overflow: hidden;
 
   display: flex;
   flex-direction: column;
   align-self: stretch;
+}
+
+.flow-item .title {
+  padding: 10px;
+  font-weight: bold;
+  background-color: var(--panel);
+  border-bottom: 1px solid var(--border-subtle-colour);
+}
+
+.flow-item .content {
+  padding: 15px;
 }
 
 </style>

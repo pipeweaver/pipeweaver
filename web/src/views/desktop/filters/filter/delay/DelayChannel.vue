@@ -48,8 +48,6 @@ export default {
 
 <template>
   <div class="top">
-    <div class="title">{{ channel === 'l' ? 'Left' : 'Right' }}</div>
-
     <div>
       <div>Mode</div>
       <DropMenu :values="getModes()" :selected="`${activeMode}`"
@@ -111,11 +109,6 @@ export default {
 </template>
 
 <style scoped>
-.title {
-  font-size: 1.2em;
-  margin-bottom: 0.5em;
-}
-
 .split {
   display: flex;
   flex-direction: row;

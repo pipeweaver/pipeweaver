@@ -28,9 +28,7 @@ export default {
 <template>
   <div style="padding: 10px">
     <FlowLayout>
-      <FlowItem width="200px">
-        <div class="title">Controls</div>
-
+      <FlowItem width="200px" title="Controls">
         <Field label="Release">
           <NumberInput :min="getParam('rel').min" :max="getParam('rel').max" :step="0.01"
                        suffix="ms"
@@ -49,9 +47,4 @@ export default {
 </template>
 
 <style scoped>
-.title {
-  font-size: 1.1em;
-  font-weight: 600;
-  margin-bottom: 0.6em;
-}
 </style>

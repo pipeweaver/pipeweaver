@@ -109,9 +109,7 @@ export default {
   <div style="padding: 10px">
     <FlowLayout>
       <!-- Card: Mode -->
-      <FlowItem width="200px">
-        <div class="title">Mode</div>
-
+      <FlowItem width="200px" title="Mode">
         <Field label="Mode">
           <DropMenu :values="modeOptions()" :selected="`${getParam('mode').value.Int32}`"
                     @valueClicked="setParam('mode', $event)"/>
@@ -127,9 +125,7 @@ export default {
       </FlowItem>
 
       <!-- Card: Limiter -->
-      <FlowItem width="180px">
-        <div class="title">Limiter</div>
-
+      <FlowItem width="180px" title="Limiter">
         <Field label="Threshold">
           <NumberInput :min="-48" :max="0" :step="0.1" suffix="dB"
                        :value="getDb('th')" @input="setDbParam('th', $event)" :allow-empty="false"/>
@@ -153,9 +149,7 @@ export default {
       </FlowItem>
 
       <!-- Card: Sidechain -->
-      <FlowItem width="180px">
-        <div class="title">Sidechain</div>
-
+      <FlowItem width="180px" title="Sidechain">
         <div class="fields-grid">
           <Field label="Input" full>
             <DropMenu :values="sidechainInputOptions()"
@@ -176,9 +170,7 @@ export default {
       </FlowItem>
 
       <!-- Card: Pre-Mix -->
-      <FlowItem width="180px">
-        <div class="title">Pre-Mix</div>
-
+      <FlowItem width="180px" title="Pre-Mix">
         <div class="fields-grid">
           <Field label="Input to Link">
             <NumberInput :min="-80" :max="40" :step="0.1" suffix="dB"
@@ -199,9 +191,7 @@ export default {
       </FlowItem>
 
       <!-- Card: Automatic Level Regulation -->
-      <FlowItem width="180px">
-        <div class="title">Automatic Level Regulation</div>
-
+      <FlowItem width="180px" title="Automatic Level Regulation">
         <Field label="Attack" :disabled="!getParam('alr').value.Bool">
           <NumberInput :min="getParam('alr_at').min" :max="getParam('alr_at').max" :step="0.01"
                        suffix="ms"
@@ -237,13 +227,6 @@ export default {
 </template>
 
 <style scoped>
-.title {
-  font-size: 1.1em;
-  font-weight: 600;
-  margin-bottom: 0.6em;
-}
-
-
 .fields-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

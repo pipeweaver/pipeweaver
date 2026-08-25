@@ -167,9 +167,7 @@ export default {
   <div style="padding: 10px">
     <!-- Card: global controls -->
     <FlowLayout>
-      <FlowItem width="200px">
-        <div class="title">Multiband Compressor</div>
-
+      <FlowItem width="200px" title="Multiband Compressor">
         <Field label="Operating Mode">
           <DropMenu :values="compressorModeOptions()" :selected="`${getParam('mode').value.Int32}`"
                     @valueClicked="setParam('mode', $event)"/>
@@ -193,9 +191,7 @@ export default {
         </Field>
       </FlowItem>
 
-      <FlowItem width="180px">
-        <div class="title">Pre-Mix</div>
-
+      <FlowItem width="180px" title="Pre-Mix">
         <div class="fields-grid">
           <Field label="Input to Link">
             <NumberInput :min="-80" :max="40" :step="0.1" suffix="dB"
@@ -244,9 +240,7 @@ export default {
 
     <!-- Band: Compressor view -->
     <FlowLayout v-if="view === 'compressor'">
-      <FlowItem width="180px">
-        <div class="title">Band {{ activeBand + 1 }}</div>
-
+      <FlowItem width="180px" :title="`Band ${activeBand + 1}`">
         <div class="fields-grid">
           <Field label="Compression Mode">
             <DropMenu :values="compressionModeOptions()" :selected="`${bandModeValue}`"
@@ -268,8 +262,7 @@ export default {
         </div>
       </FlowItem>
 
-      <FlowItem width="160px">
-        <div class="title">Frequency</div>
+      <FlowItem width="160px" title="Frequency">
         <Field label="Start" v-if="activeBand > 0">
           <NumberInput :min="getParam(bp('SplitFrequency')).min"
                        :max="getParam(bp('SplitFrequency')).max" :step="1" suffix="Hz"
@@ -281,8 +274,7 @@ export default {
         </Field>
       </FlowItem>
 
-      <FlowItem width="180px">
-        <div class="title">Attack</div>
+      <FlowItem width="180px" title="Attack">
         <div class="fields-grid">
           <Field label="Time">
             <NumberInput :min="getParam(bp('AttackTime')).min" :max="getParam(bp('AttackTime')).max"
@@ -299,8 +291,7 @@ export default {
         </div>
       </FlowItem>
 
-      <FlowItem width="180px">
-        <div class="title">Release</div>
+      <FlowItem width="180px" title="Release">
         <div class="fields-grid">
           <Field label="Time">
             <NumberInput :min="getParam(bp('ReleaseTime')).min"
@@ -318,8 +309,7 @@ export default {
         </div>
       </FlowItem>
 
-      <FlowItem width="180px">
-        <div class="title">Gain</div>
+      <FlowItem width="180px" title="Gain">
         <div class="fields-grid">
           <Field label="Ratio">
             <NumberInput :min="getParam(bp('Ratio')).min" :max="getParam(bp('Ratio')).max"
@@ -345,9 +335,7 @@ export default {
 
     <!-- Band: Sidechain view -->
     <FlowLayout v-else>
-      <FlowItem width="200px">
-        <div class="title">Band {{ activeBand + 1 }} Sidechain</div>
-
+      <FlowItem width="200px" :title="`Band ${ activeBand + 1 } Sidechain`">
         <div class="fields-grid">
           <Field label="Input" full>
             <DropMenu :values="sidechainInputOptions()"
@@ -389,9 +377,7 @@ export default {
         </div>
       </FlowItem>
 
-      <FlowItem width="180px">
-        <div class="title">Sidechain Filter</div>
-
+      <FlowItem width="180px" title="Sidechain Filter">
         <Field label="Low-cut" row>
           <Toggle :value="getParam(bp('SidechainCustomLowcutFilter')).value.Bool"
                   @input="setParam(bp('SidechainCustomLowcutFilter'), $event)"/>
@@ -422,12 +408,6 @@ export default {
 </template>
 
 <style scoped>
-.title {
-  font-size: 1.1em;
-  font-weight: 600;
-  margin-bottom: 0.6em;
-}
-
 .fields-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

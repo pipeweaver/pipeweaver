@@ -53,9 +53,7 @@ export default {
 <template>
   <div style="padding: 10px">
     <FlowLayout>
-      <FlowItem width="220px">
-        <div class="title">Controls</div>
-
+      <FlowItem width="220px" title="Controls">
         <Field label="Amount">
           <NumberInput :min="-100" :max="36" :step="0.1" suffix="dB"
                        :value="getDb('amount')"
@@ -96,11 +94,4 @@ export default {
 </template>
 
 <style scoped>
-.title {
-  font-size: 1.1em;
-  font-weight: 600;
-  margin-bottom: 0.6em;
-}
-
-
 </style>

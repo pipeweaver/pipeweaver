@@ -98,9 +98,7 @@ export default {
 <template>
   <div style="padding: 10px">
     <FlowLayout>
-      <FlowItem width="200px">
-        <div class="title">Controls</div>
-
+      <FlowItem width="200px" title="Controls">
         <Field label="Type">
           <DropMenu :values="typeOptions()" :selected="`${getParam('ft').value.Int32}`"
                     @valueClicked="setParam('ft', $event)"/>
@@ -123,9 +121,7 @@ export default {
         </Field>
       </FlowItem>
 
-      <FlowItem width="180px">
-        <div class="title">Filter</div>
-
+      <FlowItem width="180px" title="Filter">
         <Field label="Frequency">
           <NumberInput :min="getParam('f').min" :max="getParam('f').max" :step="0.1" suffix="Hz"
                        :value="getParam('f').value.Float32"
@@ -156,9 +152,4 @@ export default {
 </template>
 
 <style scoped>
-.title {
-  font-size: 1.1em;
-  font-weight: 600;
-  margin-bottom: 0.6em;
-}
 </style>

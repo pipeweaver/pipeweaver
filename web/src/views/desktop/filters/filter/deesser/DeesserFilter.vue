@@ -54,9 +54,7 @@ export default {
 <template>
   <div style="padding: 10px">
     <FlowLayout>
-      <FlowItem width="220px">
-        <div class="title">Deesser</div>
-
+      <FlowItem width="220px" title="Deesser">
         <div class="fields-grid">
           <Field label="Detection">
             <DropMenu :values="detectionOptions()"
@@ -90,9 +88,7 @@ export default {
         </div>
       </FlowItem>
 
-      <FlowItem width="180px">
-        <div class="title">Filter</div>
-
+      <FlowItem width="180px" title="Filter">
         <div class="fields-grid">
           <Field label="F1 Split">
             <NumberInput :min="getParam('f1_freq').min" :max="getParam('f1_freq').max" :step="1"
@@ -133,17 +129,9 @@ export default {
 </template>
 
 <style scoped>
-.title {
-  font-size: 1.1em;
-  font-weight: 600;
-  margin-bottom: 0.6em;
-}
-
-
 .fields-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   column-gap: 12px;
 }
-
 </style>

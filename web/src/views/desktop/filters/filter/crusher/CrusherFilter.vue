@@ -57,9 +57,7 @@ export default {
 <template>
   <div style="padding: 10px">
     <FlowLayout>
-      <FlowItem width="220px">
-        <div class="title">Shape</div>
-
+      <FlowItem width="220px" title="Shape">
         <Field label="Bit Reduction">
           <NumberInput :min="getParam('bits').min" :max="getParam('bits').max" :step="0.1"
                        :value="getParam('bits').value.Float32"
@@ -85,9 +83,7 @@ export default {
         </Field>
       </FlowItem>
 
-      <FlowItem width="180px">
-        <div class="title">Sample Rate</div>
-
+      <FlowItem width="180px" title="Sample Rate">
         <Field label="Reduction">
           <NumberInput :min="getParam('samples').min" :max="getParam('samples').max" :step="1"
                        :value="getParam('samples').value.Int32"
@@ -113,11 +109,4 @@ export default {
 </template>
 
 <style scoped>
-.title {
-  font-size: 1.1em;
-  font-weight: 600;
-  margin-bottom: 0.6em;
-}
-
-
 </style>

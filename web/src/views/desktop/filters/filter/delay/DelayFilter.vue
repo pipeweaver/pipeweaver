@@ -16,10 +16,10 @@ export default {
 <template>
   <div style="min-width: 600px; padding: 10px">
     <FlowLayout>
-      <FlowItem width="300px">
+      <FlowItem width="300px" title="Left">
         <DelayChannel :filterId="filterId" channel="l"/>
       </FlowItem>
-      <FlowItem width="300px">
+      <FlowItem width="300px" title="Right">
         <DelayChannel :filterId="filterId" channel="r"/>
       </FlowItem>
     </FlowLayout>
