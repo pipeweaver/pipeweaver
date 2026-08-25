@@ -6,7 +6,13 @@ import FlowItem from "@/views/desktop/filters/layout/FlowItem.vue";
 import Field from "@/views/desktop/filters/layout/Field.vue";
 import ActionBar from "@/views/desktop/filters/layout/ActionBar.vue";
 import ActionBarItem from "@/views/desktop/filters/layout/ActionBarItem.vue";
-import {dbToLinear, getFilterConfig, linearToDb, setFilterValue} from "@/app/filters.js";
+import {
+  dbToLinear,
+  getFilterConfig,
+  linearToDb,
+  setFilterValue,
+  setFilterValues
+} from "@/app/filters.js";
 
 export default {
   name: "ReverberationFilter",
@@ -22,11 +28,16 @@ export default {
     },
 
     setParam(symbol, value) {
-      setFilterValue(this.filterId, symbol, value);
+      return setFilterValue(this.filterId, symbol, value);
     },
 
     setDbParam(symbol, value) {
-      this.setParam(symbol, dbToLinear(value));
+      return this.setParam(symbol, dbToLinear(value));
+    },
+
+    setValues(pairs) {
+      if (pairs.length === 0) return Promise.resolve();
+      return setFilterValues(this.filterId, pairs);
     },
 
     getDb(symbol) {
@@ -45,15 +56,32 @@ export default {
     },
 
     applyPreset(preset) {
-      if (preset.decayTime !== undefined) this.setParam('decay_time', preset.decayTime);
-      if (preset.hfDamp !== undefined) this.setParam('hf_damp', preset.hfDamp);
-      if (preset.roomSize !== undefined) this.setParam('room_size', preset.roomSize);
-      if (preset.diffusion !== undefined) this.setParam('diffusion', preset.diffusion);
-      if (preset.amountLinear !== undefined) this.setDbParam('amount', linearToDb(preset.amountLinear));
-      if (preset.dryLinear !== undefined) this.setDbParam('dry', linearToDb(preset.dryLinear));
-      if (preset.predelay !== undefined) this.setParam('predelay', preset.predelay);
-      if (preset.bassCut !== undefined) this.setParam('bass_cut', preset.bassCut);
-      if (preset.trebleCut !== undefined) this.setParam('treble_cut', preset.trebleCut);
+      const updates = [];
+      if (preset.decayTime !== undefined) updates.push({
+        symbol: 'decay_time',
+        value: preset.decayTime
+      });
+      if (preset.hfDamp !== undefined) updates.push({symbol: 'hf_damp', value: preset.hfDamp});
+      if (preset.roomSize !== undefined) updates.push({
+        symbol: 'room_size',
+        value: preset.roomSize
+      });
+      if (preset.diffusion !== undefined) updates.push({
+        symbol: 'diffusion',
+        value: preset.diffusion
+      });
+      if (preset.amountLinear !== undefined) updates.push({
+        symbol: 'amount',
+        value: preset.amountLinear
+      });
+      if (preset.dryLinear !== undefined) updates.push({symbol: 'dry', value: preset.dryLinear});
+      if (preset.predelay !== undefined) updates.push({symbol: 'predelay', value: preset.predelay});
+      if (preset.bassCut !== undefined) updates.push({symbol: 'bass_cut', value: preset.bassCut});
+      if (preset.trebleCut !== undefined) updates.push({
+        symbol: 'treble_cut',
+        value: preset.trebleCut
+      });
+      return this.setValues(updates);
     },
 
     presetAmbience() {
