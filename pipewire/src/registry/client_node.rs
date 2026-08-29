@@ -5,6 +5,7 @@ use crate::store::utils::get_media_class;
 use crate::{ApplicationNode, Direction, MediaClass, NodeTarget};
 use anyhow::anyhow;
 use enum_map::EnumMap;
+use log::{debug, error, warn};
 use pipewire::keys::{CLIENT_ID, MEDIA_CLASS, MEDIA_NAME, NODE_NAME, OBJECT_SERIAL};
 use pipewire::metadata::Metadata;
 use pipewire::node::{Node, NodeChangeMask, NodeListener};
@@ -27,10 +28,20 @@ pub fn handle_client_node(
     store: &mut Store,
     listener_store: Weak<RefCell<Store>>,
 ) {
-    if let Some(props) = global.props
-        && let Ok(mut node) = RegistryClientNode::try_from(props)
-        && let Some(client) = store.unmanaged_client_get(node.parent_id)
-    {
+    if let Some(props) = global.props {
+        let mut node = match RegistryClientNode::try_from(props) {
+            Ok(node) => node,
+            Err(e) => {
+                error!("Failed to parse client node: {}", e);
+                return;
+            }
+        };
+
+        let Some(client) = store.unmanaged_client_get(node.parent_id) else {
+            return;
+        };
+        debug!("Node Created: {:?}", node);
+
         let bound: Option<Node> = registry.bind(global).ok();
         if let Some(proxy) = bound {
             let param_local = listener_store.clone();
@@ -220,6 +231,10 @@ impl TryFrom<&DictRef> for RegistryClientNode {
 
 impl RegistryClientNode {
     pub(crate) fn add_port(&mut self, direction: Direction, port: RegistryPort) {
+        debug!(
+            "Port Added to Application: {:?} - {}",
+            direction, port.channel
+        );
         self.ports[direction].insert(port.global_id, port);
     }
 
@@ -241,6 +256,10 @@ impl RegistryClientNode {
             || self.is_running.is_none()
             || self.is_running == Some(false)
         {
+            warn!(
+                "Node not usable: {:?} - {:?} - {:?}",
+                self.node_name, self.application_name, self.is_running
+            );
             return None;
         }
 
