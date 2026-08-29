@@ -256,10 +256,7 @@ impl RegistryClientNode {
             || self.is_running.is_none()
             || self.is_running == Some(false)
         {
-            warn!(
-                "Node not usable: {:?} - {:?} - {:?}",
-                self.node_name, self.application_name, self.is_running
-            );
+            warn!("Node not usable: {:?}", self);
             return None;
         }
 
@@ -278,6 +275,7 @@ impl RegistryClientNode {
         }
 
         // Return the Specific MediaClass based on Channel Count
+        debug!("Determining Media Class: {:?} - {:?}", in_count, out_count);
         get_media_class(in_count, out_count)
     }
 
