@@ -135,8 +135,11 @@ impl ManagedLink {
     }
 
     pub(crate) fn all_bound(&self) -> bool {
-        PortLocation::iter()
-            .all(|port| self.links[port].as_ref().is_some_and(|link| link.pw_id.is_some()))
+        PortLocation::iter().all(|port| {
+            self.links[port]
+                .as_ref()
+                .is_some_and(|link| link.pw_id.is_some())
+        })
     }
 }
 

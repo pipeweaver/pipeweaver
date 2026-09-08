@@ -174,7 +174,7 @@ impl VolumeManager for PipewireManager {
                     true => MuteState::Muted,
                     false => MuteState::Unmuted,
                 };
-                self.set_source_mute_state(id, MuteTarget::TargetA, muted)
+                self.set_source_mute_state(id, MuteTarget::TargetA, muted, false)
                     .await?;
             }
             _ => {}

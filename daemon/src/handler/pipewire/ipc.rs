@@ -184,12 +184,12 @@ impl IPCHandler for PipewireManager {
             }
 
             Cmd::AddSourceMuteTarget(id, target) => self
-                .set_source_mute_state(id, target, Muted)
+                .set_source_mute_state(id, target, Muted, true)
                 .await
                 .map(|_| Resp::Ok),
             Cmd::AddSourceMuteTargetByName(name, target) => {
                 if let Some(id) = self.get_node_id_by_name(&name) {
-                    self.set_source_mute_state(id, target, Muted)
+                    self.set_source_mute_state(id, target, Muted, true)
                         .await
                         .map(|_| Resp::Ok)
                 } else {
@@ -198,12 +198,12 @@ impl IPCHandler for PipewireManager {
             }
 
             Cmd::DelSourceMuteTarget(id, target) => self
-                .set_source_mute_state(id, target, Unmuted)
+                .set_source_mute_state(id, target, Unmuted, true)
                 .await
                 .map(|_| Resp::Ok),
             Cmd::DelSourceMuteTargetByName(name, target) => {
                 if let Some(id) = self.get_node_id_by_name(&name) {
-                    self.set_source_mute_state(id, target, Unmuted)
+                    self.set_source_mute_state(id, target, Unmuted, true)
                         .await
                         .map(|_| Resp::Ok)
                 } else {

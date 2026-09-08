@@ -34,6 +34,7 @@ pub(crate) trait MuteManager {
         id: Ulid,
         target: MuteTarget,
         state: MuteState,
+        api: bool,
     ) -> Result<()>;
     async fn set_target_mute_state(&mut self, id: Ulid, state: MuteState) -> Result<()>;
 
@@ -72,7 +73,7 @@ impl MuteManager for PipewireManager {
         if mute_state.mute_state.contains(&state) {
             // TODO: We should just 'Update' the current mute state, but for now, unmute it
             warn!("Un-muting {:?} to ensure consistency", state);
-            self.set_source_mute_state(id, state, MuteState::Unmuted)
+            self.set_source_mute_state(id, state, MuteState::Unmuted, true)
                 .await?;
         }
 
@@ -114,7 +115,7 @@ impl MuteManager for PipewireManager {
         if mute_state.mute_state.contains(&state) {
             // TODO: We should just 'Update' the current mute state, but for now, unmute it
             warn!("Un-muting {:?} to ensure consistency", state);
-            self.set_source_mute_state(id, state, MuteState::Unmuted)
+            self.set_source_mute_state(id, state, MuteState::Unmuted, true)
                 .await?;
         }
 
@@ -132,7 +133,7 @@ impl MuteManager for PipewireManager {
         if mute_state.mute_state.contains(&state) {
             // TODO: We should just 'Update' the current mute state, but for now, unmute it
             warn!("Un-muting {:?} to ensure consistency", state);
-            self.set_source_mute_state(id, state, MuteState::Unmuted)
+            self.set_source_mute_state(id, state, MuteState::Unmuted, true)
                 .await?;
         }
 
@@ -148,6 +149,7 @@ impl MuteManager for PipewireManager {
         id: Ulid,
         target: MuteTarget,
         state: MuteState,
+        api: bool,
     ) -> Result<()> {
         // Get the Mute States for this Source
         let mute_state = self.get_source_mute_states_mut(id)?;
@@ -170,7 +172,7 @@ impl MuteManager for PipewireManager {
         }
 
         let node_type = self.get_node_type(id).ok_or(anyhow!("Unknown Node"))?;
-        if target == MuteTarget::TargetA && node_type == NodeType::VirtualSource {
+        if target == MuteTarget::TargetA && node_type == NodeType::VirtualSource && api {
             // Apply mute state to Pipewire
             let message = PipewireMessage::SetNodeMute(
                 id,

@@ -224,7 +224,10 @@ impl Store {
             bail!("Node not found")
         };
 
-        let Some(parent) = node.parent_id.and_then(|pid| self.unmanaged_devices.get(&pid)) else {
+        let Some(parent) = node
+            .parent_id
+            .and_then(|pid| self.unmanaged_devices.get(&pid))
+        else {
             // No parent, set directly on the node
             node.set_volume(volume);
             return Ok(());
@@ -249,7 +252,10 @@ impl Store {
             bail!("Node not found")
         };
 
-        let Some(parent) = node.parent_id.and_then(|pid| self.unmanaged_devices.get(&pid)) else {
+        let Some(parent) = node
+            .parent_id
+            .and_then(|pid| self.unmanaged_devices.get(&pid))
+        else {
             // No parent, set directly on the node
             node.set_mute(muted);
             return Ok(());
