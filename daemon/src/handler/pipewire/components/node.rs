@@ -16,7 +16,7 @@ use pipeweaver_profile::{
     DeviceDescription, PhysicalSourceDevice, PhysicalTargetDevice, VirtualSourceDevice,
     VirtualTargetDevice,
 };
-use pipeweaver_shared::{Colour, Mix, NodeType, OrderGroup};
+use pipeweaver_shared::{Colour, Mix, MuteTarget, NodeType, OrderGroup};
 use strum::IntoEnumIterator;
 use ulid::Ulid;
 
@@ -373,6 +373,20 @@ impl NodeManagementLocal for PipewireManager {
         // A 'Virtual' source is a pipewire node that's selectable by the user.
         let properties = self.create_node_props(MediaClass::Sink, desc);
         self.node_pw_create(properties).await?;
+
+        // Set the initial Mute State of the node
+        if let Some(node) = self
+            .profile
+            .devices
+            .sources
+            .virtual_devices
+            .iter()
+            .find(|device| device.description.id == desc.id)
+            && node.mute_states.mute_state.contains(&MuteTarget::TargetA)
+        {
+            let message = PipewireMessage::SetNodeMute(desc.id, true);
+            self.pipewire().send_message(message)?;
+        }
 
         // Create a Meter
         let filter_name = format!("{}-meter", desc.name);
