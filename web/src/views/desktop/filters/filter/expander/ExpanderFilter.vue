@@ -96,8 +96,7 @@ export default {
 <template>
   <div style="padding: 10px">
     <FlowLayout>
-      <!-- Card: Expander -->
-      <FlowItem width="180px" title="Expander">
+      <FlowItem width="300px" min-width="300px" title="Expander">
         <div class="fields-grid">
           <Field label="Mode" full>
             <DropMenu :values="modeOptions()" :selected="`${getParam('em').value.Int32}`"
@@ -116,25 +115,24 @@ export default {
         </div>
       </FlowItem>
 
-      <!-- Card: Threshold and Time -->
-      <FlowItem width="220px" title="Threshold and Time">
+      <FlowItem width="300px" min-width="300px" title="Threshold and Time">
         <div class="fields-grid">
-          <Field label="Threshold">
+          <Field label="Attack">
             <NumberInput :min="-60" :max="0" :step="0.1" suffix="dB"
                          :value="getDb('al')" @input="setDbParam('al', $event)"
                          :allow-empty="false"/>
           </Field>
-          <Field label="Attack">
+          <Field label="&nbsp;">
             <NumberInput :min="getParam('at').min" :max="getParam('at').max" :step="1" suffix="ms"
                          :value="getParam('at').value.Float32"
                          @input="setParam('at', $event)" :allow-empty="false"/>
           </Field>
-          <Field label="Release Threshold">
+          <Field label="Release">
             <NumberInput :min="-80" :max="0" :step="0.1" suffix="dB"
                          :value="getDb('rrl')" @input="setDbParam('rrl', $event)"
                          :allow-empty="false"/>
           </Field>
-          <Field label="Release">
+          <Field label="&nbsp;">
             <NumberInput :min="getParam('rt').min" :max="getParam('rt').max" :step="1" suffix="ms"
                          :value="getParam('rt').value.Float32"
                          @input="setParam('rt', $event)" :allow-empty="false"/>
@@ -142,8 +140,7 @@ export default {
         </div>
       </FlowItem>
 
-      <!-- Card: Sidechain -->
-      <FlowItem width="220px" title="Sidechain">
+      <FlowItem width="300px" min-width="300px" title="Sidechain">
         <div class="fields-grid">
           <Field label="Input" full>
             <DropMenu :values="sidechainInputOptions()" :selected="`${getParam('sci').value.Int32}`"
@@ -166,8 +163,7 @@ export default {
         </div>
       </FlowItem>
 
-      <!-- Card: Sidechain (filter/reactivity) -->
-      <FlowItem width="220px" title="Sidechain Filter">
+      <FlowItem width="300px" min-width="300px" title="Sidechain Filter">
         <div class="fields-grid">
           <Field label="Preamp">
             <NumberInput :min="-80" :max="40" :step="0.1" suffix="dB"
@@ -209,8 +205,7 @@ export default {
         </div>
       </FlowItem>
 
-      <!-- Card: Output -->
-      <FlowItem width="180px" title="Output">
+      <FlowItem width="300px" min-width="300px" title="Output">
         <Field label="Dry">
           <NumberInput :min="-80" :max="20" :step="0.1" suffix="dB"
                        :value="getDb('cdr')" @input="setDbParam('cdr', $event)"
@@ -227,8 +222,7 @@ export default {
         </Field>
       </FlowItem>
 
-      <!-- Card: Pre-Mix -->
-      <FlowItem width="180px" title="Pre-Mix">
+      <FlowItem width="300px" min-width="300px" title="Pre-Mix">
         <div class="fields-grid">
           <Field label="Input to Link">
             <NumberInput :min="-80" :max="40" :step="0.1" suffix="dB"
