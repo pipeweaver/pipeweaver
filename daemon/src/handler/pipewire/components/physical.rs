@@ -621,8 +621,28 @@ impl PhysicalDevices for PipewireManager {
                 // Attempt to locate this node in our list
                 let pw_node = self.locate_node(descriptor);
                 if let Some(node) = pw_node {
-                    self.link_remove_unmanaged_to_filter(node.node_id, id)
-                        .await?;
+                    let node_id = node.node_id;
+                    if let Some((_, output)) = self.bridged_filters.get(&node_id) {
+                        // Detach the output from our pass-through filter
+                        self.link_remove_filter_to_filter(*output, id).await?;
+
+                        // Ok, we need to remove the internal tracking of the mapping
+                        if let Some(src) = self.physical_source.get_mut(&id) {
+                            src.retain(|id| *id != node_id);
+                        }
+
+                        // And finally, check whether this node is attached anywhere else
+                        if !self
+                            .physical_source
+                            .values()
+                            .flatten()
+                            .any(|&i| i == node_id)
+                            && let Some((input, output)) = self.bridged_filters.remove(&node_id)
+                        {
+                            self.filter_remove(input).await?;
+                            self.filter_remove(output).await?;
+                        }
+                    }
                 }
             }
             NodeType::PhysicalTarget => {
