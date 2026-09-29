@@ -90,7 +90,7 @@ export default {
         </div>
 
         <FlowLayout>
-          <FlowItem width="300px" title="Shape">
+          <FlowItem width="300px" min-width="300px" title="Shape">
             <Field label="Mode">
               <DropMenu :values="modeOptions()" :selected="`${getParam('mode').value.Int32}`"
                         @valueClicked="setParam('mode', $event)"/>
@@ -112,7 +112,7 @@ export default {
             </Field>
           </FlowItem>
 
-          <FlowItem width="300px" title="Sample Rate">
+          <FlowItem width="300px" min-width="300px" title="Sample Rate">
             <Field label="Reduction">
               <NumberInput :min="getParam('samples').min" :max="getParam('samples').max" :step="1"
                            :value="getParam('samples').value.Float32"

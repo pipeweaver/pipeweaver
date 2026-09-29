@@ -104,7 +104,7 @@ export default {
   <div style="padding: 10px">
     <FlowLayout>
       <!-- Card: Compressor -->
-      <FlowItem width="300px" title="Compressor">
+      <FlowItem width="300px" min-width="300px" title="Compressor">
         <div class="fields-grid">
           <Field label="Mode" full>
             <DropMenu :values="modeOptions()" :selected="`${activeMode}`"
@@ -138,7 +138,7 @@ export default {
       </FlowItem>
 
       <!-- Card: Threshold and Time -->
-      <FlowItem width="300px" title="Threshold and Time">
+      <FlowItem width="300px" min-width="300px" title="Threshold and Time">
         <div class="fields-grid">
           <Field label="Attack">
             <NumberInput :min="-60" :max="0" :step="0.1" suffix="dB"
@@ -164,7 +164,7 @@ export default {
       </FlowItem>
 
       <!-- Card: Sidechain -->
-      <FlowItem width="300px" title="Sidechain">
+      <FlowItem width="300px" min-width="300px" title="Sidechain">
         <div class="fields-grid">
           <Field label="Type" full>
             <DropMenu :values="sidechainTypeOptions()" :selected="`${getParam('sct').value.Int32}`"
@@ -188,7 +188,7 @@ export default {
       </FlowItem>
 
       <!-- Card: Sidechain (filter/reactivity) -->
-      <FlowItem width="300px" title="Sidechain Filter">
+      <FlowItem width="300px" min-width="300px" title="Sidechain Filter">
         <div class="fields-grid">
           <Field label="Preamp">
             <NumberInput :min="-80" :max="40" :step="0.1" suffix="dB"
@@ -231,7 +231,7 @@ export default {
       </FlowItem>
 
       <!-- Card: Output -->
-      <FlowItem width="300px" title="Output">
+      <FlowItem width="300px" min-width="300px" title="Output">
         <Field label="Dry">
           <NumberInput :min="-80" :max="20" :step="0.1" suffix="dB"
                        :value="getDb('cdr')" @input="setDbParam('cdr', $event)"
@@ -249,7 +249,7 @@ export default {
       </FlowItem>
 
       <!-- Card: Pre-Mix -->
-      <FlowItem width="300px" title="Pre-Mix">
+      <FlowItem width="300px" min-width="300px" title="Pre-Mix">
         <div class="fields-grid">
           <Field label="Input to Link">
             <NumberInput :min="-80" :max="40" :step="0.1" suffix="dB"
