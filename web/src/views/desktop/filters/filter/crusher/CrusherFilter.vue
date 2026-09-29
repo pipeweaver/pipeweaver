@@ -21,6 +21,7 @@ export default {
     },
 
     setParam(symbol, value) {
+      console.log(symbol, value);
       setFilterValue(this.filterId, symbol, value);
     },
 
@@ -44,6 +45,11 @@ export default {
       return [{value: 'false', text: 'Off'}, {value: 'true', text: 'On'}];
     },
 
+    roundToStep(n, s) {
+      const decimals = (s.toString().split('.')[1] ?? '').length;
+      return parseFloat(parseFloat(n).toFixed(decimals));
+    },
+
     modeOptions() {
       return [
         {value: '0', text: 'Linear'},
@@ -57,56 +63,92 @@ export default {
 <template>
   <div style="padding: 10px">
     <FlowLayout>
-      <FlowItem width="220px" title="Shape">
-        <Field label="Bit Reduction">
-          <NumberInput :min="getParam('bits').min" :max="getParam('bits').max" :step="0.1"
-                       :value="getParam('bits').value.Float32"
-                       @input="setParam('bits', $event)" :allow-empty="false"/>
-        </Field>
-        <Field label="Mode">
-          <DropMenu :values="modeOptions()" :selected="`${getParam('mode').value.Int32}`"
-                    @valueClicked="setParam('mode', $event)"/>
-        </Field>
-        <Field label="DC Offset">
-          <NumberInput :min="-12" :max="12" :step="0.1" suffix="dB"
-                       :value="getDb('dc')" @input="setDbParam('dc', $event)" :allow-empty="false"/>
-        </Field>
-        <Field label="Anti-aliasing">
-          <NumberInput :min="0" :max="100" :step="1" suffix="%"
-                       :value="getPercent('anti_aliasing')"
-                       @input="setPercent('anti_aliasing', $event)" :allow-empty="false"/>
-        </Field>
-        <Field label="Mix">
-          <NumberInput :min="0" :max="100" :step="1" suffix="%"
-                       :value="getPercent('morph')"
-                       @input="setPercent('morph', $event)" :allow-empty="false"/>
-        </Field>
-      </FlowItem>
+      <div class="content">
+        <div style="width: 100%">
+          <div style="width: 100%; text-align: center">Bit Reduction</div>
+          <div
+            style="align-items: center; margin-bottom: 5px; padding: 4px;">
+            <div style="width: 100%">
+              <input type="range" :min="getParam('bits').min" :max="getParam('bits').max"
+                     :step="0.1"
+                     :value="getParam('bits').value.Float32"
+                     @input="setParam('bits', roundToStep($event.target.value, 0.1))"
+                     list="ticks" style="width: 100%; box-sizing: border-box; display: block;"/>
+            </div>
+          </div>
 
-      <FlowItem width="180px" title="Sample Rate">
-        <Field label="Reduction">
-          <NumberInput :min="getParam('samples').min" :max="getParam('samples').max" :step="1"
-                       :value="getParam('samples').value.Int32"
-                       @input="setParam('samples', $event)" :allow-empty="false"/>
-        </Field>
-        <Field label="Low Frequency Oscillator" row>
-          <Toggle :value="getParam('lfo').value.Bool" @input="setParam('lfo', $event)"/>
-        </Field>
-        <Field label="Range" :disabled="!getParam('lfo').value.Bool">
-          <NumberInput :min="getParam('lforange').min" :max="getParam('lforange').max" :step="1"
-                       :value="getParam('lforange').value.Int32"
-                       @input="setParam('lforange', $event)" :allow-empty="false"/>
-        </Field>
-        <Field label="Rate" :disabled="!getParam('lfo').value.Bool">
-          <NumberInput :min="getParam('lforate').min" :max="getParam('lforate').max" :step="0.1"
-                       suffix="Hz"
-                       :value="getParam('lforate').value.Float32"
-                       @input="setParam('lforate', $event)" :allow-empty="false"/>
-        </Field>
-      </FlowItem>
+          <div style="width: 100%; text-align: center">
+            {{ roundToStep(getParam('bits').value.Float32, 0.1) }}
+          </div>
+          <datalist id="ticks">
+            <option
+              v-for="i in 76"
+              :key="i"
+              :value="(1 + (i - 1) * 0.2).toFixed(1)"
+            />
+          </datalist>
+        </div>
+
+        <FlowLayout>
+          <FlowItem width="300px" title="Shape">
+            <Field label="Mode">
+              <DropMenu :values="modeOptions()" :selected="`${getParam('mode').value.Int32}`"
+                        @valueClicked="setParam('mode', $event)"/>
+            </Field>
+            <Field label="DC Offset">
+              <NumberInput :min="-12" :max="12" :step="0.1" suffix="dB"
+                           :value="getDb('dc')" @input="setDbParam('dc', $event)"
+                           :allow-empty="false"/>
+            </Field>
+            <Field label="Anti-aliasing">
+              <NumberInput :min="0" :max="100" :step="1" suffix="%"
+                           :value="getPercent('anti_aliasing')"
+                           @input="setPercent('anti_aliasing', $event)" :allow-empty="false"/>
+            </Field>
+            <Field label="Mix">
+              <NumberInput :min="0" :max="100" :step="1" suffix="%"
+                           :value="getPercent('morph')"
+                           @input="setPercent('morph', $event)" :allow-empty="false"/>
+            </Field>
+          </FlowItem>
+
+          <FlowItem width="300px" title="Sample Rate">
+            <Field label="Reduction">
+              <NumberInput :min="getParam('samples').min" :max="getParam('samples').max" :step="1"
+                           :value="getParam('samples').value.Float32"
+                           @input="setParam('samples', $event)" :allow-empty="false"/>
+            </Field>
+            <Field label="Low Frequency Oscillator" row>
+              <Toggle :value="getParam('lfo').value.Bool" @input="setParam('lfo', $event)"/>
+            </Field>
+            <Field label="Range" :disabled="!getParam('lfo').value.Bool">
+              <NumberInput :min="getParam('lforange').min" :max="getParam('lforange').max" :step="1"
+                           :value="getParam('lforange').value.Float32"
+                           @input="setParam('lforange', $event)" :allow-empty="false"/>
+            </Field>
+            <Field label="Rate" :disabled="!getParam('lfo').value.Bool">
+              <NumberInput :min="getParam('lforate').min" :max="getParam('lforate').max" :step="0.1"
+                           suffix="Hz"
+                           :value="getParam('lforate').value.Float32"
+                           @input="setParam('lforate', $event)" :allow-empty="false"/>
+            </Field>
+          </FlowItem>
+        </FlowLayout>
+      </div>
     </FlowLayout>
   </div>
 </template>
 
 <style scoped>
+.content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 10px;
+  width: 100%;
+  min-width: 300px;
+  max-width: 620px;
+  gap: 20px;
+}
 </style>
