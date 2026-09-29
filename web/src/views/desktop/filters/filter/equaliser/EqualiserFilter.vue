@@ -309,36 +309,34 @@ export default {
 
 <template>
   <div class="equaliser-root">
-    <FlowLayout>
-      <!-- Card: Equalizer global controls -->
-      <FlowItem width="200px" title="Equalizer">
-        <Field label="Mode">
-          <DropMenu :values="modeOptions()" :selected="`${getParam('mode').value.Int32}`"
-                    @valueClicked="setParam('mode', $event)"/>
-        </Field>
-        <Field label="Decramping">
-          <DropMenu :values="decrampOptions()" :selected="`${getParam('decramp').value.Int32}`"
-                    @valueClicked="setParam('decramp', $event)"/>
-        </Field>
-        <Field label="Balance">
-          <NumberInput :min="getParam('bal').min" :max="getParam('bal').max" :step="0.1" suffix="%"
-                       :value="getParam('bal').value.Float32"
-                       @input="setParam('bal', $event)" :allow-empty="false"/>
-        </Field>
-        <Field label="Pitch Left">
-          <NumberInput :min="getParam('frqs_l').min" :max="getParam('frqs_l').max" :step="0.1"
-                       suffix="st"
-                       :value="getParam('frqs_l').value.Float32"
-                       @input="setParam('frqs_l', $event)" :allow-empty="false"/>
-        </Field>
-        <Field label="Pitch Right">
-          <NumberInput :min="getParam('frqs_r').min" :max="getParam('frqs_r').max" :step="0.1"
-                       suffix="st"
-                       :value="getParam('frqs_r').value.Float32"
-                       @input="setParam('frqs_r', $event)" :allow-empty="false"/>
-        </Field>
-      </FlowItem>
-    </FlowLayout>
+    <div class="flow">
+      <Field label="Mode">
+        <DropMenu :values="modeOptions()" :selected="`${getParam('mode').value.Int32}`"
+                  @valueClicked="setParam('mode', $event)"/>
+      </Field>
+      <Field label="Decramping">
+        <DropMenu :values="decrampOptions()" :selected="`${getParam('decramp').value.Int32}`"
+                  @valueClicked="setParam('decramp', $event)"/>
+      </Field>
+      <Field label="Balance">
+        <NumberInput :min="getParam('bal').min" :max="getParam('bal').max" :step="0.1" suffix="%"
+                     :value="getParam('bal').value.Float32"
+                     @input="setParam('bal', $event)" :allow-empty="false"/>
+      </Field>
+      <Field label="Pitch Left">
+        <NumberInput :min="getParam('frqs_l').min" :max="getParam('frqs_l').max" :step="0.01"
+                     suffix="st"
+                     :value="getParam('frqs_l').value.Float32"
+                     @input="setParam('frqs_l', $event)" :allow-empty="false"/>
+      </Field>
+      <Field label="Pitch Right">
+        <NumberInput :min="getParam('frqs_r').min" :max="getParam('frqs_r').max" :step="0.01"
+                     suffix="st"
+                     :value="getParam('frqs_r').value.Float32"
+                     @input="setParam('frqs_r', $event)" :allow-empty="false"/>
+      </Field>
+    </div>
+
 
     <div class="channel-tabs" v-if="!getParam('clink').value.Bool">
       <button :class="{active: channel === 'left'}" @click="channel = 'left'">Left</button>
@@ -384,7 +382,7 @@ export default {
                      @click="addBand"/>
     </ActionBar>
 
-    <ModalOverlay ref="bandModal" id="equaliserBandModal" width="360px">
+    <ModalOverlay ref="bandModal" id="equaliserBandModal" :show_footer="false" width="450px">
       <template v-slot:title>Band {{ menuBand + 1 }}</template>
 
       <div class="band-modal-body">
@@ -424,9 +422,7 @@ export default {
           <Toggle :value="getParam(bandSymbol('solo', menuBand)).value.Bool"
                   @input="setBandParam('solo', menuBand, $event)"/>
         </Field>
-      </div>
 
-      <template v-slot:footer>
         <div class="band-modal-footer">
           <Field label="Type">
             <DropMenu :values="bandTypeOptions()"
@@ -444,7 +440,8 @@ export default {
                       @valueClicked="setBandParam('slope', menuBand, $event)"/>
           </Field>
         </div>
-      </template>
+      </div>
+
     </ModalOverlay>
   </div>
 </template>
@@ -460,6 +457,22 @@ export default {
 
 .equaliser-root > .flow-layout {
   flex: 0 0 auto;
+}
+
+.equaliser-root > .flow {
+  display: flex;
+  flex-wrap: wrap;
+
+  justify-content: center;
+
+  gap: 16px;
+
+  align-items: stretch;
+  align-content: flex-start;
+}
+
+.equaliser-root > .flow > * {
+  width: 150px;
 }
 
 .channel-tabs {
@@ -565,15 +578,15 @@ export default {
   opacity: 1;
 }
 
-.band-modal-body {
+.band-modal-footer {
   display: flex;
-  flex-direction: column;
-  gap: 0.6em;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.band-modal-body .field input {
-  width: 100%;
-  box-sizing: border-box;
+.band-modal-footer > * {
+  flex: 1;
 }
 
 </style>
