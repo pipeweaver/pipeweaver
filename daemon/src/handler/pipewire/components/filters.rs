@@ -1,5 +1,5 @@
 use crate::handler::pipewire::components::audio_filters::internal::bridge::{
-    BridgeCaptureFilter, BridgePlaybackFilter,
+    BRIDGE_BUFFER_SIZE, BridgeCaptureFilter, BridgePlaybackFilter,
 };
 use crate::handler::pipewire::components::audio_filters::internal::meter::MeterFilter;
 use crate::handler::pipewire::components::audio_filters::internal::pass_through::PassThroughFilter;
@@ -216,7 +216,7 @@ impl FilterManagementLocal for PipewireManager {
         let mut producers = Vec::with_capacity(channel_count);
         let mut consumers = Vec::with_capacity(channel_count);
         for _ in 0..channel_count {
-            let (p, c) = rt_ring::new(2048);
+            let (p, c) = rt_ring::new(BRIDGE_BUFFER_SIZE);
             producers.push(p);
             consumers.push(c);
         }

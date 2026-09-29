@@ -2,6 +2,10 @@ use anyhow::Result;
 use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
 use rt_ring::{Consumer, Producer};
 
+// This should never get filled up, but needs to be larger than our maximum configurable quantum
+// (4096 frames), otherwise we cannot populate fast enough for the read rate.
+pub const BRIDGE_BUFFER_SIZE: usize = 8192;
+
 // Capture Side, should be linked to the physical device
 pub struct BridgeCaptureFilter {
     producers: Vec<Producer>, // one per channel
