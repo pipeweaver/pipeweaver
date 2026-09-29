@@ -99,7 +99,7 @@ impl PhysicalDevices for PipewireManager {
                             && pair == dev
                         {
                             let node_id = device.node_id;
-                            let src = if let Some(src) = self.detached_nodes.get(&node_id) {
+                            let src = if let Some(src) = self.bridged_filters.get(&node_id) {
                                 src.1
                             } else {
                                 let id = self.filter_bridge_create(dev.clone()).await?;
@@ -107,7 +107,7 @@ impl PhysicalDevices for PipewireManager {
                                 // Connect the physical node up to the input filter
                                 self.link_create_unmanaged_to_filter(node_id, id.0).await?;
 
-                                self.detached_nodes.insert(node_id, (id.0, id.1));
+                                self.bridged_filters.insert(node_id, (id.0, id.1));
                                 id.1
                             };
 
@@ -162,7 +162,7 @@ impl PhysicalDevices for PipewireManager {
 
                         let node_id = node.node_id;
                         let dest_id = device.description.id;
-                        let src = if let Some(src) = self.detached_nodes.get(&node_id) {
+                        let src = if let Some(src) = self.bridged_filters.get(&node_id) {
                             src.1
                         } else {
                             let id = self.filter_bridge_create(name.clone()).await?;
@@ -170,7 +170,7 @@ impl PhysicalDevices for PipewireManager {
                             // Connect the physical node up to the input filter
                             self.link_create_unmanaged_to_filter(node_id, id.0).await?;
 
-                            self.detached_nodes.insert(node_id, (id.0, id.1));
+                            self.bridged_filters.insert(node_id, (id.0, id.1));
 
                             id.1
                         };
@@ -520,7 +520,7 @@ impl PhysicalDevices for PipewireManager {
                 if let Some(node) = pw_node {
                     let node_id = node.node_id;
 
-                    let src = if let Some(src) = self.detached_nodes.get(&node_id) {
+                    let src = if let Some(src) = self.bridged_filters.get(&node_id) {
                         src.1
                     } else {
                         let name = node.name.as_deref().unwrap_or("Unknown");
@@ -529,7 +529,7 @@ impl PhysicalDevices for PipewireManager {
                         // Connect the physical node up to the input filter
                         self.link_create_unmanaged_to_filter(node_id, id.0).await?;
 
-                        self.detached_nodes.insert(node_id, (id.0, id.1));
+                        self.bridged_filters.insert(node_id, (id.0, id.1));
 
                         id.1
                     };

@@ -66,7 +66,10 @@ pub(crate) struct PipewireManager {
     // A list of physical nodes
     pub(crate) node_list: EnumMap<DeviceType, Vec<PhysicalDevice>>,
     pub(crate) device_nodes: HashMap<u32, DeviceNode>,
-    pub(crate) detached_nodes: HashMap<u32, (Ulid, Ulid)>,
+
+    // For incoming physical sources, these filters bridge them to the pipeweaver tree without
+    // the devices themselves becoming attached, allowing them to maintain their own clocks.
+    pub(crate) bridged_filters: HashMap<u32, (Ulid, Ulid)>,
 
     // A list of application nodes
     pub(crate) application_nodes: HashMap<u32, ApplicationNode>,
@@ -104,7 +107,7 @@ impl PipewireManager {
 
             node_list: Default::default(),
             device_nodes: Default::default(),
-            detached_nodes: Default::default(),
+            bridged_filters: Default::default(),
 
             application_nodes: Default::default(),
             application_target_ignore: Default::default(),
@@ -468,7 +471,7 @@ impl PipewireManager {
                                 }
                                 let _ = self.worker_sender.send(TransientChange).await;
                             }
-                            if let Some((input, output)) = self.detached_nodes.remove(&id) {
+                            if let Some((input, output)) = self.bridged_filters.remove(&id) {
                                 // Physical node is gone, remove the bridge filters
                                 let _ = self.filter_remove(input).await;
                                 let _ = self.filter_remove(output).await;
