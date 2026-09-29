@@ -65,6 +65,7 @@ pub(crate) struct PipewireManager {
     // A list of physical nodes
     pub(crate) node_list: EnumMap<DeviceType, Vec<PhysicalDevice>>,
     pub(crate) device_nodes: HashMap<u32, DeviceNode>,
+    pub(crate) detached_nodes: HashMap<u32, (Ulid, Ulid)>,
 
     // A list of application nodes
     pub(crate) application_nodes: HashMap<u32, ApplicationNode>,
@@ -102,6 +103,7 @@ impl PipewireManager {
 
             node_list: Default::default(),
             device_nodes: Default::default(),
+            detached_nodes: Default::default(),
 
             application_nodes: Default::default(),
             application_target_ignore: Default::default(),
