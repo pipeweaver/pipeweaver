@@ -226,7 +226,7 @@ impl FilterManagementLocal for PipewireManager {
 
         let input = FilterProperties {
             filter_id: id.0,
-            filter_name: "Detached-In".into(),
+            filter_name: format!("bridge-put.{description}"),
             filter_nick: name.to_string(),
             filter_description: format!("{}/{}/in", APP_NAME_ID, description),
 
@@ -241,7 +241,7 @@ impl FilterManagementLocal for PipewireManager {
 
         let output = FilterProperties {
             filter_id: id.1,
-            filter_name: "Detached-Out".into(),
+            filter_name: format!("bridge-get.{description}"),
             filter_nick: name.to_string(),
             filter_description: format!("{}/{}/out", APP_NAME_ID, description),
 
