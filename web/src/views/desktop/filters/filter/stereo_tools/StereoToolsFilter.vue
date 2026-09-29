@@ -54,7 +54,7 @@ export default {
 <template>
   <div style="padding: 10px">
     <FlowLayout>
-      <FlowItem width="180px" class="Input">
+      <FlowItem width="300px" min-width="300px" title="Input">
         <Field label="Softclip" row>
           <Toggle :value="getParam('softclip').value.Bool" @input="setParam('softclip', $event)"/>
         </Field>
@@ -71,7 +71,7 @@ export default {
         </Field>
       </FlowItem>
 
-      <FlowItem width="200px" title="Stereo Matrix">
+      <FlowItem width="300px" min-width="300px" title="Stereo Matrix">
         <div class="fields-grid">
           <Field label="Mode" full>
             <DropMenu :values="modeOptions()" :selected="`${getParam('mode').value.Int32}`"
@@ -100,7 +100,7 @@ export default {
         </div>
       </FlowItem>
 
-      <FlowItem width="160px" title="Left / Right">
+      <FlowItem width="300px" min-width="300px" title="Left / Right">
         <Field label="Left Mute" row>
           <Toggle :value="getParam('mutel').value.Bool" @input="setParam('mutel', $event)"/>
         </Field>
@@ -115,7 +115,7 @@ export default {
         </Field>
       </FlowItem>
 
-      <FlowItem width="180px" title="Output">
+      <FlowItem width="300px" min-width="300px" title="Output">
         <div class="fields-grid">
           <Field label="Balance">
             <NumberInput :min="getParam('balance_out').min" :max="getParam('balance_out').max"
