@@ -2,6 +2,7 @@ use crate::handler::pipewire::components::application::{
     ApplicationManagement, get_application_type,
 };
 use crate::handler::pipewire::components::defaults::DefaultHandlers;
+use crate::handler::pipewire::components::filters::FilterManagement;
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
@@ -467,6 +468,12 @@ impl PipewireManager {
                                 }
                                 let _ = self.worker_sender.send(TransientChange).await;
                             }
+                            if let Some((input, output)) = self.detached_nodes.remove(&id) {
+                                // Physical node is gone, remove the bridge filters
+                                let _ = self.filter_remove(input).await;
+                                let _ = self.filter_remove(output).await;
+                            }
+
                         }
                         PipewireReceiver::DeviceUsable(id, usable) => {
                             // TODO: I shouldn't need to call this anymore
