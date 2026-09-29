@@ -120,8 +120,7 @@ export class Websocket {
 
     // Wrap this request with an ID
     let final_request = {
-      id: id,
-      data: request
+      id: id, data: request
     }
 
     this.#websocket.send(JSON.stringify(final_request))
@@ -253,11 +252,9 @@ function executeHttpRequest(request) {
   let cmd_resolve, cmd_reject
 
   fetch(getHTTPAddress(), {
-    method: 'POST',
-    headers: {
+    method: 'POST', headers: {
       'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(request)
+    }, body: JSON.stringify(request)
   })
     .then((response) => response.json())
     .then((data) => {
@@ -282,10 +279,14 @@ we need to bounce requests across to the default port of the daemon. If we're ru
 to convert the HTTP request to a websocket request on the same port (this can be changed), so work it out here.
  */
 function getWebsocketAddress() {
+  const wsUrl = new URL("/api/websocket", window.location.href);
+
   if (process.env.NODE_ENV === 'development') {
-    return 'ws://localhost:14565/api/websocket'
+    wsUrl.port = "14565";
   }
-  return 'ws://' + window.location.host + '/api/websocket'
+
+  wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
+  return wsUrl;
 }
 
 // Same as above, except for HTTP request...
