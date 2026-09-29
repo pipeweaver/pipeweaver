@@ -533,7 +533,7 @@ impl PhysicalDevices for PipewireManager {
 
                         id.1
                     };
-                    
+
                     self.link_create_filter_to_filter(src, id).await?;
                 }
             }
