@@ -43,16 +43,16 @@ pub(crate) trait FilterManagement {
     async fn filter_remove(&self, id: Ulid) -> Result<()>;
     async fn filter_debug_create(&self, props: FilterProperties) -> Result<()>;
 
+    async fn source_link_to_filters(&self, id: Ulid, is_node: bool) -> Result<()>;
     async fn channel_load_filters(&mut self, id: Ulid) -> Result<()>;
-    async fn source_link_to_filters(&mut self, id: Ulid, is_node: bool) -> Result<()>;
 
     async fn filter_custom_create(&mut self, target: Ulid, filter: Filter) -> Result<()>;
     async fn filter_custom_remove(&mut self, id: Ulid) -> Result<()>;
     async fn filter_custom_move(&mut self, id: Ulid, new_index: usize) -> Result<()>;
 
-    fn filter_custom_get_running(&mut self, device: Ulid) -> Vec<Ulid>;
+    async fn filter_custom_get_running(&self, device: Ulid) -> Vec<Ulid>;
     async fn filter_custom_tree_teardown(&mut self, id: Ulid) -> Result<()>;
-    async fn filter_custom_get_last(&mut self, id: Ulid) -> Option<Ulid>;
+    async fn filter_custom_get_last(&self, id: Ulid) -> Option<Ulid>;
 
     async fn filter_set_value(&mut self, filter: Ulid, id: u32, value: FilterValue) -> Result<()>;
     async fn filter_set_values(&mut self, filter: Ulid, values: Vec<FilterValueSet>) -> Result<()>;
@@ -137,6 +137,44 @@ impl FilterManagement for PipewireManager {
         self.filter_pw_create(props).await
     }
 
+    async fn source_link_to_filters(&self, id: Ulid, is_node: bool) -> Result<()> {
+        let filter_ids: Vec<Ulid> = self
+            .get_device_filters(id)?
+            .iter()
+            .map(|filter| filter.id)
+            .collect();
+
+        for filter_id in filter_ids {
+            let Some(filter_config) = self.filter_config.get(&filter_id) else {
+                warn!("Filter not found in config");
+                continue;
+            };
+
+            if filter_config.state == FilterState::Running {
+                if is_node {
+                    self.link_create_node_to_filter(id, filter_id).await?;
+                } else {
+                    self.link_create_filter_to_filter(id, filter_id).await?;
+                }
+                return Ok(());
+            }
+        }
+
+        // If we get here, we didn't find any running filters, so we'll just link to the passthrough
+        let pass_id = self
+            .source_filter_end
+            .get(&id)
+            .expect("No pass-through filter found for source");
+
+        if is_node {
+            self.link_create_node_to_filter(id, *pass_id).await?;
+        } else {
+            self.link_create_filter_to_filter(id, *pass_id).await?;
+        }
+
+        Ok(())
+    }
+
     async fn channel_load_filters(&mut self, id: Ulid) -> Result<()> {
         if self.get_device_filters(id)?.is_empty() {
             return Ok(());
@@ -200,44 +238,6 @@ impl FilterManagement for PipewireManager {
                 warn!("Unexpected filter tree configuration");
             }
         }
-        Ok(())
-    }
-
-    async fn source_link_to_filters(&mut self, id: Ulid, is_node: bool) -> Result<()> {
-        let filter_ids: Vec<Ulid> = self
-            .get_device_filters(id)?
-            .iter()
-            .map(|filter| filter.id)
-            .collect();
-
-        for filter_id in filter_ids {
-            let Some(filter_config) = self.filter_config.get(&filter_id) else {
-                warn!("Filter not found in config");
-                continue;
-            };
-
-            if filter_config.state == FilterState::Running {
-                if is_node {
-                    self.link_create_node_to_filter(id, filter_id).await?;
-                } else {
-                    self.link_create_filter_to_filter(id, filter_id).await?;
-                }
-                return Ok(());
-            }
-        }
-
-        // If we get here, we didn't find any running filters, so we'll just link to the passthrough
-        let pass_id = self
-            .source_filter_end
-            .get(&id)
-            .expect("No pass-through filter found for source");
-
-        if is_node {
-            self.link_create_node_to_filter(id, *pass_id).await?;
-        } else {
-            self.link_create_filter_to_filter(id, *pass_id).await?;
-        }
-
         Ok(())
     }
 
@@ -418,7 +418,7 @@ impl FilterManagement for PipewireManager {
 
         // Get the device, and the previous and next running filters
         let (device_id, node_type) = self.get_device_id_by_filter(id)?;
-        let (prev, next) = self.find_running_neighbours(device_id, id)?;
+        let (prev, next) = self.find_running_neighbours(device_id, id).await?;
 
         let err = anyhow!("Filter not found in config");
         let Some(filter) = self.filter_config.remove(&id) else {
@@ -545,7 +545,7 @@ impl FilterManagement for PipewireManager {
         let (device_id, node_type) = self.get_device_id_by_filter(id)?;
 
         // Grab neighbours before the move
-        let (old_prev, old_next) = self.find_running_neighbours(device_id, id)?;
+        let (old_prev, old_next) = self.find_running_neighbours(device_id, id).await?;
 
         // Reorder the vec
         {
@@ -565,7 +565,7 @@ impl FilterManagement for PipewireManager {
         }
 
         // Grab neighbours after the move
-        let (new_prev, new_next) = self.find_running_neighbours(device_id, id)?;
+        let (new_prev, new_next) = self.find_running_neighbours(device_id, id).await?;
 
         // If nothing changed in terms of running neighbours, no relink needed
         if old_prev == new_prev && old_next == new_next {
@@ -741,7 +741,7 @@ impl FilterManagement for PipewireManager {
         Ok(())
     }
 
-    fn filter_custom_get_running(&mut self, device: Ulid) -> Vec<Ulid> {
+    async fn filter_custom_get_running(&self, device: Ulid) -> Vec<Ulid> {
         let running: Vec<Ulid> = self
             .filter_config
             .iter()
@@ -764,7 +764,7 @@ impl FilterManagement for PipewireManager {
         // This should be called *AFTER* the filter tree has been disconnected from in / out
         // nodes, so all we need to do is remove the links between the filters and remove them.
 
-        let filters = self.filter_custom_get_running(id);
+        let filters = self.filter_custom_get_running(id).await;
         let Some(node_type) = self.get_node_type(id) else {
             bail!("Failed to find node type");
         };
@@ -843,8 +843,8 @@ impl FilterManagement for PipewireManager {
         Ok(())
     }
 
-    async fn filter_custom_get_last(&mut self, id: Ulid) -> Option<Ulid> {
-        self.filter_custom_get_running(id).last().copied()
+    async fn filter_custom_get_last(&self, id: Ulid) -> Option<Ulid> {
+        self.filter_custom_get_running(id).await.last().copied()
     }
 
     async fn filter_set_value(&mut self, filter: Ulid, id: u32, value: FilterValue) -> Result<()> {
@@ -935,7 +935,7 @@ trait FilterManagementLocal {
     fn get_device_filters_mut(&mut self, target: Ulid) -> Result<&mut Vec<Filter>>;
     fn get_device_by_filter_mut(&mut self, filter: Ulid) -> Result<&mut Vec<Filter>>;
     fn get_device_id_by_filter(&self, filter: Ulid) -> Result<(Ulid, NodeType)>;
-    fn find_running_neighbours(
+    async fn find_running_neighbours(
         &mut self,
         dev: Ulid,
         id: Ulid,
@@ -1222,12 +1222,12 @@ impl FilterManagementLocal for PipewireManager {
         ))
     }
 
-    fn find_running_neighbours(
+    async fn find_running_neighbours(
         &mut self,
         dev: Ulid,
         id: Ulid,
     ) -> Result<(Option<Ulid>, Option<Ulid>)> {
-        let active_filters = self.filter_custom_get_running(dev);
+        let active_filters = self.filter_custom_get_running(dev).await;
         debug!("Active filters: {:?}", active_filters);
 
         let idx = active_filters

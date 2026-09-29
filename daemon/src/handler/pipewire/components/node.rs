@@ -582,7 +582,7 @@ impl NodeManagementLocal for PipewireManager {
         // Check whether we have to detach a filter tree
         if src != id {
             // Get the first running filter, of if there isn't one, the passthrough
-            let running = self.filter_custom_get_running(src);
+            let running = self.filter_custom_get_running(src).await;
             let first = running.first().copied().unwrap_or(src);
 
             // Detach it.
@@ -650,7 +650,7 @@ impl NodeManagementLocal for PipewireManager {
 
         // Check whether we have to detach a passthrough node
         if src != id {
-            let running = self.filter_custom_get_running(src);
+            let running = self.filter_custom_get_running(src).await;
             let first = running.first().copied().unwrap_or(src);
 
             self.link_remove_node_to_filter(id, first).await?;
@@ -733,7 +733,7 @@ impl NodeManagementLocal for PipewireManager {
 
         // Finally, disconnect the last filter (if applicable) from the end
         if src != id {
-            let running = self.filter_custom_get_running(src);
+            let running = self.filter_custom_get_running(src).await;
             let last = running.last().copied().unwrap_or(src);
 
             self.link_remove_filter_to_filter(last, id).await?;
@@ -802,7 +802,7 @@ impl NodeManagementLocal for PipewireManager {
         }
 
         if src != id {
-            let running = self.filter_custom_get_running(src);
+            let running = self.filter_custom_get_running(src).await;
             let last = running.last().copied().unwrap_or(src);
 
             self.link_remove_filter_to_node(last, id).await?;
