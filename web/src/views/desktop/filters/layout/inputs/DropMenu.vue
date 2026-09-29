@@ -116,7 +116,7 @@ export default {
 .selector .inner {
   display: flex;
   width: 100%;
-  padding: 4px;
+  padding: 5px;
   align-items: center;
   justify-content: space-between;
   border: 1px solid #666;
