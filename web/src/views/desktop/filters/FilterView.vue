@@ -433,7 +433,7 @@ export default {
 <template>
   <ModalOverlay body-padding="0" :show_footer="false" ref="filterModal" id="filterViewModal"
                 title="Filters" fullWindow window-padding="32px">
-    <template v-slot:title>{{ getName() }} - We have EasyEffects at Home</template>
+    <template v-slot:title>Filters - {{ getName() }}</template>
     <template v-slot:default>
       <AddFilterModal ref="addFilterModal" :filters="pluginComponents" @select="addFilter"/>
 
@@ -461,8 +461,6 @@ export default {
             <div v-if="activeFilter === undefined" class="filter-page empty-state">
               <h3>No Filter Selected</h3>
               <p>Select a filter from the list or add a new one.</p>
-              <p class="suggestion">Try:
-                <code>http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo</code></p>
             </div>
 
             <div v-else class="filter-running-wrap">
@@ -493,11 +491,7 @@ export default {
             </div>
           </div>
 
-          <!-- Persistent status/action dock - mirrors EasyEffects' own footer toolbar: plugin
-               source on the left, that filter's action-bar controls teleported in on the
-               right. Lives outside .filter-scroll-area so it never scrolls away, and always
-               renders (even with an empty right side) rather than only appearing when a
-               filter happens to declare an action bar. -->
+          <!-- Display the Plugin Source, and any helper actions -->
           <div class="filter-action-dock">
             <div class="dock-source">
               <template v-if="activeFilter">Using <strong>{{ pluginPackageLabel }}</strong>
@@ -633,20 +627,6 @@ export default {
 .empty-state h3 {
   color: #ddd;
   margin-bottom: 8px;
-}
-
-/* Suggestion box */
-.suggestion {
-  margin-top: 20px;
-  padding: 12px;
-  background-color: #2a2f2e;
-  border: 1px solid #3b403f;
-  border-radius: 6px;
-}
-
-.suggestion code {
-  color: #6bb6ff;
-  font-size: 0.9em;
 }
 
 /* Drag handler, DO NOT CHANGE ANYTHING BELOW THIS LINE! */
