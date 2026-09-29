@@ -70,7 +70,7 @@ export default {
 <template>
   <div style="padding: 10px">
     <FlowLayout>
-      <FlowItem width="220px" title="Controls">
+      <FlowItem width="100%" min-width="320px" max-width="500px" title="Controls">
         <div class="fields-grid">
           <Field label="Mode" full>
             <DropMenu :values="modeOptions()" :selected="`${getParam('mode').value.Int32}`"
