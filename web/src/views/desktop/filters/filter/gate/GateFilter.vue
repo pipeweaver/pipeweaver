@@ -102,8 +102,7 @@ export default {
 <template>
   <div style="padding: 10px">
     <FlowLayout>
-      <!-- Card: Gate -->
-      <FlowItem width="200px" title="Gate">
+      <FlowItem width="300px" min-width="300px" title="Gate">
         <div class="fields-grid">
           <Field label="Attack">
             <NumberInput :min="getParam('at').min" :max="getParam('at').max" :step="1" suffix="ms"
@@ -133,8 +132,7 @@ export default {
         </div>
       </FlowItem>
 
-      <!-- Card: Hysteresis -->
-      <FlowItem width="180px" title="Hysteresis">
+      <FlowItem width="300px" min-width="300px" title="Hysteresis">
         <Field label="Enable" row>
           <Toggle :value="getParam('gh').value.Bool" @input="setParam('gh', $event)"/>
         </Field>
@@ -148,8 +146,7 @@ export default {
         </Field>
       </FlowItem>
 
-      <!-- Card: Sidechain -->
-      <FlowItem width="220px" title="Sidechain">
+      <FlowItem width="300px" min-width="300px" title="Sidechain">
         <div class="fields-grid">
           <Field label="Input" full>
             <DropMenu :values="sidechainInputOptions()" :selected="`${getParam('sci').value.Int32}`"
@@ -172,8 +169,7 @@ export default {
         </div>
       </FlowItem>
 
-      <!-- Card: Sidechain (filter/reactivity) -->
-      <FlowItem width="220px" title="Sidechain Filter">
+      <FlowItem width="300px" min-width="300px" title="Sidechain Filter">
         <div class="fields-grid">
           <Field label="Preamp">
             <NumberInput :min="-80" :max="40" :step="0.1" suffix="dB"
@@ -215,8 +211,7 @@ export default {
         </div>
       </FlowItem>
 
-      <!-- Card: Output -->
-      <FlowItem width="180px" title="Output">
+      <FlowItem width="300px" min-width="300px" title="Output">
         <Field label="Dry">
           <NumberInput :min="-80" :max="20" :step="0.1" suffix="dB"
                        :value="getDb('cdr')" @input="setDbParam('cdr', $event)"
@@ -233,8 +228,7 @@ export default {
         </Field>
       </FlowItem>
 
-      <!-- Card: Pre-Mix -->
-      <FlowItem width="180px" title=">Pre-Mix">
+      <FlowItem width="300px" min-width="300px" title="Pre-Mix">
         <div class="fields-grid">
           <Field label="Input to Link">
             <NumberInput :min="-80" :max="40" :step="0.1" suffix="dB"
