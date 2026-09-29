@@ -10,52 +10,54 @@ use ulid::Ulid;
 
 #[allow(unused)]
 pub(crate) trait FilterManagement {
-    async fn filter_pass_create(&mut self, name: String) -> Result<Ulid>;
-    async fn filter_pass_create_id(&mut self, name: String, id: Ulid) -> Result<()>;
+    async fn filter_pass_create(&self, name: String) -> Result<Ulid>;
+    async fn filter_pass_create_id(&self, name: String, id: Ulid) -> Result<()>;
 
-    async fn filter_volume_create(&mut self, name: String) -> Result<Ulid>;
-    async fn filter_volume_create_id(&mut self, name: String, id: Ulid) -> Result<()>;
+    async fn filter_volume_create(&self, name: String) -> Result<Ulid>;
+    async fn filter_volume_create_id(&self, name: String, id: Ulid) -> Result<()>;
 
     async fn filter_meter_create(&mut self, node: Ulid, name: String) -> Result<Ulid>;
     async fn filter_meter_create_id(&mut self, node: Ulid, name: String, id: Ulid) -> Result<()>;
+    async fn filter_meter_create(&self, node: Ulid, name: String) -> Result<Ulid>;
+    async fn filter_meter_create_id(&self, node: Ulid, name: String, id: Ulid) -> Result<()>;
 
     async fn filter_volume_set(&self, id: Ulid, volume: u8) -> Result<()>;
 
-    async fn filter_remove(&mut self, id: Ulid) -> Result<()>;
-    async fn filter_debug_create(&mut self, props: FilterProperties) -> Result<()>;
+    async fn filter_remove(&self, id: Ulid) -> Result<()>;
+    async fn filter_debug_create(&self, props: FilterProperties) -> Result<()>;
 }
 
 impl FilterManagement for PipewireManager {
-    async fn filter_pass_create(&mut self, name: String) -> Result<Ulid> {
+    async fn filter_pass_create(&self, name: String) -> Result<Ulid> {
         let id = Ulid::generate();
         self.filter_pass_create_id(name, id).await?;
 
         Ok(id)
     }
-    async fn filter_pass_create_id(&mut self, name: String, id: Ulid) -> Result<()> {
+    async fn filter_pass_create_id(&self, name: String, id: Ulid) -> Result<()> {
         let props = self.filter_pass_get_props(name, id);
         self.filter_pw_create(props).await
     }
 
-    async fn filter_volume_create(&mut self, name: String) -> Result<Ulid> {
+    async fn filter_volume_create(&self, name: String) -> Result<Ulid> {
         let id = Ulid::generate();
         self.filter_volume_create_id(name, id).await?;
 
         Ok(id)
     }
-    async fn filter_volume_create_id(&mut self, name: String, id: Ulid) -> Result<()> {
+    async fn filter_volume_create_id(&self, name: String, id: Ulid) -> Result<()> {
         let props = self.filter_volume_get_props(name, id);
         self.filter_pw_create(props).await
     }
 
-    async fn filter_meter_create(&mut self, node: Ulid, name: String) -> Result<Ulid> {
+    async fn filter_meter_create(&self, node: Ulid, name: String) -> Result<Ulid> {
         let id = Ulid::generate();
         self.filter_meter_create_id(node, name, id).await?;
 
         Ok(id)
     }
 
-    async fn filter_meter_create_id(&mut self, node: Ulid, name: String, id: Ulid) -> Result<()> {
+    async fn filter_meter_create_id(&self, node: Ulid, name: String, id: Ulid) -> Result<()> {
         let props = self.filter_meter_get_props(node, name, id);
         self.filter_pw_create(props).await
     }
@@ -81,11 +83,11 @@ impl FilterManagement for PipewireManager {
         Ok(())
     }
 
-    async fn filter_remove(&mut self, id: Ulid) -> Result<()> {
+    async fn filter_remove(&self, id: Ulid) -> Result<()> {
         self.filter_pw_remove(id).await
     }
 
-    async fn filter_debug_create(&mut self, props: FilterProperties) -> Result<()> {
+    async fn filter_debug_create(&self, props: FilterProperties) -> Result<()> {
         self.filter_pw_create(props).await
     }
 }
