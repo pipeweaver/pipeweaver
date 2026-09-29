@@ -46,8 +46,6 @@ impl Store {
             // READ NOTE IN state_changed BEFORE CHANGING THIS VALUE!
             *NODE_ALWAYS_PROCESS => "true",
 
-            *NODE_GROUP => "pipeweaver-nodes",
-
             *MEDIA_TYPE => "Audio",
             *MEDIA_CATEGORY => "Filter",
             *MEDIA_ROLE => "DSP",
