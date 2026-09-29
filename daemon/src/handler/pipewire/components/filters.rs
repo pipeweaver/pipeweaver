@@ -230,7 +230,7 @@ impl FilterManagementLocal for PipewireManager {
             filter_nick: name.to_string(),
             filter_description: format!("{}/{}/in", APP_NAME_ID, description),
 
-            class: MediaClass::Sink,
+            class: MediaClass::Source,
             app_id: APP_ID.to_string(),
             app_name: APP_NAME.to_string(),
             linger: false,
@@ -245,7 +245,7 @@ impl FilterManagementLocal for PipewireManager {
             filter_nick: name.to_string(),
             filter_description: format!("{}/{}/out", APP_NAME_ID, description),
 
-            class: MediaClass::Source,
+            class: MediaClass::Sink,
             app_id: APP_ID.to_string(),
             app_name: APP_NAME.to_string(),
             linger: false,
