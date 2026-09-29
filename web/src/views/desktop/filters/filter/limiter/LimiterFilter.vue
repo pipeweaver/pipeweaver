@@ -108,8 +108,7 @@ export default {
 <template>
   <div style="padding: 10px">
     <FlowLayout>
-      <!-- Card: Mode -->
-      <FlowItem width="200px" title="Mode">
+      <FlowItem width="300px" min-width="300px" title="Mode">
         <Field label="Mode">
           <DropMenu :values="modeOptions()" :selected="`${getParam('mode').value.Int32}`"
                     @valueClicked="setParam('mode', $event)"/>
@@ -124,8 +123,7 @@ export default {
         </Field>
       </FlowItem>
 
-      <!-- Card: Limiter -->
-      <FlowItem width="180px" title="Limiter">
+      <FlowItem width="300px" min-width="300px" title="Limiter">
         <Field label="Threshold">
           <NumberInput :min="-48" :max="0" :step="0.1" suffix="dB"
                        :value="getDb('th')" @input="setDbParam('th', $event)" :allow-empty="false"/>
@@ -148,8 +146,7 @@ export default {
         </Field>
       </FlowItem>
 
-      <!-- Card: Sidechain -->
-      <FlowItem width="180px" title="Sidechain">
+      <FlowItem width="300px" min-width="300px" title="Sidechain">
         <div class="fields-grid">
           <Field label="Input" full>
             <DropMenu :values="sidechainInputOptions()"
@@ -169,8 +166,7 @@ export default {
         </div>
       </FlowItem>
 
-      <!-- Card: Pre-Mix -->
-      <FlowItem width="180px" title="Pre-Mix">
+      <FlowItem width="300px" min-width="300px" title="Pre-Mix">
         <div class="fields-grid">
           <Field label="Input to Link">
             <NumberInput :min="-80" :max="40" :step="0.1" suffix="dB"
@@ -190,8 +186,7 @@ export default {
         </div>
       </FlowItem>
 
-      <!-- Card: Automatic Level Regulation -->
-      <FlowItem width="180px" title="Automatic Level Regulation">
+      <FlowItem width="300px" min-width="300px" title="Automatic Level Regulation">
         <Field label="Attack" :disabled="!getParam('alr').value.Bool">
           <NumberInput :min="getParam('alr_at').min" :max="getParam('alr_at').max" :step="0.01"
                        suffix="ms"
@@ -218,9 +213,9 @@ export default {
     </FlowLayout>
 
     <ActionBar>
-      <ActionBarItem label="Gain Boost" :active="getParam('boost').value.Bool"
+      <ActionBarItem label="Threshold Boost" :active="getParam('boost').value.Bool"
                      @click="setParam('boost', `${!getParam('boost').value.Bool}`)"/>
-      <ActionBarItem label="Automatic Level Regulation" :active="getParam('alr').value.Bool"
+      <ActionBarItem label="Automatic Level" :active="getParam('alr').value.Bool"
                      @click="setParam('alr', `${!getParam('alr').value.Bool}`)"/>
     </ActionBar>
   </div>
