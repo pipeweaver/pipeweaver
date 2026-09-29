@@ -124,7 +124,7 @@ export default {
 <template>
   <div style="padding: 10px">
     <FlowLayout>
-      <FlowItem width="200px" title="Controls">
+      <FlowItem width="300px" min-width="300px" title="Controls">
         <Field label="Room Size">
           <DropMenu :values="roomSizeOptions()" :selected="`${getParam('room_size').value.Int32}`"
                     @valueClicked="setParam('room_size', $event)"/>
@@ -143,13 +143,13 @@ export default {
         </Field>
         <Field label="Diffusion">
           <NumberInput :min="getParam('diffusion').min" :max="getParam('diffusion').max"
-                       :step="0.01"
+                       :step="0.01" suffix="%"
                        :value="getParam('diffusion').value.Float32"
                        @input="setParam('diffusion', $event)" :allow-empty="false"/>
         </Field>
       </FlowItem>
 
-      <FlowItem width="180px" title="Filter">
+      <FlowItem width="300px" min-width="300px" title="Filter">
         <div class="fields-grid">
           <Field label="High Frequency Damping" full>
             <NumberInput :min="getParam('hf_damp').min" :max="getParam('hf_damp').max" :step="1"
