@@ -124,10 +124,16 @@ export default {
   width: 100%;
 }
 
+.wrap input,
+.overlay {
+  font: inherit;
+}
+
 /* input fills parent correctly */
-input {
+.wrap input {
   width: 100%;
   box-sizing: border-box;
+  padding: 4px;
 }
 
 /* overlay does suffix layout only */
@@ -136,11 +142,9 @@ input {
   inset: 0;
 
   display: flex;
-  align-items: center;
-
   pointer-events: none;
 
-  padding: 0 6px;
+  padding: 6px 6px;
   white-space: nowrap;
   box-sizing: border-box;
 }
@@ -149,12 +153,12 @@ input {
 .ghost {
   color: transparent;
   white-space: pre;
-  font: inherit;
 }
+
 
 /* suffix follows naturally */
 .suffix {
-  color: #888;
+  color: rgba(255, 255, 255, 0.5);
   margin-left: 2px;
   white-space: nowrap;
 }

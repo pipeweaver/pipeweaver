@@ -24,7 +24,7 @@ export default {
 }
 
 .field-label {
-  margin-bottom: 0;
+  margin-bottom: 3px;
 }
 
 .field :deep(input) {
@@ -42,6 +42,8 @@ export default {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  margin-top: 1.2em;
+
 }
 
 .field.field-full {
