@@ -12,7 +12,7 @@ use pipewire::core::CoreRc;
 use pipewire::filter::{FilterFlags, FilterRc, FilterState, PortFlags};
 use pipewire::keys::{
     APP_ID, AUDIO_CHANNEL, FORMAT_DSP, MEDIA_CATEGORY, MEDIA_ROLE, MEDIA_TYPE, NODE_ALWAYS_PROCESS,
-    NODE_DESCRIPTION, NODE_GROUP, NODE_NAME, NODE_NICK, OBJECT_LINGER, PORT_NAME,
+    NODE_DESCRIPTION, NODE_NAME, NODE_NICK, OBJECT_LINGER, PORT_NAME,
 };
 use pipewire::properties::properties;
 use pipewire::spa::pod::Pod;
@@ -45,8 +45,6 @@ impl Store {
 
             // READ NOTE IN state_changed BEFORE CHANGING THIS VALUE!
             *NODE_ALWAYS_PROCESS => "true",
-
-            *NODE_GROUP => "pipeweaver-nodes",
 
             *MEDIA_TYPE => "Audio",
             *MEDIA_CATEGORY => "Filter",

@@ -2,6 +2,7 @@ use crate::handler::pipewire::components::application::{
     ApplicationManagement, get_application_type,
 };
 use crate::handler::pipewire::components::defaults::DefaultHandlers;
+use crate::handler::pipewire::components::filters::FilterManagement;
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::load_profile::LoadProfile;
 use crate::handler::pipewire::components::physical::PhysicalDevices;
@@ -76,6 +77,10 @@ pub(crate) struct PipewireManager {
     pub(crate) node_list: EnumMap<DeviceType, Vec<PhysicalDevice>>,
     pub(crate) device_nodes: HashMap<u32, DeviceNode>,
 
+    // For incoming physical sources, these filters bridge them to the pipeweaver tree without
+    // the devices themselves becoming attached, allowing them to maintain their own clocks.
+    pub(crate) bridged_filters: HashMap<u32, (Ulid, Ulid)>,
+
     // A list of application nodes
     pub(crate) application_nodes: HashMap<u32, ApplicationNode>,
     pub(crate) application_target_ignore: HashMap<u32, Option<NodeTarget>>,
@@ -116,6 +121,7 @@ impl PipewireManager {
 
             node_list: Default::default(),
             device_nodes: Default::default(),
+            bridged_filters: Default::default(),
 
             application_nodes: Default::default(),
             application_target_ignore: Default::default(),
@@ -480,6 +486,12 @@ impl PipewireManager {
                                 }
                                 let _ = self.worker_sender.send(TransientChange).await;
                             }
+                            if let Some((input, output)) = self.bridged_filters.remove(&id) {
+                                // Physical node is gone, remove the bridge filters
+                                let _ = self.filter_remove(input).await;
+                                let _ = self.filter_remove(output).await;
+                            }
+
                         }
                         PipewireReceiver::DeviceUsable(id, usable) => {
                             // TODO: I shouldn't need to call this anymore

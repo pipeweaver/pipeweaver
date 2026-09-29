@@ -2231,6 +2231,7 @@ dependencies = [
  "pipeweaver-pipewire",
  "pipeweaver-profile",
  "pipeweaver-shared",
+ "rt-ring",
  "rust-ini",
  "serde",
  "serde_json",
@@ -2583,6 +2584,12 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
 ]
+
+[[package]]
+name = "rt-ring"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fde851f93d4d9fd935a9b4b8172f805e6545646fee582f6dee15e6ba02d212c8"
 
 [[package]]
 name = "rust-ini"

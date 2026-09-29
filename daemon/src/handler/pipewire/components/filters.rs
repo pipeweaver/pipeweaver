@@ -1,3 +1,6 @@
+use crate::handler::pipewire::components::audio_filters::internal::bridge::{
+    BridgeCaptureFilter, BridgePlaybackFilter,
+};
 use crate::handler::pipewire::components::audio_filters::internal::meter::MeterFilter;
 use crate::handler::pipewire::components::audio_filters::internal::pass_through::PassThroughFilter;
 use crate::handler::pipewire::components::audio_filters::internal::volume::VolumeFilter;
@@ -23,19 +26,22 @@ fn next_filter_id() -> usize {
 
 #[allow(unused)]
 pub(crate) trait FilterManagement {
-    async fn filter_pass_create(&mut self, name: String) -> Result<Ulid>;
-    async fn filter_pass_create_id(&mut self, name: String, id: Ulid) -> Result<()>;
+    async fn filter_pass_create(&self, name: String) -> Result<Ulid>;
+    async fn filter_pass_create_id(&self, name: String, id: Ulid) -> Result<()>;
 
-    async fn filter_volume_create(&mut self, name: String) -> Result<Ulid>;
-    async fn filter_volume_create_id(&mut self, name: String, id: Ulid) -> Result<()>;
+    async fn filter_volume_create(&self, name: String) -> Result<Ulid>;
+    async fn filter_volume_create_id(&self, name: String, id: Ulid) -> Result<()>;
 
-    async fn filter_meter_create(&mut self, node: Ulid, name: String) -> Result<Ulid>;
-    async fn filter_meter_create_id(&mut self, node: Ulid, name: String, id: Ulid) -> Result<()>;
+    async fn filter_meter_create(&self, node: Ulid, name: String) -> Result<Ulid>;
+    async fn filter_meter_create_id(&self, node: Ulid, name: String, id: Ulid) -> Result<()>;
+
+    async fn filter_bridge_create(&self, name: String) -> Result<(Ulid, Ulid)>;
+    async fn filter_bridge_create_id(&self, name: String, id: (Ulid, Ulid)) -> Result<()>;
 
     async fn filter_volume_set(&self, id: Ulid, volume: u8) -> Result<()>;
 
-    async fn filter_remove(&mut self, id: Ulid) -> Result<()>;
-    async fn filter_debug_create(&mut self, props: FilterProperties) -> Result<()>;
+    async fn filter_remove(&self, id: Ulid) -> Result<()>;
+    async fn filter_debug_create(&self, props: FilterProperties) -> Result<()>;
 
     async fn channel_load_filters(&mut self, id: Ulid) -> Result<()>;
     async fn source_link_to_filters(&mut self, id: Ulid, is_node: bool) -> Result<()>;
@@ -53,38 +59,53 @@ pub(crate) trait FilterManagement {
 }
 
 impl FilterManagement for PipewireManager {
-    async fn filter_pass_create(&mut self, name: String) -> Result<Ulid> {
+    async fn filter_pass_create(&self, name: String) -> Result<Ulid> {
         let id = Ulid::generate();
         self.filter_pass_create_id(name, id).await?;
 
         Ok(id)
     }
-    async fn filter_pass_create_id(&mut self, name: String, id: Ulid) -> Result<()> {
+    async fn filter_pass_create_id(&self, name: String, id: Ulid) -> Result<()> {
         let props = self.filter_pass_get_props(name, id);
         self.filter_pw_create(props).await
     }
 
-    async fn filter_volume_create(&mut self, name: String) -> Result<Ulid> {
+    async fn filter_volume_create(&self, name: String) -> Result<Ulid> {
         let id = Ulid::generate();
         self.filter_volume_create_id(name, id).await?;
 
         Ok(id)
     }
-    async fn filter_volume_create_id(&mut self, name: String, id: Ulid) -> Result<()> {
+    async fn filter_volume_create_id(&self, name: String, id: Ulid) -> Result<()> {
         let props = self.filter_volume_get_props(name, id);
         self.filter_pw_create(props).await
     }
 
-    async fn filter_meter_create(&mut self, node: Ulid, name: String) -> Result<Ulid> {
+    async fn filter_meter_create(&self, node: Ulid, name: String) -> Result<Ulid> {
         let id = Ulid::generate();
         self.filter_meter_create_id(node, name, id).await?;
 
         Ok(id)
     }
 
-    async fn filter_meter_create_id(&mut self, node: Ulid, name: String, id: Ulid) -> Result<()> {
+    async fn filter_meter_create_id(&self, node: Ulid, name: String, id: Ulid) -> Result<()> {
         let props = self.filter_meter_get_props(node, name, id);
         self.filter_pw_create(props).await
+    }
+
+    async fn filter_bridge_create(&self, name: String) -> Result<(Ulid, Ulid)> {
+        let id = (Ulid::generate(), Ulid::generate());
+        self.filter_bridge_create_id(name, id).await?;
+
+        Ok(id)
+    }
+
+    async fn filter_bridge_create_id(&self, name: String, id: (Ulid, Ulid)) -> Result<()> {
+        let props = self.filter_bridge_get_props(name, id);
+        self.filter_pw_create(props.0).await?;
+        self.filter_pw_create(props.1).await?;
+
+        Ok(())
     }
 
     async fn filter_volume_set(&self, id: Ulid, volume: u8) -> Result<()> {
@@ -108,11 +129,11 @@ impl FilterManagement for PipewireManager {
         Ok(())
     }
 
-    async fn filter_remove(&mut self, id: Ulid) -> Result<()> {
+    async fn filter_remove(&self, id: Ulid) -> Result<()> {
         self.filter_pw_remove(id).await
     }
 
-    async fn filter_debug_create(&mut self, props: FilterProperties) -> Result<()> {
+    async fn filter_debug_create(&self, props: FilterProperties) -> Result<()> {
         self.filter_pw_create(props).await
     }
 
@@ -901,6 +922,11 @@ trait FilterManagementLocal {
     fn filter_pass_get_props(&self, name: String, id: Ulid) -> FilterProperties;
     fn filter_volume_get_props(&self, name: String, id: Ulid) -> FilterProperties;
     fn filter_meter_get_props(&self, node: Ulid, name: String, id: Ulid) -> FilterProperties;
+    fn filter_bridge_get_props(
+        &self,
+        name: String,
+        id: (Ulid, Ulid),
+    ) -> (FilterProperties, FilterProperties);
 
     fn add_filter_to_profile(&mut self, target: Ulid, filter: Filter) -> Result<()>;
     fn remove_filter_from_profile(&mut self, filter: Ulid) -> Result<()>;
@@ -1002,6 +1028,58 @@ impl FilterManagementLocal for PipewireManager {
 
             ready_sender: None,
         }
+    }
+
+    fn filter_bridge_get_props(
+        &self,
+        name: String,
+        id: (Ulid, Ulid),
+    ) -> (FilterProperties, FilterProperties) {
+        let description = name.to_lowercase().replace(" ", "-");
+
+        let channel_count = 2;
+        let mut producers = Vec::with_capacity(channel_count);
+        let mut consumers = Vec::with_capacity(channel_count);
+        for _ in 0..channel_count {
+            let (p, c) = rt_ring::new(2048);
+            producers.push(p);
+            consumers.push(c);
+        }
+
+        let capture_handler = BridgeCaptureFilter::new(producers);
+        let playback_handler = BridgePlaybackFilter::new(consumers);
+
+        let input = FilterProperties {
+            filter_id: id.0,
+            filter_name: format!("bridge-put.{description}"),
+            filter_nick: name.to_string(),
+            filter_description: format!("{}/{}/in", APP_NAME_ID, description),
+
+            class: MediaClass::Source,
+            app_id: APP_ID.to_string(),
+            app_name: APP_NAME.to_string(),
+            linger: false,
+            callback: Box::new(capture_handler),
+
+            ready_sender: None,
+        };
+
+        let output = FilterProperties {
+            filter_id: id.1,
+            filter_name: format!("bridge-get.{description}"),
+            filter_nick: name.to_string(),
+            filter_description: format!("{}/{}/out", APP_NAME_ID, description),
+
+            class: MediaClass::Sink,
+            app_id: APP_ID.to_string(),
+            app_name: APP_NAME.to_string(),
+            linger: false,
+            callback: Box::new(playback_handler),
+
+            ready_sender: None,
+        };
+
+        (input, output)
     }
 
     fn add_filter_to_profile(&mut self, target: Ulid, filter: Filter) -> Result<()> {
