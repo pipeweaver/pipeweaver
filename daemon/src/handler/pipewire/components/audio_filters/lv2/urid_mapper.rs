@@ -35,6 +35,18 @@ impl UridMapper {
         map.insert(uri, id);
         id
     }
+
+    pub(crate) fn map_str(&self, uri: &str) -> u32 {
+        let mut map = self.map.lock().unwrap();
+        if let Some(id) = map.get(uri) {
+            return *id;
+        }
+        let mut next = self.next_id.lock().unwrap();
+        let id = *next;
+        *next += 1;
+        map.insert(uri.to_owned(), id);
+        id
+    }
 }
 
 pub unsafe extern "C" fn urid_map_callback(handle: *mut c_void, uri: *const i8) -> u32 {

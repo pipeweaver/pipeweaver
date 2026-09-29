@@ -57,6 +57,22 @@ struct LV2URIDMap {
     map: unsafe extern "C" fn(handle: *mut c_void, uri: *const i8) -> u32,
 }
 
+const LV2_OPTIONS_URI: &[u8] = b"http://lv2plug.in/ns/ext/options#options\0";
+struct Lv2Options {
+    sample_rate: f32,
+    options: Vec<LV2OptionsOption>,
+}
+
+#[repr(C)]
+struct LV2OptionsOption {
+    context: u32, // 0 = instance
+    subject: u32, // 0
+    key: u32,
+    size: u32,
+    type_: u32,
+    value: *const c_void,
+}
+
 // Shared LV2 world (initialized once, shared by all plugins)
 static LV2_WORLD: OnceLock<Arc<Mutex<LV2World>>> = OnceLock::new();
 fn get_world() -> &'static Arc<Mutex<LV2World>> {
@@ -477,6 +493,11 @@ pub struct LV2PluginBase {
     pub _plugin_uri: String,
     pub plugin_name: String,
     pub _sample_rate: u32,
+
+    // These need to be kept alive for the duration of the plugin instance
+    _options: Box<Lv2Options>,
+    _urid_map: Box<LV2URIDMap>,
+    _urid_mapper: Box<UridMapper>,
 }
 
 impl LV2PluginBase {
@@ -731,9 +752,8 @@ impl LV2PluginBase {
             }
 
             let urid_mapper = Box::new(UridMapper::new());
-
             let urid_map = Box::new(LV2URIDMap {
-                handle: Box::into_raw(urid_mapper) as *mut c_void,
+                handle: &*urid_mapper as *const UridMapper as *mut c_void,
                 map: urid_map_callback,
             });
 
@@ -742,7 +762,41 @@ impl LV2PluginBase {
                 data: &*urid_map as *const LV2URIDMap as *mut c_void,
             };
 
-            let features = [&feature_urid_map as *const LV2Feature, ptr::null()];
+            let mut opts = Box::new(Lv2Options {
+                sample_rate: rate as f32,
+                options: Vec::new(),
+            });
+            let sr_ptr = &opts.sample_rate as *const f32 as *const c_void;
+            opts.options = vec![
+                LV2OptionsOption {
+                    context: 0,
+                    subject: 0,
+                    key: urid_mapper.map_str("http://lv2plug.in/ns/ext/parameters#sampleRate"),
+                    size: 4,
+                    type_: urid_mapper.map_str("http://lv2plug.in/ns/ext/atom#Float"),
+                    value: sr_ptr,
+                },
+                // Terminator
+                LV2OptionsOption {
+                    context: 0,
+                    subject: 0,
+                    key: 0,
+                    size: 0,
+                    type_: 0,
+                    value: ptr::null(),
+                },
+            ];
+
+            let feature_options = LV2Feature {
+                uri: LV2_OPTIONS_URI.as_ptr() as *const i8,
+                data: opts.options.as_ptr() as *mut c_void,
+            };
+
+            let features = [
+                &feature_urid_map as *const LV2Feature,
+                &feature_options as *const LV2Feature,
+                ptr::null(),
+            ];
 
             let instance =
                 lilv_plugin_instantiate(plugin, rate as f64, features.as_ptr() as *const _);
@@ -767,6 +821,10 @@ impl LV2PluginBase {
                 _plugin_uri: plugin_uri.to_string(),
                 plugin_name,
                 _sample_rate: rate,
+
+                _options: opts,
+                _urid_map: urid_map,
+                _urid_mapper: urid_mapper,
             };
 
             // Connect all control ports once during initialization (both inputs and outputs)
