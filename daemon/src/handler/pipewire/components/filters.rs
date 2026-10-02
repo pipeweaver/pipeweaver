@@ -4,6 +4,7 @@ use crate::handler::pipewire::components::audio_filters::internal::bridge::{
 use crate::handler::pipewire::components::audio_filters::internal::meter::MeterFilter;
 use crate::handler::pipewire::components::audio_filters::internal::pass_through::PassThroughFilter;
 use crate::handler::pipewire::components::audio_filters::internal::volume::VolumeFilter;
+use crate::handler::pipewire::components::audio_filters::pwv::bleep::filter_bleep;
 use crate::handler::pipewire::components::audio_filters::pwv::gain::filter_gain;
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::node::NodeManagement;
@@ -1331,12 +1332,14 @@ impl FilterManagementLocal for PipewireManager {
 
                 let plugin_name = match pwv_filter.plugin_type {
                     PWVFilters::Gain => "Gain".to_string(),
+                    PWVFilters::Bleep => "Bleep".to_string(),
                 };
 
                 let name = format!("{}-{}-{}", node_desc.name, plugin_name, index);
-                //let rate = self.clock_rate.unwrap_or(48000);
+                let rate = self.clock_rate.unwrap_or(48000);
                 let create_filter = match pwv_filter.plugin_type {
                     PWVFilters::Gain => filter_gain(id, name, defaults),
+                    PWVFilters::Bleep => filter_bleep(id, name, defaults, rate),
                 };
 
                 let (name, parameters, state) = match create_filter {

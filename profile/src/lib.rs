@@ -258,6 +258,7 @@ pub struct PWVFilter {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PWVFilters {
     Gain,
+    Bleep,
 }
 
 fn generate_uid() -> Ulid {

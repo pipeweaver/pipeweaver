@@ -29,6 +29,7 @@ import MaximizerFilter from "@/views/desktop/filters/filter/maximizer/MaximizerF
 import ReverberationFilter
   from "@/views/desktop/filters/filter/reverberation/ReverberationFilter.vue";
 import GainFilter from "@/views/desktop/filters/filter/gain/GainFilter.vue";
+import BleepFilter from "@/views/desktop/filters/filter/bleep/BleepFilter.vue";
 
 const INTERNAL_SCALE = 0.8;
 
@@ -38,6 +39,7 @@ export default {
     AddFilterModal,
     FilterListItem,
     ModalOverlay,
+    BleepFilter,
     DelayFilter,
     CompressorFilter,
     GainFilter,
@@ -67,6 +69,17 @@ export default {
       activeFilter: undefined,
       // Map specific plugin URIs to components
       pluginComponents: {
+        "Gain": {
+          type: "PWV",
+          display: "Gain",
+          component: "GainFilter",
+        },
+        "Bleep": {
+          type: "PWV",
+          display: "Bleep",
+          component: "BleepFilter",
+        },
+
         "http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo": {
           type: "LV2",
           display: "Delay",
@@ -76,11 +89,6 @@ export default {
           type: "LV2",
           display: "Compressor",
           component: "CompressorFilter",
-        },
-        "Gain": {
-          type: "PWV",
-          display: "Gain",
-          component: "GainFilter",
         },
         "http://lsp-plug.in/plugins/lv2/gate_stereo": {
           type: "LV2",
