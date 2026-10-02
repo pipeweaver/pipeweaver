@@ -2,7 +2,7 @@
 import {dbToLinear, getFilterConfig, linearToDb, setFilterValue} from "@/app/filters.js";
 
 export default {
-  name: "BassEnhancerFilter",
+  name: "GainFilter",
   components: {},
   props: {
     filterId: {type: String, required: true},

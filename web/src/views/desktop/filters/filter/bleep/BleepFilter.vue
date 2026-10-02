@@ -9,7 +9,7 @@ import Field from "@/views/desktop/filters/layout/Field.vue";
 import FlowItem from "@/views/desktop/filters/layout/FlowItem.vue";
 
 export default {
-  name: "BassEnhancerFilter",
+  name: "BleepFilter",
   components: {FlowItem, Field, FlowLayout, NumberInput, Toggle, ActionBar, ActionBarItem},
   props: {
     filterId: {type: String, required: true},
