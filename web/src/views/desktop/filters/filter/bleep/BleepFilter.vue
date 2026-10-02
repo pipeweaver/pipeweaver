@@ -40,7 +40,7 @@ export default {
 <template>
   <div style="padding: 10px">
     <FlowLayout>
-      <FlowItem width="100%" title="Controls">
+      <FlowItem width="100%" max-width="500px" min-width="250px" title="Controls">
         <Field label="Enabled" row>
           <Toggle :value="getParam('enabled').value.Bool"
                   @input="setParam('enabled', $event)"/>

@@ -30,6 +30,8 @@ import ReverberationFilter
   from "@/views/desktop/filters/filter/reverberation/ReverberationFilter.vue";
 import GainFilter from "@/views/desktop/filters/filter/gain/GainFilter.vue";
 import BleepFilter from "@/views/desktop/filters/filter/bleep/BleepFilter.vue";
+import NoiseReductionFilter from "@/views/desktop/filters/filter/noise_reduction/RNNoise.vue";
+import {setFilterValue} from "@/app/filters.js";
 
 const INTERNAL_SCALE = 0.8;
 
@@ -41,6 +43,7 @@ export default {
     ModalOverlay,
     BleepFilter,
     DelayFilter,
+    NoiseReductionFilter,
     CompressorFilter,
     GainFilter,
     GateFilter,
@@ -69,6 +72,7 @@ export default {
       activeFilter: undefined,
       // Map specific plugin URIs to components
       pluginComponents: {
+        // Internal Plugins
         "Gain": {
           type: "PWV",
           display: "Gain",
@@ -80,6 +84,7 @@ export default {
           component: "BleepFilter",
         },
 
+        // LSP Provided Plugins
         "http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo": {
           type: "LV2",
           display: "Delay",
@@ -120,31 +125,6 @@ export default {
           display: "Multiband Gate",
           component: "MultibandGateFilter",
         },
-        "http://calf.sourceforge.net/plugins/BassEnhancer": {
-          type: "LV2",
-          display: "Bass Enhancer",
-          component: "BassEnhancerFilter",
-        },
-        "http://calf.sourceforge.net/plugins/Crusher": {
-          type: "LV2",
-          display: "Crusher",
-          component: "CrusherFilter",
-        },
-        "http://calf.sourceforge.net/plugins/Deesser": {
-          type: "LV2",
-          display: "Deesser",
-          component: "DeesserFilter",
-        },
-        "http://calf.sourceforge.net/plugins/Exciter": {
-          type: "LV2",
-          display: "Exciter",
-          component: "ExciterFilter",
-        },
-        "http://calf.sourceforge.net/plugins/StereoTools": {
-          type: "LV2",
-          display: "Stereo Tools",
-          component: "StereoToolsFilter",
-        },
         "http://lsp-plug.in/plugins/lv2/filter_stereo": {
           type: "LV2",
           display: "Filter",
@@ -155,15 +135,55 @@ export default {
           display: "Loudness",
           component: "LoudnessFilter",
         },
-        "urn:zamaudio:ZaMaximX2": {
+
+        // Calf Provided Plugins
+        "http://calf.sourceforge.net/plugins/BassEnhancer": {
           type: "LV2",
-          display: "Maximizer",
-          component: "MaximizerFilter",
+          display: "Bass Enhancer",
+          component: "BassEnhancerFilter",
+          enable_symbol: "bypass",
+          enable_invert: true,
+        },
+        "http://calf.sourceforge.net/plugins/Crusher": {
+          type: "LV2",
+          display: "Crusher",
+          component: "CrusherFilter",
+          enable_symbol: "bypass",
+          enable_invert: true,
+        },
+        "http://calf.sourceforge.net/plugins/Deesser": {
+          type: "LV2",
+          display: "Deesser",
+          component: "DeesserFilter",
+          enable_symbol: "bypass",
+          enable_invert: true,
+        },
+        "http://calf.sourceforge.net/plugins/Exciter": {
+          type: "LV2",
+          display: "Exciter",
+          component: "ExciterFilter",
+          enable_symbol: "bypass",
+          enable_invert: true,
+        },
+        "http://calf.sourceforge.net/plugins/StereoTools": {
+          type: "LV2",
+          display: "Stereo Tools",
+          component: "StereoToolsFilter",
+          enable_symbol: "bypass",
+          enable_invert: true,
         },
         "http://calf.sourceforge.net/plugins/Reverb": {
           type: "LV2",
           display: "Reverberation",
           component: "ReverberationFilter",
+          enable_symbol: "on",
+        },
+
+        // ZamAudio Provided Plugins
+        "urn:zamaudio:ZaMaximX2": {
+          type: "LV2",
+          display: "Maximizer",
+          component: "MaximizerFilter",
         },
       },
       // Fallback component for each filter type
@@ -359,6 +379,21 @@ export default {
       this.activeFilter = this.getFilterInfo(filter);
     },
 
+    setFilterEnabled(filter, enabled) {
+      let config = store.getAudio().filter_config[filter.id];
+      if (this.pluginComponents[config.identifier]) {
+        let enable_symbol = this.pluginComponents[config.identifier].enable_symbol || "enabled";
+        let enable_invert = this.pluginComponents[config.identifier].enable_invert || false;
+
+        let set_enabled = enabled;
+        if (enable_invert) {
+          set_enabled = !enabled;
+        }
+
+        setFilterValue(filter.id, enable_symbol, set_enabled);
+      }
+    },
+
     getFilters() {
       let device = get_device_by_id(this.id);
       return device.filters;
@@ -450,6 +485,40 @@ export default {
       if (uri.startsWith('http://lsp-plug.in')) return 'LSP Plugins';
       if (uri.startsWith('urn:zamaudio')) return 'ZamAudio';
       return 'LV2';
+    },
+
+    filterItems() {
+      return this.getFilters().map(filter => {
+
+        // Ok, lets try and find this filter's config
+        let config = store.getAudio().filter_config[filter.id];
+        let enabled = undefined;
+
+        if (this.pluginComponents[config.identifier]) {
+          let enable_symbol = this.pluginComponents[config.identifier].enable_symbol || "enabled";
+          let enable_invert = this.pluginComponents[config.identifier].enable_invert || false;
+
+          let param = config.parameters.find(p => p.symbol === enable_symbol);
+          if (param !== undefined && param.value['Bool'] !== undefined) {
+            enabled = param.value['Bool'];
+            if (enable_invert) {
+              enabled = !enabled;
+            }
+          } else {
+            console.warn("Filter " + config.identifier + " does not have a boolean parameter named " + enable_symbol);
+            console.debug(config.parameters);
+          }
+        }
+
+        const info = this.getFilterInfo(filter);
+        return {
+          filter,
+          info,
+          id: info.id,
+          name: this.getFilterName(filter),
+          enabled,
+        };
+      });
     }
   },
 
@@ -491,15 +560,17 @@ export default {
 
           <div ref="filters">
             <FilterListItem
-              v-for="filter in getFilters()"
-              :key="getFilterInfo(filter).id"
-              :ref="getFilterInfo(filter).id"
-              :data-id="getFilterInfo(filter).id"
-              :filter="filter"
-              :filter-info="getFilterInfo(filter)"
-              :filter-name="getFilterName(filter)"
+              v-for="item in filterItems"
+              :key="item.id"
+              :ref="item.id"
+              :data-id="item.id"
+              :filter="item.filter"
+              :filter-info="item.info"
+              :filter-name="item.name"
+              :filter-enabled="item.enabled"
               @select="setActiveFilter"
               @remove="removeFilter"
+              @enable="setFilterEnabled"
             />
           </div>
         </div>
@@ -662,7 +733,6 @@ export default {
 /* Empty/error screens */
 .empty-state,
 .error-state {
-  height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -705,7 +775,7 @@ export default {
   transition: all 0.3s;
 
   transform-origin: center center !important;
-  will-change: transform, top, left;
+  will-change: transform;
 }
 
 .restore-mirror {
