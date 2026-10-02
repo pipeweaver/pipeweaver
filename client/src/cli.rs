@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use pipeweaver_shared::{
     Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType, OrderGroup, Quantum,
 };
+use ulid::Ulid;
 
 /// PipeWeaver CLI
 #[derive(Parser, Debug)]
@@ -60,6 +61,11 @@ pub enum NodeCommands {
         name: String,
         #[command(subcommand)]
         command: NodeIdCommands,
+    },
+    Filter {
+        id: Ulid,
+        #[command(subcommand)]
+        command: FilterCommands,
     },
 }
 
@@ -128,6 +134,12 @@ pub enum NodeIdCommands {
     SetOrder {
         order: u8,
     },
+}
+
+#[derive(Subcommand, Debug)]
+#[command(arg_required_else_help = true)]
+pub enum FilterCommands {
+    Set { symbol: String, value: String },
 }
 
 #[derive(Subcommand, Debug)]
