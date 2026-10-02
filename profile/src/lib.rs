@@ -1,7 +1,9 @@
 mod default;
 
 use enum_map::{EnumMap, enum_map};
-use pipeweaver_shared::{Colour, DeviceType, Mix, MuteState, MuteTarget, OrderGroup, Quantum};
+use pipeweaver_shared::{
+    Colour, DeviceType, FilterValue, Mix, MuteState, MuteTarget, OrderGroup, Quantum,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use ulid::Ulid;
@@ -71,6 +73,9 @@ pub struct VirtualSourceDevice {
     pub description: DeviceDescription,
     pub mute_states: MuteStates,
     pub volumes: Volumes,
+
+    #[serde(default)]
+    pub filters: Vec<Filter>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +96,9 @@ pub struct PhysicalSourceDevice {
     pub mute_states: MuteStates,
     pub volumes: Volumes,
 
+    #[serde(default)]
+    pub filters: Vec<Filter>,
+
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 
     #[serde(default)]
@@ -108,6 +116,9 @@ pub struct VirtualTargetDevice {
     pub volume: u8,
     pub mix: Mix,
 
+    #[serde(default)]
+    pub filters: Vec<Filter>,
+
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 
     #[serde(default)]
@@ -121,6 +132,9 @@ pub struct PhysicalTargetDevice {
     pub mute_state: MuteState,
     pub volume: u8,
     pub mix: Mix,
+
+    #[serde(default)]
+    pub filters: Vec<Filter>,
 
     pub attached_devices: Vec<PhysicalDeviceDescriptor>,
 
@@ -140,6 +154,8 @@ impl Default for PhysicalTargetDevice {
             mute_state: Default::default(),
             mix: Default::default(),
 
+            filters: Default::default(),
+
             attached_devices: Default::default(),
             sync_with_devices: false,
 
@@ -156,6 +172,8 @@ impl Default for VirtualTargetDevice {
 
             mute_state: Default::default(),
             mix: Default::default(),
+
+            filters: Default::default(),
 
             attached_devices: Default::default(),
             attached_port_maps: Default::default(),
@@ -209,4 +227,27 @@ pub struct PortAssignment {
 
     pub left: String,
     pub right: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Filter {
+    #[serde(default = "generate_uid")]
+    pub id: Ulid,
+
+    pub filter: FilterType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FilterType {
+    LV2(LV2Filter),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LV2Filter {
+    pub plugin_uri: String,
+    pub values: HashMap<String, FilterValue>,
+}
+
+fn generate_uid() -> Ulid {
+    Ulid::generate()
 }

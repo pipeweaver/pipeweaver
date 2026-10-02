@@ -1,5 +1,6 @@
 use anyhow::Result;
-use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
+use pipeweaver_pipewire::FilterHandler;
+use pipeweaver_shared::{FilterProperty, FilterValue};
 use rt_ring::{Consumer, Producer};
 
 // This should never get filled up, but needs to be larger than our maximum configurable quantum

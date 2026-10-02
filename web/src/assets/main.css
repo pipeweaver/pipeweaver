@@ -6,7 +6,20 @@
     --mix-background: linear-gradient(#1C242E, #131A22);
     --mix-button-background: linear-gradient(#1c272e, #131A22);
     --mix-button-muted: linear-gradient(rgba(255, 0, 0, 0.2), rgba(255, 0, 0, 0.1));
-    --border: 1px solid rgba(100, 100, 100, 1);
+
+    /*
+     * Reference for a lot of colours:
+     * Background: https://www.colorhexa.com/293a4f
+     * Lighter Stuff: https://www.colorhexa.com/0f151d
+     *
+     * The 'Monochromatic Color' sections of these pages give some clean brighter / darker colours
+     */
+    --border: 1px solid var(--border-colour);
+    --border-colour: #435e82;
+
+    --border-subtle: 1px solid var(--border-subtle-colour);
+    --border-subtle-colour: #324660;
+
     --text: #cacaca;
 
     --cyan: #4fd7ff;

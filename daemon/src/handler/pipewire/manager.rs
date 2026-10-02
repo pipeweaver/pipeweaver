@@ -21,7 +21,7 @@ use pipeweaver_pipewire::{
     PipewireReceiver, PipewireRunner,
 };
 use pipeweaver_profile::Profile;
-use pipeweaver_shared::{AppTarget, DeviceType, Mix, PortDirection};
+use pipeweaver_shared::{AppTarget, DeviceType, FilterConfig, Mix, PortDirection};
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
@@ -62,6 +62,16 @@ pub(crate) struct PipewireManager {
 
     meter_receiver: Option<mpsc::Receiver<(Ulid, u8)>>,
     meter_broadcast: broadcast::Sender<MeterEvent>,
+
+    // Custom filter configs
+    pub(crate) filter_config: HashMap<Ulid, FilterConfig>,
+
+    // These two define which nodes should be considered the start / end points for
+    // a route, this is so we can keep filter management isolated.
+    pub(crate) source_filter_end: HashMap<Ulid, Ulid>,
+
+    #[allow(unused)]
+    pub(crate) target_filter_start: HashMap<Ulid, Ulid>,
 
     // A list of physical nodes
     pub(crate) node_list: EnumMap<DeviceType, Vec<PhysicalDevice>>,
@@ -105,6 +115,10 @@ impl PipewireManager {
             meter_receiver: Some(meter_rx),
             meter_broadcast: config.meter_sender,
 
+            filter_config: Default::default(),
+            source_filter_end: Default::default(),
+            target_filter_start: Default::default(),
+
             node_list: Default::default(),
             device_nodes: Default::default(),
             bridged_filters: Default::default(),
@@ -124,6 +138,7 @@ impl PipewireManager {
     async fn get_audio_config(&self) -> AudioConfiguration {
         AudioConfiguration {
             profile: self.profile.clone(),
+            filter_config: self.filter_config.clone(),
             devices: self.node_list.clone(),
             defaults: enum_map! {
                 DeviceType::Source => match &self.default_source {

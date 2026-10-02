@@ -10,11 +10,13 @@ import MixAssignment from "@/views/desktop/channels/MixAssignment.vue";
 import PhysicalDeviceSelector from "@/views/desktop/channels/DevicePopup.vue";
 import DevicePopup from "@/views/desktop/channels/DevicePopup.vue";
 import ColourPicker from "@/views/desktop/components/ColourPicker.vue";
+import FilterView from "@/views/desktop/filters/FilterView.vue";
 import {Theme} from "@/app/theme.js";
 
 export default {
   name: 'ChannelColumn',
   components: {
+    FilterView,
     ColourPicker,
     DevicePopup,
     PhysicalDeviceSelector,
@@ -233,6 +235,10 @@ export default {
       this.$refs.colour.show(this.$refs['colour_section']);
     },
 
+    filter_clicked: function (e) {
+      this.$refs.filters.show(e);
+    },
+
     colour_changed: function (value) {
       // We're going to abuse the color_dragging function here, and fake an event
       this.$refs.colour_picker.value = value;
@@ -351,6 +357,8 @@ export default {
                 @closed="colour_closed" @colour-changed="colour_changed"
                 @preview-clicked="colour_show_native"/>
 
+  <FilterView :id="id" ref="filters"/>
+
   <div class="mix">
     <div class="title">
       <div class="start drag-handle">
@@ -359,7 +367,7 @@ export default {
       <div class="name">{{ getChannelName() }}</div>
       <div class="end" :class="{ glowing: needsDevice() }">
         <DevicePopup id="select_device" :colour_callback="colour_clicked" :device_id="id"
-                     :order_group='order_group'
+                     :order_group='order_group' :filter_callback="filter_clicked"
                      :type='type'/>
       </div>
     </div>

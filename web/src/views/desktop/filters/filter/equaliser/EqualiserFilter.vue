@@ -1,0 +1,592 @@
+<script>
+import NumberInput from "@/views/desktop/filters/layout/inputs/NumberInput.vue";
+import Toggle from "@/views/desktop/filters/layout/inputs/Toggle.vue";
+import DropMenu from "@/views/desktop/filters/layout/inputs/DropMenu.vue";
+import VerticalRange from "@/views/desktop/inputs/VerticalRange.vue";
+import FlowLayout from "@/views/desktop/filters/layout/FlowLayout.vue";
+import FlowItem from "@/views/desktop/filters/layout/FlowItem.vue";
+import Field from "@/views/desktop/filters/layout/Field.vue";
+import ActionBar from "@/views/desktop/filters/layout/ActionBar.vue";
+import ActionBarItem from "@/views/desktop/filters/layout/ActionBarItem.vue";
+import ModalOverlay from "@/views/desktop/components/ModalOverlay.vue";
+import {
+  dbToLinear,
+  getFilterConfig,
+  linearToDb,
+  setFilterValue,
+  setFilterValues
+} from "@/app/filters.js";
+
+export default {
+  name: "EqualiserFilter",
+  components: {
+    FlowItem,
+    Field,
+    FlowLayout,
+    DropMenu,
+    NumberInput,
+    Toggle,
+    VerticalRange,
+    ActionBar,
+    ActionBarItem,
+    ModalOverlay
+  },
+  props: {
+    filterId: {type: String, required: true},
+    filterType: {type: String, required: true}
+  },
+
+  data() {
+    return {
+      update_locked: false,
+      gainLocks: {},
+
+      channel: 'left',
+      menuBand: 0,
+      bandIndices: Array.from({length: 32}, (_, i) => i),
+
+      visibleBandCount: 8,
+      prefix: {
+        left: {
+          type: 'ftl',
+          mode: 'fml',
+          slope: 'sl',
+          solo: 'xsl',
+          mute: 'xml',
+          freq: 'fl',
+          q: 'ql',
+          width: 'wl',
+          gain: 'gl'
+        },
+        right: {
+          type: 'ftr',
+          mode: 'fmr',
+          slope: 'sr',
+          solo: 'xsr',
+          mute: 'xmr',
+          freq: 'fr',
+          q: 'qr',
+          width: 'wr',
+          gain: 'gr'
+        },
+      },
+    };
+  },
+
+  created() {
+    // Minimum of 8 bands, work backwards from 32 to find highest active band
+    const minimum = this.visibleBandCount;
+    let highestActive = -1;
+    for (const index of this.bandIndices) {
+      const leftType = this.getParam(`${this.prefix.left.type}_${index}`)?.value?.Int32;
+      const rightType = this.getParam(`${this.prefix.right.type}_${index}`)?.value?.Int32;
+      if (leftType || rightType) highestActive = index;
+    }
+    this.visibleBandCount = Math.max(minimum, highestActive + 1);
+  },
+
+  computed: {
+    visibleBandIndices() {
+      return this.bandIndices.slice(0, this.visibleBandCount);
+    },
+  },
+
+  methods: {
+    linearToDb,
+
+    getParam(symbol) {
+      return getFilterConfig(this.filterId).parameters.find(p => p.symbol === symbol);
+    },
+
+    setParam(symbol, value) {
+      return setFilterValue(this.filterId, symbol, value);
+    },
+
+    // Batched form of setParam - takes an array of {symbol, value} pairs and
+    // sends them as a single SetFilterValues command, instead of one
+    // SetFilterValue round-trip per param.
+    setValues(pairs) {
+      if (pairs.length === 0) return Promise.resolve();
+      return setFilterValues(this.filterId, pairs);
+    },
+
+    setDbParam(symbol, value) {
+      return this.setParam(symbol, dbToLinear(value));
+    },
+
+    getDb(symbol) {
+      return linearToDb(this.getParam(symbol).value.Float32);
+    },
+
+    bandSymbol(field, index) {
+      return `${this.prefix[this.channel][field]}_${index}`;
+    },
+
+    getRawValue(symbol) {
+      const p = this.getParam(symbol);
+      if ('Bool' in p.value) return p.value.Bool;
+      if ('Int32' in p.value) return p.value.Int32;
+      return p.value.Float32;
+    },
+
+    setBandParam(field, index, value) {
+      return this.setValues(this.buildBandUpdates(field, index, value));
+    },
+
+    setBandDbParam(field, index, value) {
+      return this.setValues(this.buildBandUpdates(field, index, dbToLinear(value)));
+    },
+
+    buildBandUpdates(field, index, rawValue) {
+      const updates = [{symbol: this.bandSymbol(field, index), value: rawValue}];
+      if (this.channel === 'left' && this.getParam('clink').value.Bool) {
+        updates.push({symbol: `${this.prefix.right[field]}_${index}`, value: rawValue});
+      }
+      return updates;
+    },
+
+    bandGainDrag(index, e) {
+      if (this.gainLocks[index]) return;
+      this.commitBandGain(index, e);
+    },
+
+    bandGainCommit(index, e) {
+      this.commitBandGain(index, e);
+    },
+
+    commitBandGain(index, e) {
+      this.gainLocks = {...this.gainLocks, [index]: true};
+      const value = parseFloat(e.target.value);
+      Promise.resolve(this.setBandDbParam('gain', index, value)).then(() => {
+        this.gainLocks = {...this.gainLocks, [index]: false};
+      });
+    },
+
+    buildBandSyncUpdates() {
+      const fields = ['type', 'mode', 'slope', 'solo', 'mute', 'freq', 'q', 'width', 'gain'];
+      const updates = [];
+      for (const index of this.bandIndices) {
+        for (const field of fields) {
+          const leftSymbol = `${this.prefix.left[field]}_${index}`;
+          const rightSymbol = `${this.prefix.right[field]}_${index}`;
+          const leftValue = this.getRawValue(leftSymbol);
+          if (this.getRawValue(rightSymbol) === leftValue) continue; // already in sync
+          updates.push({symbol: rightSymbol, value: leftValue});
+        }
+      }
+      return updates;
+    },
+
+    toggleLinkChannels() {
+      const enabling = !this.getParam('clink').value.Bool;
+      const updates = [{symbol: 'clink', value: `${enabling}`}];
+      if (enabling) {
+        this.channel = 'left';
+        updates.push(...this.buildBandSyncUpdates());
+      }
+      return this.setValues(updates);
+    },
+
+    boolOptions() {
+      return [{value: 'false', text: 'Off'}, {value: 'true', text: 'On'}];
+    },
+
+    modeOptions() {
+      return [
+        {value: '0', text: 'IIR'},
+        {value: '1', text: 'FIR'},
+        {value: '2', text: 'FFT'},
+        {value: '3', text: 'SPM'},
+      ];
+    },
+
+    decrampOptions() {
+      return [
+        {value: '0', text: 'Off'},
+        {value: '1', text: 'x2'},
+        {value: '2', text: 'x3'},
+        {value: '3', text: 'x4'},
+        {value: '4', text: 'x6'},
+        {value: '5', text: 'x8'},
+      ];
+    },
+
+    bandTypeOptions() {
+      return [
+        {value: '0', text: 'Off'},
+        {value: '1', text: 'Bell'},
+        {value: '2', text: 'Hi-pass'},
+        {value: '3', text: 'Hi-shelf'},
+        {value: '4', text: 'Lo-pass'},
+        {value: '5', text: 'Lo-shelf'},
+        {value: '6', text: 'Notch'},
+        {value: '7', text: 'Resonance'},
+        {value: '8', text: 'Allpass'},
+        {value: '9', text: 'Bandpass'},
+        {value: '10', text: 'Ladder-pass'},
+        {value: '11', text: 'Ladder-rej'},
+      ];
+    },
+
+    bandModeOptions() {
+      return [
+        {value: '0', text: 'RLC (BT)'},
+        {value: '1', text: 'RLC (MT)'},
+        {value: '2', text: 'BWC (BT)'},
+        {value: '3', text: 'BWC (MT)'},
+        {value: '4', text: 'LRX (BT)'},
+        {value: '5', text: 'LRX (MT)'},
+        {value: '6', text: 'APO (DR)'},
+      ];
+    },
+
+    bandSlopeOptions() {
+      return [
+        {value: '0', text: 'x1'},
+        {value: '1', text: 'x2'},
+        {value: '2', text: 'x3'},
+        {value: '3', text: 'x4'},
+      ];
+    },
+
+    widthEnabled(index) {
+      const t = this.getParam(this.bandSymbol('type', index)).value.Int32;
+      return t === 9 || t === 10 || t === 11;
+    },
+
+    openBandMenu(index) {
+      this.menuBand = index;
+      this.$refs.bandModal.openModal(undefined, undefined);
+    },
+
+    formattedFreq(index) {
+      const f = this.getParam(this.bandSymbol('freq', index)).value.Float32;
+      if (f < 1000) {
+        return `${f.toFixed(0)} Hz`;
+      }
+      return `${(f * 0.001).toFixed(1)} kHz`;
+    },
+
+    flatResponse() {
+      const updates = [];
+      for (const i of this.bandIndices) {
+        updates.push({symbol: `${this.prefix.left.gain}_${i}`, value: dbToLinear(0)});
+        updates.push({symbol: `${this.prefix.right.gain}_${i}`, value: dbToLinear(0)});
+      }
+      return this.setValues(updates);
+    },
+
+    canAddBand() {
+      return this.visibleBandCount < this.bandIndices.length;
+    },
+
+    canRemoveBand() {
+      return this.visibleBandCount > 1;
+    },
+
+    addBand() {
+      if (!this.canAddBand()) return;
+      this.visibleBandCount += 1;
+    },
+
+    removeBand() {
+      if (!this.canRemoveBand()) return;
+      const index = this.visibleBandCount - 1;
+      this.visibleBandCount -= 1;
+
+      // Force the band we just hid to 'Off' on BOTH channels - regardless
+      // of which tab is currently selected, or whether they're linked -
+      // so nothing keeps running silently off-screen on either side.
+      this.setValues([
+        {symbol: `${this.prefix.left.type}_${index}`, value: '0'},
+        {symbol: `${this.prefix.right.type}_${index}`, value: '0'},
+      ]);
+    },
+
+  }
+}
+</script>
+
+<template>
+  <div class="equaliser-root">
+    <div class="flow">
+      <Field label="Mode">
+        <DropMenu :values="modeOptions()" :selected="`${getParam('mode').value.Int32}`"
+                  @valueClicked="setParam('mode', $event)"/>
+      </Field>
+      <Field label="Decramping">
+        <DropMenu :values="decrampOptions()" :selected="`${getParam('decramp').value.Int32}`"
+                  @valueClicked="setParam('decramp', $event)"/>
+      </Field>
+      <Field label="Balance">
+        <NumberInput :min="getParam('bal').min" :max="getParam('bal').max" :step="0.1" suffix="%"
+                     :value="getParam('bal').value.Float32"
+                     @input="setParam('bal', $event)" :allow-empty="false"/>
+      </Field>
+      <Field label="Pitch Left">
+        <NumberInput :min="getParam('frqs_l').min" :max="getParam('frqs_l').max" :step="0.01"
+                     suffix="st"
+                     :value="getParam('frqs_l').value.Float32"
+                     @input="setParam('frqs_l', $event)" :allow-empty="false"/>
+      </Field>
+      <Field label="Pitch Right">
+        <NumberInput :min="getParam('frqs_r').min" :max="getParam('frqs_r').max" :step="0.01"
+                     suffix="st"
+                     :value="getParam('frqs_r').value.Float32"
+                     @input="setParam('frqs_r', $event)" :allow-empty="false"/>
+      </Field>
+    </div>
+
+
+    <div class="channel-tabs" v-if="!getParam('clink').value.Bool">
+      <button :class="{active: channel === 'left'}" @click="channel = 'left'">Left</button>
+      <button :class="{active: channel === 'right'}" @click="channel = 'right'">Right</button>
+    </div>
+
+    <div class="bands-scroll">
+      <div class="band-strip" v-for="index in visibleBandIndices" :key="index"
+           :class="{off: getParam(bandSymbol('type', index)).value.Int32 === 0}">
+        <div class="band-index">{{ index + 1 }}</div>
+
+        <button class="band-menu-btn" @click="openBandMenu(index)" title="Band settings">
+          <font-awesome-icon :icon="['fas', 'gear']"/>
+        </button>
+
+        <div class="band-freq">{{ formattedFreq(index) }}</div>
+        <div class="band-q">Q {{ getParam(bandSymbol('q', index)).value.Float32.toFixed(2) }}</div>
+
+        <div class="band-gain-slider">
+          <VerticalRange :min-value="-36" :max-value="36" :step="0.01"
+                         :current-value="getDb(bandSymbol('gain', index))"
+                         :meter="false"
+                         :aria-label="`Band ${index + 1} gain`"
+                         @input="e => bandGainDrag(index, e)"
+                         @change="e => bandGainCommit(index, e)"/>
+        </div>
+
+        <div class="band-gain-value">{{ getDb(bandSymbol('gain', index)).toFixed(2) }}</div>
+      </div>
+    </div>
+
+    <ActionBar>
+      <ActionBarItem label="Link Channels" :active="getParam('clink').value.Bool"
+                     @click="toggleLinkChannels"/>
+      <ActionBarItem label="Flat Response" :toggle="false" @click="flatResponse"/>
+
+      <ActionBarItem label="−" :toggle="false" :disabled="!canRemoveBand()"
+                     @click="removeBand"/>
+      <span class="band-count">{{ visibleBandCount }} band{{
+          visibleBandCount === 1 ? '' : 's'
+        }}</span>
+      <ActionBarItem label="+" :toggle="false" :disabled="!canAddBand()"
+                     @click="addBand"/>
+    </ActionBar>
+
+    <ModalOverlay ref="bandModal" id="equaliserBandModal" :show_footer="false" width="450px">
+      <template v-slot:title>Band {{ menuBand + 1 }}</template>
+
+      <div class="band-modal-body">
+        <Field label="Frequency">
+          <NumberInput :min="getParam(bandSymbol('freq', menuBand)).min"
+                       :max="getParam(bandSymbol('freq', menuBand)).max" :step="1" suffix="Hz"
+                       :value="getParam(bandSymbol('freq', menuBand)).value.Float32"
+                       @input="setBandParam('freq', menuBand, $event)" :allow-empty="false"/>
+        </Field>
+
+        <Field label="Gain">
+          <NumberInput :min="-36" :max="36" :step="0.1" suffix="dB"
+                       :value="getDb(bandSymbol('gain', menuBand))"
+                       @input="setBandDbParam('gain', menuBand, $event)" :allow-empty="false"/>
+        </Field>
+
+        <Field label="Q">
+          <NumberInput :min="getParam(bandSymbol('q', menuBand)).min"
+                       :max="getParam(bandSymbol('q', menuBand)).max" :step="0.01"
+                       :value="getParam(bandSymbol('q', menuBand)).value.Float32"
+                       @input="setBandParam('q', menuBand, $event)" :allow-empty="false"/>
+        </Field>
+
+        <Field label="Width" :disabled="!widthEnabled(menuBand)">
+          <NumberInput :min="getParam(bandSymbol('width', menuBand)).min"
+                       :max="getParam(bandSymbol('width', menuBand)).max" :step="0.01" suffix="oct"
+                       :value="getParam(bandSymbol('width', menuBand)).value.Float32"
+                       @input="setBandParam('width', menuBand, $event)" :allow-empty="false"/>
+        </Field>
+
+        <Field label="Mute" row>
+          <Toggle :value="getParam(bandSymbol('mute', menuBand)).value.Bool"
+                  @input="setBandParam('mute', menuBand, $event)"/>
+        </Field>
+
+        <Field label="Solo" row>
+          <Toggle :value="getParam(bandSymbol('solo', menuBand)).value.Bool"
+                  @input="setBandParam('solo', menuBand, $event)"/>
+        </Field>
+
+        <div class="band-modal-footer">
+          <Field label="Type">
+            <DropMenu :values="bandTypeOptions()"
+                      :selected="`${getParam(bandSymbol('type', menuBand)).value.Int32}`"
+                      @valueClicked="setBandParam('type', menuBand, $event)"/>
+          </Field>
+          <Field label="Mode">
+            <DropMenu :values="bandModeOptions()"
+                      :selected="`${getParam(bandSymbol('mode', menuBand)).value.Int32}`"
+                      @valueClicked="setBandParam('mode', menuBand, $event)"/>
+          </Field>
+          <Field label="Slope">
+            <DropMenu :values="bandSlopeOptions()"
+                      :selected="`${getParam(bandSymbol('slope', menuBand)).value.Int32}`"
+                      @valueClicked="setBandParam('slope', menuBand, $event)"/>
+          </Field>
+        </div>
+      </div>
+
+    </ModalOverlay>
+  </div>
+</template>
+
+<style scoped>
+.equaliser-root {
+  height: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.equaliser-root > .flow-layout {
+  flex: 0 0 auto;
+}
+
+.equaliser-root > .flow {
+  display: flex;
+  flex-wrap: wrap;
+
+  justify-content: center;
+
+  gap: 16px;
+
+  align-items: stretch;
+  align-content: flex-start;
+}
+
+.equaliser-root > .flow > * {
+  width: 150px;
+}
+
+.channel-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.channel-tabs button {
+  padding: 4px 14px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background-color: #222222;
+  color: inherit;
+  cursor: pointer;
+}
+
+.channel-tabs button.active {
+  background-color: #444444;
+  font-weight: 600;
+}
+
+.bands-scroll {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.band-count {
+  font-size: 0.9em;
+  opacity: 0.75;
+  min-width: 5.5em;
+  text-align: center;
+}
+
+.band-strip {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+
+  border: 1px solid #3b403f;
+  padding: 8px 6px;
+  border-radius: 10px;
+  background-color: #252a29;
+  width: 56px;
+  flex: 0 0 56px;
+}
+
+.band-strip.off {
+  opacity: 0.45;
+}
+
+.band-index {
+  flex: 0 0 auto;
+  font-weight: 600;
+  font-size: 0.9em;
+}
+
+.band-menu-btn {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid #666;
+  background-color: #252a29;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75em;
+}
+
+.band-menu-btn:hover {
+  background-color: #3b413f;
+}
+
+.band-freq, .band-q, .band-gain-value {
+  flex: 0 0 auto;
+  font-size: 0.75em;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.band-gain-slider {
+  width: 28px;
+  flex: 1;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.band-gain-value {
+  font-weight: 600;
+  opacity: 1;
+}
+
+.band-modal-footer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.band-modal-footer > * {
+  flex: 1;
+}
+
+</style>

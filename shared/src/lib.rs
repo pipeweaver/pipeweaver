@@ -10,6 +10,7 @@ use strum_macros::{Display, EnumIter};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Debug;
 use std::str::FromStr;
@@ -270,4 +271,58 @@ fn parse_nibble(b: u8) -> Result<u8, InvalidColour> {
 
     // Expand nibble: e.g. A → AA
     Ok((value << 4) | value)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FilterValue {
+    Int32(i32),
+    Float32(f32),
+    UInt8(u8),
+    UInt32(u32),
+    String(String),
+    Bool(bool),
+    Enum(String, u32),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilterValueSet {
+    pub id: u32,
+    pub value: FilterValue,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilterProperty {
+    pub id: u32,
+    pub name: String,
+    pub symbol: String,
+    pub value: FilterValue,
+
+    pub min: f32,
+    pub max: f32,
+
+    pub is_input: bool,
+
+    pub enum_def: Option<HashMap<u32, String>>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct FilterConfig {
+    pub name: String,
+    pub identifier: String,
+    pub state: FilterState,
+    pub parameters: Vec<FilterProperty>,
+}
+
+#[derive(Display, Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub enum FilterState {
+    Running,
+    NotFound,
+    NotCompatible,
+    Error(String),
+
+    // This one is for when the cargo feature for a filter isn't enabled.
+    FeatureMissing(String),
+
+    #[default]
+    Stopped,
 }

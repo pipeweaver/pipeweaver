@@ -156,6 +156,13 @@ impl PipewireManager {
             .managed_filter_set_parameter(id, key, value)
     }
 
+    pub fn set_filter_values(&mut self, id: Ulid, values: Vec<(u32, FilterValue)>) -> Result<()> {
+        // We need to grab the filter from the store, and pass the value set..
+        self.store
+            .borrow_mut()
+            .managed_filter_set_parameters(id, values)
+    }
+
     pub fn create_link(
         &mut self,
         source: LinkType,
@@ -398,7 +405,9 @@ pub fn run_pw_main_loop(
             PipewireInternalMessage::SetFilterValue(id, key, value, result) => {
                 let _ = result.send(manager.borrow_mut().set_filter_value(id, key, value));
             }
-
+            PipewireInternalMessage::SetFilterValues(id, values, result) => {
+                let _ = result.send(manager.borrow_mut().set_filter_values(id, values));
+            }
             PipewireInternalMessage::SetNodeVolume(id, volume, result) => {
                 let _ = result.send(manager.borrow_mut().set_node_volume(id, volume));
             }

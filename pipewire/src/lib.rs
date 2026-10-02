@@ -9,7 +9,7 @@ use anyhow::{Result, anyhow, bail};
 use enum_map::{Enum, EnumMap};
 use log::{info, trace, warn};
 use oneshot::TryRecvError;
-use std::collections::HashMap;
+use pipeweaver_shared::{FilterProperty, FilterValue};
 use std::fmt::Debug;
 use std::sync::mpsc;
 use std::thread;
@@ -36,6 +36,7 @@ pub enum PipewireMessage {
 
     GetFilterParameters(Ulid, oneshot::Sender<Result<Vec<FilterProperty>>>),
     SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<String>>),
+    SetFilterValues(Ulid, Vec<(u32, FilterValue)>),
 
     SetNodeVolume(Ulid, u8),
     SetNodeMute(Ulid, bool),
@@ -72,6 +73,7 @@ pub enum PipewireInternalMessage {
 
     GetFilterParameters(Ulid, oneshot::Sender<Result<Vec<FilterProperty>>>),
     SetFilterValue(Ulid, u32, FilterValue, oneshot::Sender<Result<String>>),
+    SetFilterValues(Ulid, Vec<(u32, FilterValue)>, oneshot::Sender<Result<()>>),
 
     SetNodeVolume(Ulid, u8, oneshot::Sender<Result<()>>),
     SetNodeMute(Ulid, bool, oneshot::Sender<Result<()>>),
@@ -209,6 +211,9 @@ impl PipewireRunner {
             }
             PipewireMessage::SetFilterValue(id, prop, value, tx) => {
                 PipewireInternalMessage::SetFilterValue(id, prop, value, tx)
+            }
+            PipewireMessage::SetFilterValues(id, values) => {
+                PipewireInternalMessage::SetFilterValues(id, values, tx)
             }
             PipewireMessage::SetNodeVolume(id, volume) => {
                 PipewireInternalMessage::SetNodeVolume(id, volume, tx)
@@ -409,34 +414,15 @@ pub trait FilterHandler: Send + 'static {
     fn get_properties(&self) -> Vec<FilterProperty>;
     fn get_property(&self, id: u32) -> FilterProperty;
     fn set_property(&mut self, id: u32, value: FilterValue) -> Result<String>;
+    fn set_properties(&mut self, values: Vec<(u32, FilterValue)>) -> Result<()> {
+        // Default behaviour is to just send them all through
+        for value in values {
+            self.set_property(value.0, value.1)?;
+        }
+        Ok(())
+    }
 
     fn process_samples(&mut self, inputs: Vec<&mut [f32]>, outputs: Vec<&mut [f32]>);
-}
-
-// We need these because while *WE* know what values are coming in and out, rust doesn't
-// so gives us a wrapper around some common types that can be read out appropriately by the filter
-#[derive(Debug)]
-pub enum FilterValue {
-    Int32(i32),
-    Float32(f32),
-    UInt8(u8),
-    UInt32(u32),
-    String(String),
-    Bool(bool),
-    Enum(String, u32),
-}
-
-#[derive(Debug)]
-pub struct FilterProperty {
-    pub id: u32,
-    pub name: String,
-    pub symbol: String,
-    pub value: FilterValue,
-
-    pub min: f32,
-    pub max: f32,
-
-    pub enum_def: Option<HashMap<u32, String>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

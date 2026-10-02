@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
-use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
+use pipeweaver_pipewire::FilterHandler;
+use pipeweaver_shared::{FilterProperty, FilterValue};
 
 pub struct PassThroughFilter {}
 

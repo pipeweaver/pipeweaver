@@ -298,7 +298,7 @@ export default {
 .modal-footer button {
   background-color: #353937;
   color: #fff;
-  padding: 8px 30px;
+  padding: 4px 25px;
   border: 1px solid #2a2e2d;
 }
 

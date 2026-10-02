@@ -1,9 +1,9 @@
 use enum_map::EnumMap;
 use json_patch::Patch;
-use pipeweaver_profile::Profile;
+use pipeweaver_profile::{Filter, Profile};
 use pipeweaver_shared::{
-    AppDefinition, AppTarget, Colour, DeviceType, Mix, MuteState, MuteTarget, NodeType, OrderGroup,
-    PortDirection, Quantum,
+    AppDefinition, AppTarget, Colour, DeviceType, FilterConfig, FilterValue, FilterValueSet, Mix,
+    MuteState, MuteTarget, NodeType, OrderGroup, PortDirection, Quantum,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -151,6 +151,13 @@ pub enum APICommand {
     // Commands for Default Device changing
     SetDefaultInput(Ulid),
     SetDefaultOutput(Ulid),
+
+    // Ability to create filters for a node
+    AddFilterToNode(Ulid, Filter),
+    SetFilterValue(Ulid, u32, FilterValue),
+    SetFilterValues(Ulid, Vec<FilterValueSet>),
+    RemoveFilter(Ulid),
+    MoveFilter(Ulid, usize),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,6 +176,7 @@ pub struct DaemonStatus {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AudioConfiguration {
     pub profile: Profile,
+    pub filter_config: HashMap<Ulid, FilterConfig>,
     pub devices: EnumMap<DeviceType, Vec<PhysicalDevice>>,
 
     // Default device assignments. The defaults field is legacy, and defaults_id should be used

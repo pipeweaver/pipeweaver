@@ -23,6 +23,7 @@ use ulid::Ulid;
 type GroupList = EnumMap<OrderGroup, Vec<Ulid>>;
 
 /// This crate contains everything needed to create a Pipewire node
+#[allow(unused)]
 pub(crate) trait NodeManagement {
     fn get_node_type(&self, id: Ulid) -> Option<NodeType>;
 
@@ -38,6 +39,7 @@ pub(crate) trait NodeManagement {
 
     async fn node_set_group(&mut self, id: Ulid, group: OrderGroup) -> Result<()>;
     async fn node_set_position(&mut self, id: Ulid, position: u8) -> Result<()>;
+    async fn node_get_description(&self, id: Ulid) -> Result<DeviceDescription>;
 
     async fn node_set_colour(&mut self, id: Ulid, colour: Colour) -> Result<()>;
     fn get_target_node_count(&self) -> usize;
@@ -207,9 +209,16 @@ impl NodeManagement for PipewireManager {
         let description = self.get_device_description(id)?;
         description.name = name;
 
-        // Create a local version of this description, create the node tree and load volumes
+        // Create a local version of this description
         let local_desc = description.clone();
+
+        // First, re-load the filter tree before creating the new node.
+        self.channel_load_filters(id).await?;
+
+        // Create the nodes
         self.node_create(node_type, &local_desc).await?;
+
+        // Load volumes, and sync with pipewire
         self.load_initial_volume(id).await?;
         self.sync_pipewire_volume(id).await;
 
@@ -270,6 +279,27 @@ impl NodeManagement for PipewireManager {
             order.insert(position, id);
         }
         Ok(())
+    }
+
+    async fn node_get_description(&self, id: Ulid) -> Result<DeviceDescription> {
+        let err = anyhow!("Cannot Find Node");
+        if let Some(node_type) = self.get_node_type(id) {
+            return match node_type {
+                NodeType::PhysicalSource => {
+                    Ok(self.get_physical_source(id).ok_or(err)?.description.clone())
+                }
+                NodeType::PhysicalTarget => {
+                    Ok(self.get_physical_target(id).ok_or(err)?.description.clone())
+                }
+                NodeType::VirtualSource => {
+                    Ok(self.get_virtual_source(id).ok_or(err)?.description.clone())
+                }
+                NodeType::VirtualTarget => {
+                    Ok(self.get_virtual_target(id).ok_or(err)?.description.clone())
+                }
+            };
+        }
+        bail!("Cannot Find Node");
     }
 
     async fn node_set_colour(&mut self, id: Ulid, colour: Colour) -> Result<()> {
@@ -347,16 +377,28 @@ impl NodeManagementLocal for PipewireManager {
         // Create and attach a meter
         let filter_name = format!("{}-meter", desc.name);
         let meter = self.filter_meter_create(desc.id, filter_name).await?;
-        if self.meter_enabled {
-            self.link_create_filter_to_filter(desc.id, meter).await?;
-        }
         self.meter_map.insert(desc.id, meter);
 
         let (mix_a, mix_b) = self.node_create_a_b_volumes(desc).await?;
 
+        let source = self
+            .source_filter_end
+            .get(&desc.id)
+            .copied()
+            .unwrap_or(desc.id);
+
+        if self.meter_enabled {
+            self.link_create_filter_to_filter(source, meter).await?;
+        }
+
         // Now we need to link our filter to the Mixes
-        self.link_create_filter_to_filter(desc.id, mix_a).await?;
-        self.link_create_filter_to_filter(desc.id, mix_b).await?;
+        self.link_create_filter_to_filter(source, mix_a).await?;
+        self.link_create_filter_to_filter(source, mix_b).await?;
+
+        if source != desc.id {
+            // We need to attach this to our filter tree
+            self.source_link_to_filters(desc.id, false).await?;
+        }
 
         // Add this for mapping physical devices
         self.physical_source.insert(desc.id, vec![]);
@@ -391,19 +433,32 @@ impl NodeManagementLocal for PipewireManager {
         // Create a Meter
         let filter_name = format!("{}-meter", desc.name);
         let meter = self.filter_meter_create(desc.id, filter_name).await?;
-
-        // Attach this to the original source
-        if self.meter_enabled {
-            self.link_create_node_to_filter(desc.id, meter).await?;
-        }
         self.meter_map.insert(desc.id, meter);
 
         // Generate the A/B Mixes
         let (mix_a, mix_b) = self.node_create_a_b_volumes(desc).await?;
 
-        // Now we need to link our node to the Mixes
-        self.link_create_node_to_filter(desc.id, mix_a).await?;
-        self.link_create_node_to_filter(desc.id, mix_b).await?;
+        if let Some(id) = self.source_filter_end.get(&desc.id) {
+            // If we have a filter end point, we're joining on filters and not on nodes
+            if self.meter_enabled {
+                self.link_create_filter_to_filter(*id, meter).await?;
+            }
+
+            // Now we need to link our node to the Mixes
+            self.link_create_filter_to_filter(*id, mix_a).await?;
+            self.link_create_filter_to_filter(*id, mix_b).await?;
+
+            // Ok, we need to attach ourselves to the main filter tree
+            self.source_link_to_filters(desc.id, true).await?;
+        } else {
+            if self.meter_enabled {
+                self.link_create_node_to_filter(desc.id, meter).await?;
+            }
+
+            // Now we need to link our node to the Mixes
+            self.link_create_node_to_filter(desc.id, mix_a).await?;
+            self.link_create_node_to_filter(desc.id, mix_b).await?;
+        };
 
         // Create a map for this ID to the mixes
         self.source_map
@@ -438,6 +493,12 @@ impl NodeManagementLocal for PipewireManager {
         }
         self.meter_map.insert(desc.id, meter);
 
+        // Ok, before we finish off, we need to find the last active filter (if applicable) and
+        // connect it up to us.
+        if let Some(last) = self.filter_custom_get_last(desc.id).await {
+            self.link_create_filter_to_filter(last, desc.id).await?;
+        }
+
         Ok(())
     }
 
@@ -453,6 +514,10 @@ impl NodeManagementLocal for PipewireManager {
             self.link_create_node_to_filter(desc.id, meter).await?;
         }
         self.meter_map.insert(desc.id, meter);
+
+        if let Some(last) = self.filter_custom_get_last(desc.id).await {
+            self.link_create_filter_to_node(last, desc.id).await?;
+        }
 
         Ok(())
     }
@@ -488,10 +553,13 @@ impl NodeManagementLocal for PipewireManager {
             }
         }
 
+        // Get the filter chain sauce if needed
+        let src = self.source_filter_end.get(&id).copied().unwrap_or(id);
+
         // Detach and destroy the Meter
         if let Some(&meter) = self.meter_map.get(&id) {
             if self.meter_enabled {
-                self.link_remove_filter_to_filter(id, meter).await?;
+                self.link_remove_filter_to_filter(src, meter).await?;
             }
             self.filter_remove(meter).await?;
             self.meter_map.remove(&id);
@@ -501,15 +569,28 @@ impl NodeManagementLocal for PipewireManager {
         if let Some(mix_map) = self.source_map.get(&id) {
             let mix_map = *mix_map;
             for mix in Mix::iter() {
-                self.link_remove_filter_to_filter(id, mix_map[mix]).await?;
+                self.link_remove_filter_to_filter(src, mix_map[mix]).await?;
 
                 // Remove all links from this Mix to all defined outputs
-                self.remove_routes(id, mix_map[mix]).await?;
+                self.remove_routes(src, mix_map[mix]).await?;
 
                 // Should be fully detached, remove the Mix filter
                 self.filter_remove(mix_map[mix]).await?
             }
         }
+
+        // Check whether we have to detach a filter tree
+        if src != id {
+            // Get the first running filter, of if there isn't one, the passthrough
+            let running = self.filter_custom_get_running(src).await;
+            let first = running.first().copied().unwrap_or(src);
+
+            // Detach it.
+            self.link_remove_filter_to_filter(id, first).await?;
+        }
+
+        // After this point, the entire filter tree is isolated, so remove it
+        self.filter_custom_tree_teardown(id).await?;
 
         // Remove the Base pass through filter from the tree
         self.filter_remove(id).await?;
@@ -542,10 +623,13 @@ impl NodeManagementLocal for PipewireManager {
         // Virtual Sources are a little easier, still a bit of a repeat from the above
         // in places, but we don't have to deal with Unmanaged sources, and our node
         // connects directly to the Mix A / B volume filters
+
+        let src = self.source_filter_end.get(&id).copied().unwrap_or(id);
+
         if let Some(mix_map) = self.source_map.get(&id) {
             let mix_map = *mix_map;
             for mix in Mix::iter() {
-                self.link_remove_node_to_filter(id, mix_map[mix]).await?;
+                self.link_remove_node_to_filter(src, mix_map[mix]).await?;
 
                 // Remove all links from this Mix to all defined outputs
                 self.remove_routes(id, mix_map[mix]).await?;
@@ -558,11 +642,22 @@ impl NodeManagementLocal for PipewireManager {
         // Detach and destroy the Meter
         if let Some(&meter) = self.meter_map.get(&id) {
             if self.meter_enabled {
-                self.link_remove_node_to_filter(id, meter).await?;
+                self.link_remove_node_to_filter(src, meter).await?;
             }
             self.filter_remove(meter).await?;
             self.meter_map.remove(&id);
         }
+
+        // Check whether we have to detach a passthrough node
+        if src != id {
+            let running = self.filter_custom_get_running(src).await;
+            let first = running.first().copied().unwrap_or(src);
+
+            self.link_remove_node_to_filter(id, first).await?;
+        }
+
+        // After this point, the entire filter tree is isolated
+        self.filter_custom_tree_teardown(id).await?;
 
         // Remove the Node from the Pipewire tree
         self.node_pw_remove(id).await?;
@@ -600,6 +695,8 @@ impl NodeManagementLocal for PipewireManager {
             }
         }
 
+        let src = self.target_filter_start.get(&id).copied().unwrap_or(id);
+
         // Detach and destroy the Meter
         if let Some(&meter) = self.meter_map.get(&id) {
             if self.meter_enabled {
@@ -619,7 +716,7 @@ impl NodeManagementLocal for PipewireManager {
                     // Drop our Link on All Mixes
                     for mix in Mix::iter() {
                         // Flag this for removal, this gets done slightly later
-                        self.link_remove_filter_to_filter(mix_map[mix], id).await?;
+                        self.link_remove_filter_to_filter(mix_map[mix], src).await?;
                     }
                 }
             }
@@ -633,6 +730,17 @@ impl NodeManagementLocal for PipewireManager {
                 }
             }
         }
+
+        // Finally, disconnect the last filter (if applicable) from the end
+        if src != id {
+            let running = self.filter_custom_get_running(src).await;
+            let last = running.last().copied().unwrap_or(src);
+
+            self.link_remove_filter_to_filter(last, id).await?;
+        }
+
+        // Remove the entire filter tree
+        self.filter_custom_tree_teardown(id).await?;
 
         // Now we can destroy our 'Volume' filter
         self.filter_remove(id).await?;
@@ -660,6 +768,8 @@ impl NodeManagementLocal for PipewireManager {
         // Again, similar to physical targets, but we need to check the target map to
         // find our volume filter then un-route and remove it
 
+        let src = self.target_filter_start.get(&id).copied().unwrap_or(id);
+
         // Detach and destroy the Meter
         if let Some(&meter) = self.meter_map.get(&id) {
             if self.meter_enabled {
@@ -685,11 +795,21 @@ impl NodeManagementLocal for PipewireManager {
                 if let Some(mix_map) = self.source_map.get(&source) {
                     let mix_map = *mix_map;
                     for mix in Mix::iter() {
-                        self.link_remove_filter_to_node(mix_map[mix], id).await?;
+                        self.link_remove_filter_to_node(mix_map[mix], src).await?;
                     }
                 }
             }
         }
+
+        if src != id {
+            let running = self.filter_custom_get_running(src).await;
+            let last = running.last().copied().unwrap_or(src);
+
+            self.link_remove_filter_to_node(last, id).await?;
+        }
+
+        // Remove the entire filter tree
+        self.filter_custom_tree_teardown(id).await?;
 
         // Now we can drop the node
         self.node_pw_remove(id).await?;
@@ -724,7 +844,8 @@ impl NodeManagementLocal for PipewireManager {
         if let Some(route) = self.profile.routes.get(&source) {
             let route = route.clone();
             for route in route {
-                self.link_remove_filter_to_filter(target, route).await?;
+                let route = self.target_filter_start.get(&route).unwrap_or(&route);
+                self.link_remove_filter_to_filter(target, *route).await?;
             }
         }
         Ok(())

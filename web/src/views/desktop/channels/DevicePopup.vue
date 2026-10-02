@@ -34,7 +34,8 @@ export default {
     device_id: {type: String, required: true},
     order_group: {type: String, required: true},
     id: {type: String, required: true},
-    colour_callback: {type: Function, required: true}
+    colour_callback: {type: Function, required: true},
+    filter_callback: {type: Function, required: true}
   },
 
   data() {
@@ -259,6 +260,11 @@ export default {
     onColourClicked(e) {
       this.colour_callback(e);
       this.$refs.popup.hideDialog();
+    },
+
+    onFilterClicked(e) {
+      this.filter_callback(e);
+      this.$refs.popup.hideDialog();
     }
   },
 }
@@ -311,6 +317,7 @@ export default {
       <span>Change Colour</span>
     </div>
     <div class="separator"/>
+
     <div v-if="order_group !== DeviceOrderType.Pinned" class="entry"
          @click="e => onPinClicked(true, e)">
       <span class="selected"></span>
@@ -341,7 +348,11 @@ export default {
         <span>{{ getDeviceName(device) }}</span>
       </span>
     </div>
-
+    <div class="separator"/>
+    <div class="entry" @click="onFilterClicked">
+      <span class="selected"></span>
+      <span>Filters</span>
+    </div>
     <div class="separator"/>
     <div class="entry" @click="onRenameClick">
       <span class="selected"></span>
@@ -462,7 +473,7 @@ span {
 .modal-footer button {
   background-color: #353937;
   color: #fff;
-  padding: 8px 30px;
+  padding: 4px 25px;
   border: 1px solid #2a2e2d;
 }
 

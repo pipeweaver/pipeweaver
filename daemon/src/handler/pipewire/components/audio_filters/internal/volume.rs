@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
-use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
+use pipeweaver_pipewire::FilterHandler;
+use pipeweaver_shared::{FilterProperty, FilterValue};
 
 const POWER_FACTOR: f32 = 3.8;
 
@@ -83,6 +84,8 @@ impl FilterHandler for VolumeFilter {
 
                 min: 0.0,
                 max: 100.0,
+
+                is_input: true,
 
                 enum_def: None,
             },

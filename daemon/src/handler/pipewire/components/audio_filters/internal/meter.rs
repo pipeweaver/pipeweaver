@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
-use pipeweaver_pipewire::{FilterHandler, FilterProperty, FilterValue};
+use pipeweaver_pipewire::FilterHandler;
+use pipeweaver_shared::{FilterProperty, FilterValue};
 use tokio::sync::mpsc;
 use ulid::Ulid;
 
@@ -61,6 +62,8 @@ impl FilterHandler for MeterFilter {
 
                 min: 0.0,
                 max: 1.0,
+
+                is_input: true,
 
                 enum_def: None,
             },

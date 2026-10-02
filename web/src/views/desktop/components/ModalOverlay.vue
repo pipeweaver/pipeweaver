@@ -1,7 +1,8 @@
 <template>
   <div v-show=is_visible class="modal-mask">
     <div class="modal-wrapper" @click.self="$emit('backdrop-click')">
-      <div ref="dialog" class="modal-container" role="dialog" @keyup.esc.prevent="closeModalEsc">
+      <div ref="dialog" class="modal-container" :style="dialogStyle" role="dialog"
+           @keyup.esc.prevent="closeModalEsc">
         <div class="modal-header" tabindex="0">
           <div :id="`${id}_label`" role="heading">
             <b>
@@ -41,7 +42,9 @@ export default {
     prevent_esc: {type: Boolean, default: false},
 
     bodyPadding: {type: String, default: "20px"},
-    width: {type: String, default: "500px"}
+    width: {type: String, default: "500px"},
+    fullWindow: {type: Boolean, default: false},
+    windowPadding: {type: String, default: "20px"},
   },
 
   data() {
@@ -101,6 +104,23 @@ export default {
     isOpen() {
       return this.is_visible;
     }
+  },
+  computed: {
+    dialogStyle() {
+      if (this.fullWindow) {
+        return {
+          width: `calc(100vw - (${this.windowPadding} * 2))`,
+          height: `calc(100vh - (${this.windowPadding} * 2))`,
+          overflow: "hidden",
+          display: "flex",
+        };
+      }
+
+      return {
+        minWidth: this.width,
+        maxWidth: "min-content"
+      };
+    }
   }
 }
 
@@ -117,39 +137,45 @@ export default {
   width: 100%;
   height: 100%;
   background-color: rgba(0, 0, 0, 0.6);
-  display: table;
-  transition: opacity 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Positions the Modal in the Middle of the Screen */
 .modal-wrapper {
-  display: table-cell;
-  vertical-align: middle;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* The Actual Border / Setup of the Modal */
 .modal-container {
-  border: 1px solid #000;
+  border: var(--border);
+  margin: v-bind(windowPadding) auto;
 
-  min-width: v-bind(width);
-  max-width: min-content;
-  margin: 0 auto;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.33);
-  transition: all 0.3s ease;
 
   overflow: hidden;
+
+  display: flex;
+  flex-direction: column;
 }
 
 /* Header Styling.. */
 .modal-header {
   text-transform: uppercase;
   font-family: LeagueMono, sans-serif;
-  background-color: #3b413f;
+  background: var(--panel);
   text-align: center;
   color: #fff;
   overflow: hidden;
   outline: none;
+
+  border-bottom: 1px solid var(--border-subtle-colour);
 }
 
 .modal-header div {
@@ -169,14 +195,20 @@ export default {
 }
 
 .modal-body {
-  background-color: #2d3230;
+  background: var(--mix-background);
   color: #fff;
   padding: v-bind(bodyPadding);
+  border-bottom: 1px solid var(--border-subtle-colour);
+
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .modal-footer {
-  background-color: #2d3230;
+  background: var(--panel);
   text-align: right;
+  padding-top: 10px;
   padding-right: 10px;
   padding-bottom: 10px;
 }
@@ -184,7 +216,6 @@ export default {
 .modal-footer button {
   background-color: #353937;
   color: #fff;
-  padding: 8px 30px;
   border: none;
 }
 
