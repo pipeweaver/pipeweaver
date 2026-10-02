@@ -421,7 +421,7 @@ impl FilterManagement for PipewireManager {
         let (prev, next) = self.find_running_neighbours(device_id, id).await?;
 
         let err = anyhow!("Filter not found in config");
-        let Some(filter) = self.filter_config.remove(&id) else {
+        let Some(_filter) = self.filter_config.remove(&id) else {
             // We need to make sure this is cleared from the profile, otherwise we'll get a stuck
             // state where the filter is still in the profile but the filter is not running.
             self.remove_filter_from_profile(id)?;

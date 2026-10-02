@@ -1,6 +1,7 @@
 use crate::commands::{DaemonRequest, DaemonResponse, DaemonStatus};
 use anyhow::Result;
 
+#[allow(clippy::double_must_use)]
 #[maybe_async::maybe_async(?Send)]
 pub trait Client {
     async fn send(&mut self, request: &DaemonRequest) -> Result<DaemonResponse>;
