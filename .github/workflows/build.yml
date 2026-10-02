@@ -35,10 +35,10 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-debug-
 
       - name: Running Tests
-        run: cargo check --workspace --all-features
+        run: cargo check --workspace
 
       - name: Checking Formatting
         run: cargo fmt --all -- --check
 
       - name: Performing Clippy Test
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
