@@ -259,6 +259,7 @@ pub struct PWVFilter {
 pub enum PWVFilters {
     Gain,
     Bleep,
+    RNNoise,
 }
 
 fn generate_uid() -> Ulid {

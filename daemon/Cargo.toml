@@ -75,8 +75,12 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 open = "5.3"
 which = "8.0"
 
-### LV2 Support?
+### LV2 Support
 lilv-sys = { version = "0.2.1", optional = true }
+
+### RNNoise Implementation
+nnnoiseless = "0.5.2"
+rubato = "5.0.1"
 
 ## Ok, Build Stuff Time :D
 [package.metadata.deb]

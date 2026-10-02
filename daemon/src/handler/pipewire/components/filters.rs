@@ -6,6 +6,7 @@ use crate::handler::pipewire::components::audio_filters::internal::pass_through:
 use crate::handler::pipewire::components::audio_filters::internal::volume::VolumeFilter;
 use crate::handler::pipewire::components::audio_filters::pwv::bleep::filter_bleep;
 use crate::handler::pipewire::components::audio_filters::pwv::gain::filter_gain;
+use crate::handler::pipewire::components::audio_filters::pwv::rnnoise::filter_rnnoise;
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::routing::RoutingManagement;
@@ -1333,6 +1334,7 @@ impl FilterManagementLocal for PipewireManager {
                 let plugin_name = match pwv_filter.plugin_type {
                     PWVFilters::Gain => "Gain".to_string(),
                     PWVFilters::Bleep => "Bleep".to_string(),
+                    PWVFilters::RNNoise => "RNNoise".to_string(),
                 };
 
                 let name = format!("{}-{}-{}", node_desc.name, plugin_name, index);
@@ -1340,6 +1342,7 @@ impl FilterManagementLocal for PipewireManager {
                 let create_filter = match pwv_filter.plugin_type {
                     PWVFilters::Gain => filter_gain(id, name, defaults),
                     PWVFilters::Bleep => filter_bleep(id, name, defaults, rate),
+                    PWVFilters::RNNoise => filter_rnnoise(id, name, defaults, rate, 2),
                 };
 
                 let (name, parameters, state) = match create_filter {

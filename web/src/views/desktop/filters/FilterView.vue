@@ -83,6 +83,11 @@ export default {
           display: "Bleep",
           component: "BleepFilter",
         },
+        "RNNoise": {
+          type: "PWV",
+          display: "Noise Reduction",
+          component: "NoiseReductionFilter",
+        },
 
         // LSP Provided Plugins
         "http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo": {
