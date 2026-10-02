@@ -28,6 +28,7 @@ import LoudnessFilter from "@/views/desktop/filters/filter/loudness/LoudnessFilt
 import MaximizerFilter from "@/views/desktop/filters/filter/maximizer/MaximizerFilter.vue";
 import ReverberationFilter
   from "@/views/desktop/filters/filter/reverberation/ReverberationFilter.vue";
+import GainFilter from "@/views/desktop/filters/filter/gain/GainFilter.vue";
 
 const INTERNAL_SCALE = 0.8;
 
@@ -39,6 +40,7 @@ export default {
     ModalOverlay,
     DelayFilter,
     CompressorFilter,
+    GainFilter,
     GateFilter,
     ExpanderFilter,
     LimiterFilter,
@@ -66,70 +68,92 @@ export default {
       // Map specific plugin URIs to components
       pluginComponents: {
         "http://lsp-plug.in/plugins/lv2/comp_delay_x2_stereo": {
+          type: "LV2",
           display: "Delay",
           component: "DelayFilter",
         },
         "http://lsp-plug.in/plugins/lv2/compressor_stereo": {
+          type: "LV2",
           display: "Compressor",
           component: "CompressorFilter",
         },
+        "Gain": {
+          type: "PWV",
+          display: "Gain",
+          component: "GainFilter",
+        },
         "http://lsp-plug.in/plugins/lv2/gate_stereo": {
+          type: "LV2",
           display: "Gate",
           component: "GateFilter",
         },
         "http://lsp-plug.in/plugins/lv2/expander_stereo": {
+          type: "LV2",
           display: "Expander",
           component: "ExpanderFilter",
         },
         "http://lsp-plug.in/plugins/lv2/limiter_stereo": {
+          type: "LV2",
           display: "Limiter",
           component: "LimiterFilter",
         },
         "http://lsp-plug.in/plugins/lv2/para_equalizer_x32_lr": {
+          type: "LV2",
           display: "Equaliser",
           component: "EqualiserFilter",
         },
         "http://lsp-plug.in/plugins/lv2/mb_compressor_stereo": {
+          type: "LV2",
           display: "Multiband Compressor",
           component: "MultibandCompressorFilter",
         },
         "http://lsp-plug.in/plugins/lv2/mb_gate_stereo": {
+          type: "LV2",
           display: "Multiband Gate",
           component: "MultibandGateFilter",
         },
         "http://calf.sourceforge.net/plugins/BassEnhancer": {
+          type: "LV2",
           display: "Bass Enhancer",
           component: "BassEnhancerFilter",
         },
         "http://calf.sourceforge.net/plugins/Crusher": {
+          type: "LV2",
           display: "Crusher",
           component: "CrusherFilter",
         },
         "http://calf.sourceforge.net/plugins/Deesser": {
+          type: "LV2",
           display: "Deesser",
           component: "DeesserFilter",
         },
         "http://calf.sourceforge.net/plugins/Exciter": {
+          type: "LV2",
           display: "Exciter",
           component: "ExciterFilter",
         },
         "http://calf.sourceforge.net/plugins/StereoTools": {
+          type: "LV2",
           display: "Stereo Tools",
           component: "StereoToolsFilter",
         },
         "http://lsp-plug.in/plugins/lv2/filter_stereo": {
+          type: "LV2",
           display: "Filter",
           component: "FilterFilter",
         },
         "http://lsp-plug.in/plugins/lv2/loud_comp_stereo": {
+          type: "LV2",
           display: "Loudness",
           component: "LoudnessFilter",
         },
         "urn:zamaudio:ZaMaximX2": {
+          type: "LV2",
           display: "Maximizer",
           component: "MaximizerFilter",
         },
         "http://calf.sourceforge.net/plugins/Reverb": {
+          type: "LV2",
           display: "Reverberation",
           component: "ReverberationFilter",
         },
@@ -292,12 +316,17 @@ export default {
       return device.description.name;
     },
 
-    addFilter(url) {
+    addFilter(type, plugin) {
+      let key = "plugin_type";
+      if (type === "LV2") {
+        key = "plugin_uri";
+      }
+
       let command = {
         "AddFilterToNode": [this.id, {
           "filter": {
-            LV2: {
-              "plugin_uri": url,
+            [type]: {
+              [key]: plugin,
               "values": {}
             }
           }
@@ -334,6 +363,13 @@ export default {
           type: 'LV2',
           identifier: filter.filter['LV2'].plugin_uri,
         };
+      }
+      if (filter.filter["PWV"]) {
+        return {
+          id: filter.id,
+          type: 'PWV',
+          identifier: filter.filter["PWV"].plugin_type,
+        }
       }
     },
 
@@ -397,7 +433,11 @@ export default {
     // Label for the action dock's left side, e.g. "Using Calf" / "Using LSP Plugins" -
     // mirrors EasyEffects' own footer text naming which plugin package provides the effect.
     pluginPackageLabel() {
+      const type = this.activeFilter?.type || '';
       const uri = this.activeFilter?.identifier || '';
+
+      if (type === "PWV") return "Pipeweaver Internal";
+
       if (uri.startsWith('http://calf.sourceforge.net')) return 'Calf';
       if (uri.startsWith('http://lsp-plug.in')) return 'LSP Plugins';
       if (uri.startsWith('urn:zamaudio')) return 'ZamAudio';

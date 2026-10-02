@@ -240,12 +240,24 @@ pub struct Filter {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FilterType {
     LV2(LV2Filter),
+    PWV(PWVFilter),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LV2Filter {
     pub plugin_uri: String,
     pub values: HashMap<String, FilterValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PWVFilter {
+    pub plugin_type: PWVFilters,
+    pub values: HashMap<String, FilterValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PWVFilters {
+    Gain,
 }
 
 fn generate_uid() -> Ulid {

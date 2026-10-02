@@ -28,6 +28,7 @@ export default {
       return Object.entries(this.filters)
         .map(([uri, filter]) => ({
           uri,
+          type: filter.type,
           name: filter.display,
         }))
         .filter(filter =>
@@ -45,8 +46,8 @@ export default {
       this.$refs.modal.openModal(undefined, undefined);
     },
 
-    selectFilter(uri) {
-      this.$emit("select", uri);
+    selectFilter(type, uri) {
+      this.$emit("select", type, uri);
       this.$refs.modal.closeModal();
     },
   },
@@ -75,7 +76,7 @@ export default {
           v-for="filter in filteredFilters"
           :key="filter.uri"
           class="filter-entry"
-          @click="selectFilter(filter.uri)"
+          @click="selectFilter(filter.type, filter.uri)"
         >
           {{ filter.name }}
         </button>

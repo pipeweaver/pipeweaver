@@ -4,6 +4,7 @@ use crate::handler::pipewire::components::audio_filters::internal::bridge::{
 use crate::handler::pipewire::components::audio_filters::internal::meter::MeterFilter;
 use crate::handler::pipewire::components::audio_filters::internal::pass_through::PassThroughFilter;
 use crate::handler::pipewire::components::audio_filters::internal::volume::VolumeFilter;
+use crate::handler::pipewire::components::audio_filters::pwv::gain::filter_gain;
 use crate::handler::pipewire::components::links::LinkManagement;
 use crate::handler::pipewire::components::node::NodeManagement;
 use crate::handler::pipewire::components::routing::RoutingManagement;
@@ -13,7 +14,7 @@ use anyhow::{Result, anyhow, bail};
 use log::{debug, warn};
 use pipeweaver_pipewire::oneshot;
 use pipeweaver_pipewire::{FilterProperties, MediaClass, PipewireMessage};
-use pipeweaver_profile::{Filter, FilterType};
+use pipeweaver_profile::{Filter, FilterType, PWVFilters};
 use pipeweaver_shared::{FilterConfig, FilterState, FilterValue, FilterValueSet, Mix, NodeType};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -205,6 +206,7 @@ impl FilterManagement for PipewireManager {
 
             let defaults = match &filter.filter {
                 FilterType::LV2(lv2_filter) => lv2_filter.values.clone(),
+                FilterType::PWV(pwv_filter) => pwv_filter.values.clone(),
             };
 
             self.filter_create_custom(id, filter, index, defaults)
@@ -871,6 +873,9 @@ impl FilterManagement for PipewireManager {
                     FilterType::LV2(lv2_filter) => {
                         lv2_filter.values.insert(symbol, value);
                     }
+                    FilterType::PWV(pwv_filter) => {
+                        pwv_filter.values.insert(symbol, value);
+                    }
                 }
             }
         }
@@ -906,6 +911,11 @@ impl FilterManagement for PipewireManager {
                 FilterType::LV2(lv2_filter) => {
                     for (symbol, value) in filter_updates {
                         lv2_filter.values.insert(symbol, value);
+                    }
+                }
+                FilterType::PWV(pwv_filter) => {
+                    for (symbol, value) in filter_updates {
+                        pwv_filter.values.insert(symbol, value);
                     }
                 }
             }
@@ -1314,6 +1324,49 @@ impl FilterManagementLocal for PipewireManager {
                     };
                     self.filter_config.insert(id, config);
                 }
+            }
+            FilterType::PWV(pwv_filter) => {
+                let id = filter.id;
+                let node_desc = self.node_get_description(target).await?;
+
+                let plugin_name = match pwv_filter.plugin_type {
+                    PWVFilters::Gain => "Gain".to_string(),
+                };
+
+                let name = format!("{}-{}-{}", node_desc.name, plugin_name, index);
+                //let rate = self.clock_rate.unwrap_or(48000);
+                let create_filter = match pwv_filter.plugin_type {
+                    PWVFilters::Gain => filter_gain(id, name, defaults),
+                };
+
+                let (name, parameters, state) = match create_filter {
+                    Ok((name, props)) => {
+                        // Create the filter in PipeWire
+                        self.filter_pw_create(props).await?;
+
+                        // Grab the filter parameters
+                        let (tx, rx) = oneshot::channel();
+                        let message = PipewireMessage::GetFilterParameters(id, tx);
+                        self.pipewire().send_message(message)?;
+
+                        (name, rx.recv()??, FilterState::Running)
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to create Pipeweaver filter '{}': {}",
+                            plugin_name, e
+                        );
+                        (plugin_name.to_string(), Vec::new(), e)
+                    }
+                };
+
+                let config = FilterConfig {
+                    name,
+                    identifier: plugin_name,
+                    state,
+                    parameters,
+                };
+                self.filter_config.insert(id, config);
             }
         }
         Ok(())
