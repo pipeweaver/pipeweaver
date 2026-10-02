@@ -172,13 +172,16 @@ impl FilterHandler for BleepFilter {
     }
 
     fn process_samples(&mut self, inputs: Vec<&mut [f32]>, mut outputs: Vec<&mut [f32]>) {
-        if outputs.is_empty() {
+        if outputs.is_empty() || inputs.is_empty() {
             return;
         }
 
         if !self.enabled && self.mix <= 0.0 {
-            for (input, output) in inputs.iter().zip(outputs.iter_mut()) {
-                output.copy_from_slice(input);
+            for (i, input) in inputs.iter().enumerate() {
+                if input.is_empty() || outputs[i].is_empty() {
+                    continue;
+                }
+                outputs[i].copy_from_slice(input);
             }
             return;
         }
