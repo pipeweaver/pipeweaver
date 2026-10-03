@@ -10,6 +10,7 @@ repository.workspace = true
 homepage.workspace = true
 
 build = "build.rs"
+default-run = "pipeweaver-daemon"
 
 [features]
 default = ["lv2"]
