@@ -41,11 +41,6 @@ export default {
   <div style="padding: 10px">
     <FlowLayout>
       <FlowItem width="100%" max-width="500px" min-width="250px" title="Controls">
-        <Field label="Enabled" row>
-          <Toggle :value="getParam('enabled').value.Bool"
-                  @input="setParam('enabled', $event)"/>
-        </Field>
-
         <Field label="Frequency">
           <NumberInput :min="getParam('frequency').min" :max="getParam('frequency').max" :step="1"
                        :value="getDb('frequency')" suffix="Hz"
