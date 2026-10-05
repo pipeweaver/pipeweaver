@@ -60,9 +60,27 @@ export default {
         </Field>
       </FlowItem>
     </FlowLayout>
+    <br/>
+    <br/>
+    <span style="font-size: 18px; font-weight: bold">Usage</span>
+    <hr style="margin-bottom: 10px"/>
+    Enable<br/>
+    <pre>
+      pipeweaver-client filter {{ filterId }} set enabled true
+    </pre>
+
+    <br/><br/>
+    Disable<br/>
+    <pre>
+      pipeweaver-client filter {{ filterId }} set enabled false
+    </pre>
   </div>
 </template>
 
 <style scoped>
-
+pre {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
 </style>
