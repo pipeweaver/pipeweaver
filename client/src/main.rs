@@ -9,7 +9,7 @@ use pipeweaver_ipc::clients::web::WebClient;
 use pipeweaver_ipc::commands::{
     APICommand, DaemonCommand, DaemonRequest, DaemonResponse, DaemonStatus, PWCommandResponse,
 };
-use pipeweaver_shared::AppDefinition;
+use pipeweaver_shared::{AppDefinition, FilterProperty, FilterValue};
 use std::path::PathBuf;
 use std::{env, fs};
 use ulid::Ulid;
@@ -34,6 +34,7 @@ async fn main() -> Result<()> {
 
     let msg = cli.command.map(|command| match command {
         cli::Commands::Node { command } => handle_node_command(&status, command),
+        cli::Commands::Filter { id, command } => handle_filter_command(&status, id, command),
         cli::Commands::App { command } => handle_app_command(&status, command),
         cli::Commands::Route { command } => handle_route_command(&status, command),
         cli::Commands::Daemon { command } => handle_daemon_command(&status, command),
@@ -109,8 +110,55 @@ fn handle_node_command(status: &DaemonStatus, cmd: cli::NodeCommands) -> Result<
                 IdCmd::SetOrder { order } => APICommand::SetOrder(id, order),
             }
         }
-        _ => {
-            bail!("Invalid Command");
+    };
+    Ok(DaemonRequest::Pipewire(api_cmd))
+}
+
+fn handle_filter_command(
+    status: &DaemonStatus,
+    id: Ulid,
+    cmd: cli::FilterCommands,
+) -> Result<DaemonRequest> {
+    use cli::FilterCommands::*;
+
+    let api_cmd = match cmd {
+        Set { symbol, value } => {
+            // Ok, this is kinda complicated, so we need to find stuff.
+            let Some(config) = status.audio.filter_config.get(&id) else {
+                bail!("Filter not Found");
+            };
+
+            let find = |p: &&FilterProperty| p.symbol == symbol;
+            let Some(prop) = config.parameters.iter().find(find) else {
+                bail!("Symbol not found");
+            };
+
+            let value = match prop.value {
+                FilterValue::Int32(_) => FilterValue::Int32(value.parse()?),
+                FilterValue::Float32(_) => FilterValue::Float32(value.parse()?),
+                FilterValue::UInt8(_) => FilterValue::UInt8(value.parse()?),
+                FilterValue::UInt32(_) => FilterValue::UInt32(value.parse()?),
+                FilterValue::String(_) => FilterValue::String(value.to_string()),
+                FilterValue::Bool(_) => FilterValue::Bool(value.parse()?),
+                FilterValue::Enum(_, _) => {
+                    // We need to find the enum value that matches the label
+                    let Some(enum_def) = &prop.enum_def else {
+                        bail!("No enum definition found for property");
+                    };
+
+                    let key = enum_def
+                        .iter()
+                        .find_map(|(id, label)| if label == &value { Some(id) } else { None });
+
+                    let Some(value) = key else {
+                        bail!("No enum value found for label");
+                    };
+
+                    // Enums are represented as Int32s
+                    FilterValue::Int32(*value as i32)
+                }
+            };
+            APICommand::SetFilterValue(id, prop.id, value)
         }
     };
     Ok(DaemonRequest::Pipewire(api_cmd))

@@ -30,6 +30,11 @@ pub enum Commands {
         #[command(subcommand)]
         command: NodeCommands,
     },
+    Filter {
+        id: Ulid,
+        #[command(subcommand)]
+        command: FilterCommands,
+    },
     /// Route-related commands
     Route {
         #[command(subcommand)]
@@ -61,11 +66,6 @@ pub enum NodeCommands {
         name: String,
         #[command(subcommand)]
         command: NodeIdCommands,
-    },
-    Filter {
-        id: Ulid,
-        #[command(subcommand)]
-        command: FilterCommands,
     },
 }
 
