@@ -239,7 +239,7 @@ impl FilterManagement for PipewireManager {
                 self.link_create_filter_to_filter(pass, first).await?;
             }
             _ => {
-                warn!("Unexpected filter tree configuration");
+                warn!("No Filters entered a Running State");
             }
         }
         Ok(())
@@ -848,7 +848,16 @@ impl FilterManagement for PipewireManager {
     }
 
     async fn filter_custom_get_last(&self, id: Ulid) -> Option<Ulid> {
-        self.filter_custom_get_running(id).await.last().copied()
+        let node_type = self.get_node_type(id)?;
+        let filters = self.filter_custom_get_running(id).await;
+
+        if node_type == NodeType::PhysicalTarget
+            || node_type == NodeType::VirtualTarget && filters.is_empty()
+        {
+            return self.target_filter_start.get(&id).cloned();
+        }
+
+        filters.last().copied()
     }
 
     async fn filter_set_value(&mut self, filter: Ulid, id: u32, value: FilterValue) -> Result<()> {

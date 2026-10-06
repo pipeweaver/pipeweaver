@@ -267,11 +267,6 @@ impl NoiseSuppressionFilter {
                 }
                 let start = self.input_buffered;
                 let end = start + copy;
-                // debug!(
-                //     "Start: {start} - End {end} - Copy {copy} - Total {total} - Offset {offset} - Dst: {} - Src: {}",
-                //     dst.len(),
-                //     src.len()
-                // );
                 dst[start..end].copy_from_slice(&src[offset..offset + copy]);
             }
 
