@@ -554,7 +554,7 @@ export default {
 
 <template>
   <ModalOverlay body-padding="0" :show_footer="false" ref="filterModal" id="filterViewModal"
-                title="Filters" fullWindow window-padding="32px">
+                fullWindow window-padding="32px">
     <template v-slot:title>Filters - {{ getName() }}</template>
     <template v-slot:default>
       <AddFilterModal ref="addFilterModal" :filters="pluginComponents" @select="addFilter"/>
