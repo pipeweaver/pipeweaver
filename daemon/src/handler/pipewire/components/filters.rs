@@ -851,8 +851,8 @@ impl FilterManagement for PipewireManager {
         let node_type = self.get_node_type(id)?;
         let filters = self.filter_custom_get_running(id).await;
 
-        if node_type == NodeType::PhysicalTarget
-            || node_type == NodeType::VirtualTarget && filters.is_empty()
+        if (node_type == NodeType::PhysicalTarget || node_type == NodeType::VirtualTarget)
+            && filters.is_empty()
         {
             return self.target_filter_start.get(&id).cloned();
         }
