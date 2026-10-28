@@ -133,7 +133,7 @@ export default {
       // Ok, split the list out by description and name
       const [with_desc, without_desc] = list.reduce(
         ([with_desc, without_desc], item) =>
-          item.description !== undefined
+          item.description != null
             ? [[...with_desc, item], without_desc]
             : [with_desc, [...without_desc, item]],
         [[], []]
